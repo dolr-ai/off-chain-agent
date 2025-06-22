@@ -90,7 +90,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             notification_client: NotificationClient::new(
                 env::var("YRAL_METADATA_NOTIFICATION_API_KEY")
-                    .expect("YRAL_METADATA_NOTIFICATION_API_KEY is required"),
+                    .unwrap_or_default(),
             ),
             canisters_ctx: init_canisters_ctx().await,
         }
