@@ -36,6 +36,12 @@ jobs:
             ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
       - run: chmod +x target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent
       - uses: superfly/flyctl-actions/setup-flyctl@master
+        env:
+          # Pin flyctl to a concrete version so install.sh doesn't ask for the
+          # (currently broken) "latest" build and the image build can finish.
+          # Any released flyctl tag works – v0.3.144 is the most recent as of
+          # June 2025.
+          FLYCTL_VERSION: v0.3.144
       - name: Set cloudflare token
         run: |
           flyctl secrets set "CF_R2_ACCESS_KEY_TEMP=$CF_R2_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
