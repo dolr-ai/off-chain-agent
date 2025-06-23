@@ -52,6 +52,7 @@ mod qstash;
 mod types;
 pub mod user;
 pub mod utils;
+pub mod yral_auth;
 
 use app_state::AppState;
 
