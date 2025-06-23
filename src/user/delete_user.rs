@@ -130,7 +130,21 @@ pub async fn handle_delete_user(
             )
         })?;
 
-    // 7. Add deleted canister to SpaceTimeDB
+    // 7. Delete user from YRAL auth Redis
+    #[cfg(not(feature = "local-bin"))]
+    {
+        state.yral_auth_redis.delete_principal(user_principal)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to delete user from YRAL auth Redis: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to delete user from YRAL auth Redis: {}", e),
+                )
+            })?;
+    }
+
+    // 8. Add deleted canister to SpaceTimeDB
     #[cfg(not(feature = "local-bin"))]
     {
         if let Err(e) = state

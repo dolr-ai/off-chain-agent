@@ -74,6 +74,7 @@ jobs:
           flyctl secrets set "ALLOYDB_DB_PASSWORD=$ALLOYDB_DB_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set "CANISTER_BACKUP_CACHE_REDIS_URL=$CANISTER_BACKUP_CACHE_REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set "DEDUP_INDEX_ACCESS_TOKEN=$DEDUP_INDEX_ACCESS_TOKEN" --app "$APP_NAME" --stage
+          flyctl secrets set "YRAL_AUTH_REDIS_URL=$YRAL_AUTH_REDIS_URL" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -103,3 +104,4 @@ jobs:
           ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}
           CANISTER_BACKUP_CACHE_REDIS_URL: ${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}
           DEDUP_INDEX_ACCESS_TOKEN: ${{ secrets.DEDUP_INDEX_ACCESS_TOKEN }}
+          YRAL_AUTH_REDIS_URL: ${{ secrets.YRAL_AUTH_REDIS_URL }}

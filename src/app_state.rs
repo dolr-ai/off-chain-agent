@@ -6,6 +6,7 @@ use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::types::RedisPool;
+use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
@@ -50,6 +51,8 @@ pub struct AppState {
     pub canister_backup_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
     pub canisters_ctx: WrappedContextCanisters,
+    #[cfg(not(feature = "local-bin"))]
+    pub yral_auth_redis: YralAuthRedis,
 }
 
 impl AppState {
@@ -80,6 +83,8 @@ impl AppState {
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
             #[cfg(not(feature = "local-bin"))]
             canisters_ctx: init_canisters_ctx().await,
+            #[cfg(not(feature = "local-bin"))]
+            yral_auth_redis: YralAuthRedis::init(&app_config).await,
         }
     }
 
@@ -257,3 +262,4 @@ async fn init_canister_backup_redis_pool() -> RedisPool {
 pub async fn init_canisters_ctx() -> WrappedContextCanisters {
     WrappedContextCanisters::new().expect("Canisters context to be connected")
 }
+

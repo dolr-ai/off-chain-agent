@@ -16,6 +16,8 @@ use crate::consts::{STORJ_BACKUP_CANISTER_ACCESS_GRANT, STORJ_INTERFACE_TOKEN};
 pub struct AppConfig {
     pub yral_metadata_token: String,
     pub google_sa_key: String,
+    #[cfg(not(feature = "local-bin"))]
+    pub yral_auth_redis_url: String,
 }
 
 impl AppConfig {
