@@ -9,7 +9,10 @@ use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
-use yral_canisters_client::individual_user_template::IndividualUserTemplate;
+use yral_canisters_client::{
+    individual_user_template::IndividualUserTemplate,
+    user_index::{Result3, UserIndex},
+};
 
 use crate::{
     app_state::AppState,
@@ -21,7 +24,7 @@ pub struct CanisterInfo {
     #[schema(value_type = String)]
     pub canister_id: Principal,
     #[schema(value_type = String)]
-    pub subnet: Principal,
+    pub subnet_id: Principal,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,11 +51,16 @@ pub async fn delete_canister_data(
     let posts = get_canister_posts(agent, canister_id).await?;
 
     // Step 2: Bulk insert into video_deleted table if posts exist
+    //       : Handle duplicate posts cleanup (spawn as background task)
     if !posts.is_empty() {
         bulk_insert_video_delete_rows(&state.bigquery_client, posts.clone()).await?;
-    }
 
-    // TODO: call the delete canister endpoint of subnet here
+        let bigquery_client = state.bigquery_client.clone();
+        let video_ids: Vec<String> = posts.iter().map(|p| p.video_id.clone()).collect();
+        tokio::spawn(async move {
+            handle_duplicate_posts_cleanup(bigquery_client, video_ids).await;
+        });
+    }
 
     // Step 3: Delete posts from canister (spawn as background task)
     if to_delete_posts_from_canister {
@@ -63,26 +71,35 @@ pub async fn delete_canister_data(
         });
     }
 
-    // Step 4: Handle duplicate posts cleanup (spawn as background task)
-    let bigquery_client = state.bigquery_client.clone();
-    let video_ids: Vec<String> = posts.iter().map(|p| p.video_id.clone()).collect();
-    tokio::spawn(async move {
-        handle_duplicate_posts_cleanup(bigquery_client, video_ids).await;
-    });
-
-    // Step 5: Delete from Redis caches
-    state
+    // Step 4: Delete from Redis caches
+    // Wont return error if cache deletion fails, just log it
+    if let Err(e) = state
         .ml_feed_cache
         .delete_user_caches(&canister_id.to_string())
-        .await?;
+        .await
+    {
+        log::error!(
+            "Failed to delete Redis caches for canister {}: {}",
+            canister_id,
+            e
+        );
+    }
 
-    // 6. Delete user metadata using yral_metadata_client (this step is unique to user deletion)
-    state
+    // 5. Delete user metadata using yral_metadata_client (this step is unique to user deletion)
+    // Wont return error if metadata deletion fails, just log it
+    if let Err(e) = state
         .yral_metadata_client
         .delete_metadata_bulk(vec![user_principal])
-        .await?;
+        .await
+    {
+        log::error!(
+            "Failed to delete metadata for user {}: {}",
+            user_principal,
+            e
+        );
+    }
 
-    // 7. Delete user from YRAL auth Redis (this step is unique to user deletion)
+    // 6. Delete user from YRAL auth Redis (this step is unique to user deletion)
     #[cfg(not(feature = "local-bin"))]
     {
         state
@@ -204,7 +221,6 @@ async fn get_user_principal_from_canister(
 ) -> Result<Principal, anyhow::Error> {
     let individual_user_template = IndividualUserTemplate(canister_id, agent);
 
-    // Try to call get_profile_details_v_2
     match individual_user_template.get_profile_details_v_2().await {
         Ok(profile) => Ok(profile.principal_id),
         Err(e) => Err(anyhow::Error::msg(format!(
@@ -214,65 +230,99 @@ async fn get_user_principal_from_canister(
     }
 }
 
-async fn process_single_canister_deletion(
+async fn process_canister_deletion_with_error_handling(
     agent: &Agent,
     state: &Arc<AppState>,
     canister_info: CanisterInfo,
     timestamp_str: String,
 ) -> Result<String, String> {
     let canister_id = canister_info.canister_id;
-    let subnet = canister_info.subnet;
-    let redis_key = format!("failed_canister_deletions:{}", timestamp_str);
+    let subnet_id = canister_info.subnet_id;
 
-    // Try to get user principal from canister
-    let user_principal_result = get_user_principal_from_canister(agent, canister_id).await;
+    match process_single_canister_deletion(agent, state, canister_info, timestamp_str.clone()).await
+    {
+        Ok(result) => Ok(result),
+        Err(deletion_error) => {
+            let error_msg = deletion_error.error.to_string();
 
-    let user_principal = match user_principal_result {
-        Ok(principal) => Some(principal),
-        Err(e) => {
+            log::error!(
+                "Failed to process canister {} deletion from subnet {}: {}",
+                canister_id,
+                subnet_id,
+                error_msg
+            );
+
             // Store the failure in Redis
             #[cfg(not(feature = "local-bin"))]
-            if let Err(redis_err) = store_failed_canister_info(
-                &state.canister_backup_redis_pool,
-                &redis_key,
-                FailedCanisterInfo {
-                    canister_id: canister_id.to_string(),
-                    subnet: subnet.to_string(),
-                    user_principal: None,
-                    reason: format!("Failed to get user principal: {}", e),
-                },
-            )
-            .await
             {
-                log::error!("Failed to store error in Redis: {}", redis_err);
-            }
-
-            return Err(canister_id.to_string());
-        }
-    };
-
-    match delete_canister_data(agent, state, canister_id, user_principal.unwrap(), false).await {
-        Ok(_) => Ok(canister_id.to_string()),
-        Err(e) => {
-            // Store the failure in Redis
-            #[cfg(not(feature = "local-bin"))]
-            if let Err(redis_err) = store_failed_canister_info(
-                &state.canister_backup_redis_pool,
-                &redis_key,
-                FailedCanisterInfo {
-                    canister_id: canister_id.to_string(),
-                    subnet: subnet.to_string(),
-                    user_principal: user_principal.map(|p| p.to_string()),
-                    reason: format!("Failed to delete canister data: {}", e),
-                },
-            )
-            .await
-            {
-                log::error!("Failed to store error in Redis: {}", redis_err);
+                let redis_key = format!("failed_canister_deletions:{}", timestamp_str);
+                if let Err(redis_err) = store_failed_canister_info(
+                    &state.canister_backup_redis_pool,
+                    &redis_key,
+                    FailedCanisterInfo {
+                        canister_id: canister_id.to_string(),
+                        subnet: subnet_id.to_string(),
+                        user_principal: deletion_error.user_principal.map(|p| p.to_string()),
+                        reason: error_msg.clone(),
+                    },
+                )
+                .await
+                {
+                    log::error!("Failed to store error in Redis: {}", redis_err);
+                }
             }
 
             Err(canister_id.to_string())
         }
+    }
+}
+
+#[derive(Debug)]
+struct CanisterDeletionError {
+    user_principal: Option<Principal>,
+    error: anyhow::Error,
+}
+
+async fn process_single_canister_deletion(
+    agent: &Agent,
+    state: &Arc<AppState>,
+    canister_info: CanisterInfo,
+    _timestamp_str: String,
+) -> Result<String, CanisterDeletionError> {
+    let canister_id = canister_info.canister_id;
+    let subnet_id = canister_info.subnet_id;
+
+    // Try to get user principal from canister
+    let user_principal = match get_user_principal_from_canister(agent, canister_id).await {
+        Ok(principal) => principal,
+        Err(e) => {
+            return Err(CanisterDeletionError {
+                user_principal: None,
+                error: anyhow::anyhow!("Failed to get user principal: {}", e),
+            });
+        }
+    };
+
+    // Delete canister data
+    if let Err(e) = delete_canister_data(agent, state, canister_id, user_principal, false).await {
+        return Err(CanisterDeletionError {
+            user_principal: Some(user_principal),
+            error: anyhow::anyhow!("Failed to delete canister data: {}", e),
+        });
+    }
+
+    // Step 3: Delete posts from subnet
+    let subnet = UserIndex(subnet_id, agent);
+    match subnet.uninstall_individual_user_canister(canister_id).await {
+        Ok(Result3::Ok) => Ok(canister_id.to_string()),
+        Ok(Result3::Err(e)) => Err(CanisterDeletionError {
+            user_principal: Some(user_principal),
+            error: anyhow::anyhow!("Failed to uninstall canister: {}", e),
+        }),
+        Err(e) => Err(CanisterDeletionError {
+            user_principal: Some(user_principal),
+            error: anyhow::anyhow!("Agent error: {}", e),
+        }),
     }
 }
 
@@ -323,8 +373,13 @@ pub async fn handle_delete_and_reclaim_canisters(
                 let agent = agent.clone();
                 let timestamp_str = timestamp_str.clone();
                 async move {
-                    process_single_canister_deletion(&agent, &state, canister_info, timestamp_str)
-                        .await
+                    process_canister_deletion_with_error_handling(
+                        &agent,
+                        &state,
+                        canister_info,
+                        timestamp_str,
+                    )
+                    .await
                 }
             })
             .collect();
@@ -344,7 +399,6 @@ pub async fn handle_delete_and_reclaim_canisters(
         );
     });
 
-    // Return success immediately
     Ok((
         StatusCode::OK,
         format!("Deletion of {} canisters initiated", total_canisters),

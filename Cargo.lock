@@ -75,7 +75,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#822db7c3fed3bc533a974a7f68f98ab8d1b4188d"
+source = "git+https://github.com/yral-dapp/yral-common?rev=446f55a5be606ff1e0cb5fd0b87714450a17081c#446f55a5be606ff1e0cb5fd0b87714450a17081c"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -4537,7 +4537,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#822db7c3fed3bc533a974a7f68f98ab8d1b4188d"
+source = "git+https://github.com/yral-dapp/yral-common?rev=446f55a5be606ff1e0cb5fd0b87714450a17081c#446f55a5be606ff1e0cb5fd0b87714450a17081c"
 dependencies = [
  "anyhow",
  "bb8",
@@ -8624,7 +8624,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#822db7c3fed3bc533a974a7f68f98ab8d1b4188d"
+source = "git+https://github.com/yral-dapp/yral-common?rev=446f55a5be606ff1e0cb5fd0b87714450a17081c#446f55a5be606ff1e0cb5fd0b87714450a17081c"
 dependencies = [
  "anyhow",
  "candid",
@@ -8679,7 +8679,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#822db7c3fed3bc533a974a7f68f98ab8d1b4188d"
+source = "git+https://github.com/yral-dapp/yral-common?rev=446f55a5be606ff1e0cb5fd0b87714450a17081c#446f55a5be606ff1e0cb5fd0b87714450a17081c"
 dependencies = [
  "candid",
  "log",
@@ -8694,7 +8694,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#822db7c3fed3bc533a974a7f68f98ab8d1b4188d"
+source = "git+https://github.com/yral-dapp/yral-common?rev=446f55a5be606ff1e0cb5fd0b87714450a17081c#446f55a5be606ff1e0cb5fd0b87714450a17081c"
 dependencies = [
  "candid",
  "serde",
@@ -8712,7 +8712,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#822db7c3fed3bc533a974a7f68f98ab8d1b4188d"
+source = "git+https://github.com/yral-dapp/yral-common?rev=446f55a5be606ff1e0cb5fd0b87714450a17081c#446f55a5be606ff1e0cb5fd0b87714450a17081c"
 dependencies = [
  "ic-agent",
  "k256",
