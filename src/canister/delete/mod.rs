@@ -47,6 +47,15 @@ pub async fn delete_canister_data(
     user_principal: Principal,
     to_delete_posts_from_canister: bool,
 ) -> Result<(), anyhow::Error> {
+    // 0. Delete user from YRAL auth Redis (this step is unique to user deletion)
+    #[cfg(not(feature = "local-bin"))]
+    {
+        state
+            .yral_auth_redis
+            .delete_principal(user_principal)
+            .await?;
+    }
+
     // Step 1: Get all posts for the canister
     let posts = get_canister_posts(agent, canister_id).await?;
 
@@ -97,15 +106,6 @@ pub async fn delete_canister_data(
             user_principal,
             e
         );
-    }
-
-    // 6. Delete user from YRAL auth Redis (this step is unique to user deletion)
-    #[cfg(not(feature = "local-bin"))]
-    {
-        state
-            .yral_auth_redis
-            .delete_principal(user_principal)
-            .await?;
     }
 
     Ok(())
