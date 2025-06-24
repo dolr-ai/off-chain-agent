@@ -30,7 +30,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download build
         uses: actions/download-artifact@v4
         with:
@@ -78,7 +78,7 @@ jobs:
           flyctl secrets set "ALLOYDB_INSTANCE=$ALLOYDB_INSTANCE" --app "$APP_NAME" --stage
           flyctl secrets set "ALLOYDB_DB_PASSWORD=$ALLOYDB_DB_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set "CANISTER_BACKUP_CACHE_REDIS_URL=$CANISTER_BACKUP_CACHE_REDIS_URL" --app "$APP_NAME" --stage
-          flyctl secrets set "DEDUP_INDEX_ACCESS_TOKEN=$DEDUP_INDEX_ACCESS_TOKEN" --app "$APP_NAME" --stage
+          flyctl secrets set "STDB_ADMIN_ACCESS_TOKEN=$STDB_ADMIN_ACCESS_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set "YRAL_METADATA_NOTIFICATION_API_KEY=$YRAL_METADATA_NOTIFICATION_API_KEY" --app "$APP_NAME" --stage
           flyctl secrets set "YRAL_AUTH_REDIS_URL=$YRAL_AUTH_REDIS_URL" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
@@ -109,6 +109,6 @@ jobs:
           ALLOYDB_INSTANCE: ${{ secrets.ALLOYDB_INSTANCE_PROD }}
           ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}
           CANISTER_BACKUP_CACHE_REDIS_URL: ${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}
-          DEDUP_INDEX_ACCESS_TOKEN: ${{ secrets.DEDUP_INDEX_ACCESS_TOKEN }}
+          STDB_ADMIN_ACCESS_TOKEN: ${{ secrets.STDB_ADMIN_ACCESS_TOKEN }}
           YRAL_METADATA_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_NOTIFICATION_API_KEY }}
           YRAL_AUTH_REDIS_URL: ${{ secrets.YRAL_AUTH_REDIS_URL }}
