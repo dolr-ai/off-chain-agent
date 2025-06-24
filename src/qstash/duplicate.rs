@@ -269,7 +269,10 @@ impl<'a> VideoHashDuplication<'a> {
             .await
             .context("Couldn't send request to stdb")?
             .map_err(|err| anyhow!("{err}"))
-            .context("Module returned error")?;
+            .context("Module returned error")
+            .inspect_err(|err| {
+                log::error!("module error: {err:#?}");
+            })?;
 
         Ok(())
     }
