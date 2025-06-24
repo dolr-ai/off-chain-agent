@@ -36,6 +36,12 @@ jobs:
             ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
       - run: chmod +x target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent
       - uses: superfly/flyctl-actions/setup-flyctl@master
+        env:
+          # Pin flyctl to a concrete version so install.sh doesn't ask for the
+          # (currently broken) "latest" build and the image build can finish.
+          # Any released flyctl tag works – v0.3.144 is the most recent as of
+          # June 2025.
+          FLYCTL_VERSION: v0.3.144
       - name: Set cloudflare token
         run: |
           flyctl secrets set "CF_R2_ACCESS_KEY_TEMP=$CF_R2_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
@@ -65,6 +71,7 @@ jobs:
           flyctl secrets set "ALLOYDB_DB_PASSWORD=$ALLOYDB_DB_PASSWORD" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CANISTER_BACKUP_CACHE_REDIS_URL=$CANISTER_BACKUP_CACHE_REDIS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set "STDB_ADMIN_ACCESS_TOKEN=$STDB_ADMIN_ACCESS_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_METADATA_NOTIFICATION_API_KEY=$YRAL_METADATA_NOTIFICATION_API_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "YRAL_AUTH_REDIS_URL=$YRAL_AUTH_REDIS_URL" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
@@ -93,6 +100,7 @@ jobs:
           ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}
           CANISTER_BACKUP_CACHE_REDIS_URL: ${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}
           STDB_ADMIN_ACCESS_TOKEN: ${{ secrets.STDB_ADMIN_ACCESS_TOKEN }}
+          YRAL_METADATA_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_NOTIFICATION_API_KEY }}
           YRAL_AUTH_REDIS_URL: ${{ secrets.YRAL_AUTH_REDIS_URL }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml

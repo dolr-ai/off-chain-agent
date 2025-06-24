@@ -40,7 +40,12 @@ jobs:
       - name: Deploy
         id: deploy
         uses: superfly/fly-pr-review-apps@1.2.1
-
+        env:
+          # Pin flyctl to a concrete version so install.sh doesn't ask for the
+          # (currently broken) "latest" build and the image build can finish.
+          # Any released flyctl tag works – v0.3.144 is the most recent as of
+          # June 2025.
+          FLYCTL_VERSION: v0.3.144
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Set secret tokens
         if: ${{ github.event.pull_request.merged == false}}
@@ -74,6 +79,7 @@ jobs:
           flyctl secrets set "ALLOYDB_DB_PASSWORD=$ALLOYDB_DB_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set "CANISTER_BACKUP_CACHE_REDIS_URL=$CANISTER_BACKUP_CACHE_REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set "STDB_ADMIN_ACCESS_TOKEN=$STDB_ADMIN_ACCESS_TOKEN" --app "$APP_NAME" --stage
+          flyctl secrets set "YRAL_METADATA_NOTIFICATION_API_KEY=$YRAL_METADATA_NOTIFICATION_API_KEY" --app "$APP_NAME" --stage
           flyctl secrets set "YRAL_AUTH_REDIS_URL=$YRAL_AUTH_REDIS_URL" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
@@ -104,4 +110,5 @@ jobs:
           ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}
           CANISTER_BACKUP_CACHE_REDIS_URL: ${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}
           STDB_ADMIN_ACCESS_TOKEN: ${{ secrets.STDB_ADMIN_ACCESS_TOKEN }}
+          YRAL_METADATA_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_NOTIFICATION_API_KEY }}
           YRAL_AUTH_REDIS_URL: ${{ secrets.YRAL_AUTH_REDIS_URL }}
