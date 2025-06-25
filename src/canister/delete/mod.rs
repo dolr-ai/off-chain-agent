@@ -56,10 +56,24 @@ pub async fn delete_canister_data(
             .await?;
     }
 
-    // Step 1: Get all posts for the canister
+    // 1. Delete user metadata using yral_metadata_client (this step is unique to user deletion)
+    // Wont return error if metadata deletion fails, just log it
+    if let Err(e) = state
+        .yral_metadata_client
+        .delete_metadata_bulk(vec![user_principal])
+        .await
+    {
+        log::error!(
+            "Failed to delete metadata for user {}: {}",
+            user_principal,
+            e
+        );
+    }
+
+    // Step 2: Get all posts for the canister
     let posts = get_canister_posts(agent, canister_id).await?;
 
-    // Step 2: Bulk insert into video_deleted table if posts exist
+    // Step 3: Bulk insert into video_deleted table if posts exist
     //       : Handle duplicate posts cleanup (spawn as background task)
     if !posts.is_empty() {
         bulk_insert_video_delete_rows(&state.bigquery_client, posts.clone()).await?;
@@ -71,7 +85,7 @@ pub async fn delete_canister_data(
         });
     }
 
-    // Step 3: Delete posts from canister (spawn as background task)
+    // Step 4: Delete posts from canister (spawn as background task)
     if to_delete_posts_from_canister {
         let agent_clone = agent.clone();
         let posts_for_deletion = posts.clone();
@@ -80,7 +94,7 @@ pub async fn delete_canister_data(
         });
     }
 
-    // Step 4: Delete from Redis caches
+    // Step 5: Delete from Redis caches
     // Wont return error if cache deletion fails, just log it
     if let Err(e) = state
         .ml_feed_cache
@@ -90,20 +104,6 @@ pub async fn delete_canister_data(
         log::error!(
             "Failed to delete Redis caches for canister {}: {}",
             canister_id,
-            e
-        );
-    }
-
-    // 5. Delete user metadata using yral_metadata_client (this step is unique to user deletion)
-    // Wont return error if metadata deletion fails, just log it
-    if let Err(e) = state
-        .yral_metadata_client
-        .delete_metadata_bulk(vec![user_principal])
-        .await
-    {
-        log::error!(
-            "Failed to delete metadata for user {}: {}",
-            user_principal,
             e
         );
     }
