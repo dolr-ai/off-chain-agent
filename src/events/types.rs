@@ -361,6 +361,8 @@ pub struct VideoUploadSuccessfulPayload {
     pub video_id: String,
     #[serde(rename = "post_id")]
     pub post_id: u64,
+    #[serde(rename = "country", skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
 }
 
 // --------------------------------------------------
