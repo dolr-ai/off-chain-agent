@@ -1,11 +1,16 @@
+#[cfg(not(feature = "local-bin"))]
+use crate::async_backend;
 use crate::async_dedup_index;
 use crate::canister::utils::deleted_canister::WrappedContextCanisters;
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
+#[cfg(not(feature = "local-bin"))]
+use crate::events::push_notifications::NotificationClient;
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::types::RedisPool;
+use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
@@ -47,9 +52,14 @@ pub struct AppState {
     // #[cfg(not(feature = "local-bin"))]
     // pub dedup_index_ctx: async_dedup_index::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
+    pub backend_ctx: async_backend::WrappedContext,
+    #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
-    // #[cfg(not(feature = "local-bin"))]
-    // pub canisters_ctx: WrappedContextCanisters,
+    #[cfg(not(feature = "local-bin"))]
+    pub notification_client: NotificationClient,
+    pub canisters_ctx: WrappedContextCanisters,
+    #[cfg(not(feature = "local-bin"))]
+    pub yral_auth_redis: YralAuthRedis,
 }
 
 impl AppState {
@@ -77,9 +87,16 @@ impl AppState {
             // #[cfg(not(feature = "local-bin"))]
             // dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
+            backend_ctx: init_backend_ctx().await,
+            #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
-            // #[cfg(not(feature = "local-bin"))]
-            // canisters_ctx: init_canisters_ctx().await,
+            #[cfg(not(feature = "local-bin"))]
+            notification_client: NotificationClient::new(
+                env::var("YRAL_METADATA_NOTIFICATION_API_KEY").unwrap_or_default(),
+            ),
+            canisters_ctx: init_canisters_ctx().await,
+            #[cfg(not(feature = "local-bin"))]
+            yral_auth_redis: YralAuthRedis::init(&app_config).await,
         }
     }
 
@@ -220,6 +237,10 @@ pub async fn init_qstash_client() -> QStashClient {
 
 pub async fn init_dedup_index_ctx() -> async_dedup_index::WrappedContext {
     async_dedup_index::WrappedContext::new().expect("Stdb dedup index to be connected")
+}
+
+pub async fn init_backend_ctx() -> async_backend::WrappedContext {
+    async_backend::WrappedContext::new().expect("Stdb backend to be connected")
 }
 
 async fn init_alloydb_client() -> AlloyDbInstance {
