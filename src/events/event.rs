@@ -280,12 +280,15 @@ impl Event {
                 let ml_feed_cache = app_state.ml_feed_cache.clone();
 
                 let percent_watched = params.percentage_watched;
-                let nsfw_probability = params.nsfw_probability;
+                let nsfw_probability = params.nsfw_probability.unwrap_or_default();
 
                 let user_canister_id = &params.canister_id;
-                let publisher_canister_id = &params.publisher_canister_id;
-                let post_id = params.post_id;
-                let video_id = &params.video_id;
+                let publisher_canister_id = &params
+                    .publisher_canister_id
+                    .map(|f| f.to_string())
+                    .unwrap_or_default();
+                let post_id = params.post_id.unwrap_or_default();
+                let video_id = params.video_id.unwrap_or_default();
                 let item_type = "video_duration_watched".to_string();
                 let timestamp = std::time::SystemTime::now();
 
@@ -294,7 +297,7 @@ impl Event {
                     item_type: item_type.clone(),
                     nsfw_probability: nsfw_probability as f32,
                     post_id,
-                    video_id: video_id.to_string(),
+                    video_id: video_id.clone(),
                     timestamp,
                     percent_watched: percent_watched as f32,
                 };
@@ -344,7 +347,7 @@ impl Event {
                             .add_user_buffer_items(vec![BufferItem {
                                 publisher_canister_id: publisher_canister_id.to_string(),
                                 post_id,
-                                video_id: video_id.to_string(),
+                                video_id: video_id,
                                 item_type,
                                 percent_watched: watch_history_item.percent_watched,
                                 user_canister_id: user_canister_id.to_string(),
@@ -384,8 +387,8 @@ impl Event {
                 use yral_canisters_client::individual_user_template::PostViewDetailsFromFrontend;
 
                 let percentage_watched = params.percentage_watched as u8;
-                let post_id = params.post_id;
-                let publisher_canister_id = params.publisher_canister_id;
+                let post_id = params.post_id.unwrap_or_default();
+                let publisher_canister_id = params.publisher_canister_id.unwrap();
 
                 let watch_count = 1u8;
 
