@@ -92,8 +92,7 @@ impl AppState {
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
             #[cfg(not(feature = "local-bin"))]
             notification_client: NotificationClient::new(
-                env::var("YRAL_METADATA_NOTIFICATION_API_KEY")
-                    .unwrap_or_default(),
+                env::var("YRAL_METADATA_NOTIFICATION_API_KEY").unwrap_or_default(),
             ),
             canisters_ctx: init_canisters_ctx().await,
             #[cfg(not(feature = "local-bin"))]
@@ -279,4 +278,3 @@ async fn init_canister_backup_redis_pool() -> RedisPool {
 pub async fn init_canisters_ctx() -> WrappedContextCanisters {
     WrappedContextCanisters::new().expect("Canisters context to be connected")
 }
-

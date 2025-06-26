@@ -1,4 +1,5 @@
 use crate::consts::OFF_CHAIN_AGENT_URL;
+use crate::events::types::VideoDurationWatchedPayload;
 use crate::{
     app_state::AppState,
     consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
@@ -262,19 +263,32 @@ impl Event {
 
     pub fn update_watch_history(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
-            let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
+            let params: Result<VideoDurationWatchedPayload, _> =
+                serde_json::from_str(&self.event.params);
+
+            let params = match params {
+                Ok(params) => params,
+                Err(e) => {
+                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    return;
+                }
+            };
+
             let app_state = app_state.clone();
 
             tokio::spawn(async move {
                 let ml_feed_cache = app_state.ml_feed_cache.clone();
 
-                let percent_watched = params["percentage_watched"].as_f64().unwrap();
-                let nsfw_probability = params["nsfw_probability"].as_f64().unwrap_or_default();
+                let percent_watched = params.percentage_watched;
+                let nsfw_probability = params.nsfw_probability.unwrap_or_default();
 
-                let user_canister_id = params["canister_id"].as_str().unwrap();
-                let publisher_canister_id = params["publisher_canister_id"].as_str().unwrap();
-                let post_id = params["post_id"].as_u64().unwrap();
-                let video_id = params["video_id"].as_str().unwrap();
+                let user_canister_id = &params.canister_id;
+                let publisher_canister_id = &params
+                    .publisher_canister_id
+                    .map(|f| f.to_string())
+                    .unwrap_or_default();
+                let post_id = params.post_id.unwrap_or_default();
+                let video_id = params.video_id.unwrap_or_default();
                 let item_type = "video_duration_watched".to_string();
                 let timestamp = std::time::SystemTime::now();
 
@@ -283,7 +297,7 @@ impl Event {
                     item_type: item_type.clone(),
                     nsfw_probability: nsfw_probability as f32,
                     post_id,
-                    video_id: video_id.to_string(),
+                    video_id: video_id.clone(),
                     timestamp,
                     percent_watched: percent_watched as f32,
                 };
@@ -333,7 +347,7 @@ impl Event {
                             .add_user_buffer_items(vec![BufferItem {
                                 publisher_canister_id: publisher_canister_id.to_string(),
                                 post_id,
-                                video_id: video_id.to_string(),
+                                video_id: video_id,
                                 item_type,
                                 percent_watched: watch_history_item.percent_watched,
                                 user_canister_id: user_canister_id.to_string(),
@@ -347,6 +361,58 @@ impl Event {
                     Err(e) => {
                         error!("Error checking user watch history plain item: {:?}", e);
                     }
+                }
+            });
+        }
+    }
+
+    pub fn update_view_count_canister(&self, app_state: &AppState) {
+        if self.event.event == "video_duration_watched" {
+            let params: Result<VideoDurationWatchedPayload, _> =
+                serde_json::from_str(&self.event.params);
+
+            let params = match params {
+                Ok(params) => params,
+                Err(e) => {
+                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    return;
+                }
+            };
+
+            let app_state = app_state.clone();
+
+            tokio::spawn(async move {
+                use std::cmp::Ordering;
+                use yral_canisters_client::individual_user_template::IndividualUserTemplate;
+                use yral_canisters_client::individual_user_template::PostViewDetailsFromFrontend;
+
+                let percentage_watched = params.percentage_watched as u8;
+                let post_id = params.post_id.unwrap_or_default();
+                let publisher_canister_id = params.publisher_canister_id.unwrap();
+
+                let watch_count = 1u8;
+
+                let payload = match percentage_watched.cmp(&95) {
+                    Ordering::Less => {
+                        PostViewDetailsFromFrontend::WatchedPartially { percentage_watched }
+                    }
+                    _ => PostViewDetailsFromFrontend::WatchedMultipleTimes {
+                        percentage_watched,
+                        watch_count,
+                    },
+                };
+
+                let individual_user_template =
+                    IndividualUserTemplate(publisher_canister_id, &app_state.agent);
+
+                if let Err(e) = individual_user_template
+                    .update_post_add_view_details(post_id, payload)
+                    .await
+                {
+                    error!(
+                        "Failed to update view details for post {} in canister {}: {:?}",
+                        post_id, publisher_canister_id, e
+                    );
                 }
             });
         }
