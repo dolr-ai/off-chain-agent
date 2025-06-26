@@ -1,4 +1,5 @@
 use crate::consts::OFF_CHAIN_AGENT_URL;
+use crate::events::types::VideoDurationWatchedPayload;
 use crate::{
     app_state::AppState,
     consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
@@ -262,7 +263,7 @@ impl Event {
 
     pub fn update_watch_history(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
-            let params: Result<crate::events::types::VideoDurationWatchedParams, _> =
+            let params: Result<VideoDurationWatchedPayload, _> =
                 serde_json::from_str(&self.event.params);
 
             let params = match params {
@@ -364,7 +365,7 @@ impl Event {
 
     pub fn update_view_count_canister(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
-            let params: Result<crate::events::types::VideoDurationWatchedParams, _> =
+            let params: Result<VideoDurationWatchedPayload, _> =
                 serde_json::from_str(&self.event.params);
 
             let params = match params {
