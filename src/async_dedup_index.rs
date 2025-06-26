@@ -117,6 +117,9 @@ impl WrappedContext {
         self.conn
             .reducers
             .add(hash.to_string(), video_id.to_string(), timestamp.into())
+            .inspect_err(|err| {
+                log::error!("enquing reducer call failed: {err:#?}");
+            })
             .context("Couldn't send request to add")?;
 
         let res = loop {
