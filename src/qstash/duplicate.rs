@@ -121,7 +121,7 @@ impl<'a> VideoHashDuplication<'a> {
 
     pub async fn process_video_deduplication(
         &self,
-        // dedup_index_ctx: &async_dedup_index::WrappedContext,
+        dedup_index_ctx: &async_dedup_index::WrappedContext,
         bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         video_url: &str,
@@ -141,13 +141,13 @@ impl<'a> VideoHashDuplication<'a> {
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
 
         // Store the original hash regardless of duplication status
-        // let res = self
-        //     .store_videohash_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
-        //     .await;
-        // match res {
-        //     Ok(_) => log::info!("stored the video hash to stdb"),
-        //     Err(err) => log::info!("error while storing to stdb: {err:#?}"),
-        // }
+        let res = self
+            .store_videohash_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
+            .await;
+        match res {
+            Ok(_) => log::info!("stored the video hash to stdb"),
+            Err(err) => log::info!("error while storing to stdb: {err:#?}"),
+        }
         self.store_videohash_original(bigquery_client, video_id, &video_hash.hash)
             .await?;
 

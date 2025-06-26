@@ -89,8 +89,4 @@ impl WrappedContextCanisters {
 
         Ok(res)
     }
-
-    pub async fn get_deleted_count(&self) -> anyhow::Result<u64> {
-        Ok(self.conn.db.deleted_canisters().count())
-    }
 }

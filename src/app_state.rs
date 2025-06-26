@@ -49,8 +49,8 @@ pub struct AppState {
     pub metrics: CfMetricTx,
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
-    // #[cfg(not(feature = "local-bin"))]
-    // pub dedup_index_ctx: async_dedup_index::WrappedContext,
+    #[cfg(not(feature = "local-bin"))]
+    pub dedup_index_ctx: async_dedup_index::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub backend_ctx: async_backend::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
@@ -84,8 +84,8 @@ impl AppState {
             metrics: init_metrics(),
             #[cfg(not(feature = "local-bin"))]
             alloydb_client: init_alloydb_client().await,
-            // #[cfg(not(feature = "local-bin"))]
-            // dedup_index_ctx: init_dedup_index_ctx().await,
+            #[cfg(not(feature = "local-bin"))]
+            dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             backend_ctx: init_backend_ctx().await,
             #[cfg(not(feature = "local-bin"))]
