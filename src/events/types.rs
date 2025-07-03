@@ -105,8 +105,8 @@ pub struct VideoDurationWatchedPayload {
     pub publisher_user_id: Option<Principal>,
     #[serde(rename = "user_id")]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn")]
-    pub is_logged_in: bool,
+    #[serde(rename = "is_loggedIn", skip_serializing_if = "Option::is_none")]
+    pub is_logged_in: Option<bool>,
     #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(rename = "canister_id")]
