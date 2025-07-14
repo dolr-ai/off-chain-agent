@@ -108,6 +108,18 @@ pub async fn delete_canister_data(
         );
     }
 
+    if let Err(e) = state
+        .ml_feed_cache
+        .delete_user_caches_v2(&user_principal.to_string())
+        .await
+    {
+        log::error!(
+            "Failed to delete Redis caches for canister {}: {}",
+            canister_id,
+            e
+        );
+    }
+
     Ok(())
 }
 
