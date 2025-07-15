@@ -75,6 +75,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -4555,7 +4556,8 @@ dependencies = [
 
 [[package]]
 name = "ml-feed-cache"
-version = "0.1.0"
+version = "0.2.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
 dependencies = [
  "anyhow",
  "bb8",
@@ -8747,6 +8749,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
 dependencies = [
  "anyhow",
  "candid",
@@ -8818,6 +8821,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
 dependencies = [
  "candid",
  "log",
@@ -8832,6 +8836,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
 dependencies = [
  "candid",
  "serde",
@@ -8849,6 +8854,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
 dependencies = [
  "ic-agent",
  "k256",
