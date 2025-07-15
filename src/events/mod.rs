@@ -35,6 +35,7 @@ pub mod nsfw;
 pub mod push_notifications;
 pub mod queries;
 pub mod types;
+pub mod utils;
 pub mod verify;
 
 pub struct WarehouseEventsService {
@@ -184,6 +185,9 @@ async fn process_event_impl(
     event.update_watch_history(&shared_state.clone());
     event.update_view_count_canister(&shared_state.clone());
     event.update_success_history(&shared_state.clone());
+
+    event.update_watch_history_v2(&shared_state.clone());
+    event.update_success_history_v2(&shared_state.clone());
 
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_firestore(&shared_state.clone());
