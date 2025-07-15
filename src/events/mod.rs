@@ -35,6 +35,7 @@ pub mod nsfw;
 pub mod push_notifications;
 pub mod queries;
 pub mod types;
+pub mod utils;
 pub mod verify;
 
 pub struct WarehouseEventsService {

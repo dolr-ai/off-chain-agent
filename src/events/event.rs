@@ -1,5 +1,6 @@
 use crate::consts::OFF_CHAIN_AGENT_URL;
 use crate::events::types::VideoDurationWatchedPayload;
+use crate::events::utils::parse_success_history_params;
 use crate::{
     app_state::AppState,
     consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
@@ -265,6 +266,9 @@ impl Event {
         }
     }
 
+    #[deprecated(
+        note = "Use update_watch_history_v2 instead. will be removed post redis migration"
+    )]
     pub fn update_watch_history(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
             let params: Result<VideoDurationWatchedPayload, _> =
@@ -533,6 +537,9 @@ impl Event {
         }
     }
 
+    #[deprecated(
+        note = "Use update_success_history_v2 instead. will be removed post redis migration"
+    )]
     pub fn update_success_history(&self, app_state: &AppState) {
         let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
         let app_state = app_state.clone();
@@ -641,47 +648,42 @@ impl Event {
     }
 
     pub fn update_success_history_v2(&self, app_state: &AppState) {
-        let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
-        let app_state = app_state.clone();
-
-        let mut percent_watched = 0.0;
-
         if self.event.event != "video_duration_watched" && self.event.event != "like_video" {
             return;
         }
-        if self.event.event == "video_duration_watched" {
-            percent_watched = params["percentage_watched"].as_f64().unwrap();
-            if percent_watched < 30.0 {
-                return;
-            }
-        }
 
+        let app_state = app_state.clone();
         let item_type = self.event.event.clone();
+        let params_str = self.event.params.clone();
 
         tokio::spawn(async move {
             let ml_feed_cache = app_state.ml_feed_cache.clone();
-            let publisher_canister_id = params["publisher_canister_id"].as_str().unwrap();
-            let publisher_user_id = params["publisher_user_id"].as_str().unwrap();
-            let user_id = params["user_id"].as_str().unwrap();
-            let nsfw_probability = params["nsfw_probability"].as_f64().unwrap_or_default();
-            let post_id = params["post_id"].as_u64().unwrap();
-            let video_id = params["video_id"].as_str().unwrap();
             let timestamp = std::time::SystemTime::now();
 
+            // Parse parameters using the helper function
+            let params = match parse_success_history_params(&item_type, &params_str) {
+                Ok(Some(p)) => p,
+                Ok(None) => return, // Early return for video_duration_watched < 30%
+                Err(e) => {
+                    error!("Failed to parse params in update_success_history_v2: {}", e);
+                    return;
+                }
+            };
+
             let success_history_item = MLFeedCacheHistoryItemV2 {
-                publisher_user_id: publisher_user_id.to_string(),
-                canister_id: publisher_canister_id.to_string(),
+                publisher_user_id: params.publisher_user_id.clone(),
+                canister_id: params.publisher_canister_id.clone(),
                 item_type: item_type.clone(),
-                post_id,
-                video_id: video_id.to_string(),
+                post_id: params.post_id,
+                video_id: params.video_id.clone(),
                 timestamp,
-                percent_watched: percent_watched as f32,
+                percent_watched: params.percent_watched as f32,
             };
 
             let user_cache_key = format!(
                 "{}{}",
-                user_id,
-                if nsfw_probability <= 0.4 {
+                params.user_id,
+                if params.nsfw_probability <= 0.4 {
                     USER_SUCCESS_HISTORY_CLEAN_SUFFIX_V2
                 } else {
                     USER_SUCCESS_HISTORY_NSFW_SUFFIX_V2
@@ -700,14 +702,16 @@ impl Event {
 
             // add to history plain items
             if item_type == "like_video" {
-                let plain_key =
-                    format!("{}{}", user_id, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2);
+                let plain_key = format!(
+                    "{}{}",
+                    params.user_id, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2
+                );
 
                 match ml_feed_cache
                     .is_user_history_plain_item_exists_v2(
                         plain_key.as_str(),
                         PlainPostItemV2 {
-                            video_id: video_id.to_string(),
+                            video_id: params.video_id.clone(),
                         },
                     )
                     .await
@@ -719,12 +723,12 @@ impl Event {
                         // add_user_buffer_items
                         if let Err(e) = ml_feed_cache
                             .add_user_buffer_items_v2(vec![BufferItemV2 {
-                                publisher_user_id: publisher_user_id.to_string(),
-                                post_id,
-                                video_id: video_id.to_string(),
+                                publisher_user_id: params.publisher_user_id.clone(),
+                                post_id: params.post_id,
+                                video_id: params.video_id.clone(),
                                 item_type,
-                                percent_watched: percent_watched as f32,
-                                user_id: user_id.to_string(),
+                                percent_watched: params.percent_watched as f32,
+                                user_id: params.user_id.clone(),
                                 timestamp,
                             }])
                             .await

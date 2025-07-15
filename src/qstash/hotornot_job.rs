@@ -22,6 +22,7 @@ pub struct InMemoryBufferItem {
     pub post_id: u64,
 }
 
+#[deprecated(note = "Use start_hotornot_job_v2 instead. will be removed post redis migration")]
 pub async fn start_hotornot_job(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
