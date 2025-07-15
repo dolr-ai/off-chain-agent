@@ -506,6 +506,10 @@ impl Event {
                 use yral_canisters_client::individual_user_template::PostViewDetailsFromFrontend;
 
                 let percentage_watched = params.percentage_watched as u8;
+                if percentage_watched == 0 || percentage_watched > 100 {
+                    error!("Invalid percentage_watched: {}", percentage_watched);
+                    return;
+                }
                 let post_id = params.post_id.unwrap_or_default();
                 let publisher_canister_id = params.publisher_canister_id.unwrap();
 
