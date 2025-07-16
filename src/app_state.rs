@@ -160,7 +160,9 @@ pub async fn init_agent() -> Agent {
             }
         };
 
-        let agent = match Agent::builder()
+        
+
+        match Agent::builder()
             .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
             .with_identity(identity)
             .build()
@@ -169,9 +171,7 @@ pub async fn init_agent() -> Agent {
             Err(err) => {
                 panic!("Unable to create agent, error: {:?}", err);
             }
-        };
-
-        agent
+        }
     }
 
     #[cfg(any(feature = "local-bin", feature = "use-local-agent"))]

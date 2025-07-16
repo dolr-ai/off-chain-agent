@@ -8,7 +8,6 @@ use serde_json::json;
 use tonic::transport::{Channel, ClientTlsConfig};
 use tracing::instrument;
 use utoipa::ToSchema;
-use yral_canisters_client::individual_user_template::Ok;
 
 use crate::{
     app_state::AppState,

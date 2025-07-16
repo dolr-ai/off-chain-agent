@@ -128,7 +128,7 @@ impl VideoHash {
         // Use spawn_blocking for ffmpeg download
         let download_status = tokio::task::spawn_blocking(move || {
             Command::new("ffmpeg")
-                .args(&["-y", "-i", &url_clone, "-c", "copy", &temp_file_path])
+                .args(["-y", "-i", &url_clone, "-c", "copy", &temp_file_path])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()
@@ -293,7 +293,7 @@ impl VideoHash {
     ) -> Result<Vec<bool>, Box<dyn Error + Send + Sync>> {
         let num_frames = frames.len();
 
-        if (num_frames == 1) {
+        if num_frames == 1 {
             let gray = frames[0]
                 .resize_exact(GRID_SIZE, GRID_SIZE, FilterType::Triangle)
                 .grayscale()

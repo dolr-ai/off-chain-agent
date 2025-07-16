@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc, time::Duration, vec};
 use yral_canisters_client::{
     individual_user_template::{DeployedCdaoCanisters, IndividualUserTemplate},
-    platform_orchestrator::{self, PlatformOrchestrator},
+    platform_orchestrator::{PlatformOrchestrator},
     sns_governance::{
         self, Action, Command1, Configure, Follow, GetProposal, GetRunningSnsVersionArg,
         IncreaseDissolveDelay, ListNeurons, ManageNeuron, NeuronId, Operation, Proposal,
@@ -21,13 +21,10 @@ use yral_canisters_client::{
     user_index::UserIndex,
 };
 
-use ic_utils::{
-    interfaces::management_canister::{
-        builders::{CanisterUpgradeOptions, InstallMode},
+use ic_utils::interfaces::management_canister::{
+        builders::InstallMode,
         ManagementCanister,
-    },
-    Canister,
-};
+    };
 
 use crate::{consts::PLATFORM_ORCHESTRATOR_ID, qstash::client::QStashClient};
 
@@ -52,17 +49,17 @@ pub struct UpgradeArg {
     pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 
-pub const SNS_TOKEN_GOVERNANCE_MODULE_HASH: &'static str =
+pub const SNS_TOKEN_GOVERNANCE_MODULE_HASH: &str =
     "51fd3d1a529f3f7bad808b19074e761ce3538282ac8189bd7067b4156360c279";
-pub const SNS_TOKEN_LEDGER_MODULE_HASH: &'static str =
+pub const SNS_TOKEN_LEDGER_MODULE_HASH: &str =
     "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46";
-pub const SNS_TOKEN_ROOT_MODULE_HASH: &'static str =
+pub const SNS_TOKEN_ROOT_MODULE_HASH: &str =
     "431cb333feb3f762f742b0dea58745633a2a2ca41075e9933183d850b4ddb259";
-pub const SNS_TOKEN_SWAP_MODULE_HASH: &'static str =
+pub const SNS_TOKEN_SWAP_MODULE_HASH: &str =
     "8313ac22d2ef0a0c1290a85b47f235cfa24ca2c96d095b8dbed5502483b9cd18";
-pub const SNS_TOKEN_INDEX_MODULE_HASH: &'static str =
+pub const SNS_TOKEN_INDEX_MODULE_HASH: &str =
     "67b5f0bf128e801adf4a959ea26c3c9ca0cd399940e169a26a2eb237899a94dd";
-pub const SNS_TOKEN_ARCHIVE_MODULE_HASH: &'static str =
+pub const SNS_TOKEN_ARCHIVE_MODULE_HASH: &str =
     "317771544f0e828a60ad6efc97694c425c169c4d75d911ba592546912dba3116";
 
 const MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE: u128 = 1_000_000_000_000; //1T
@@ -189,7 +186,7 @@ pub async fn setup_sns_canisters_of_a_user_canister_for_upgrade(
 
     let sns_canisters: Vec<SnsCanisters> = deployed_canisters
         .into_iter()
-        .map(|d| SnsCanisters::from(d))
+        .map(SnsCanisters::from)
         .collect();
 
     sns_canisters
@@ -200,7 +197,7 @@ pub async fn setup_sns_canisters_of_a_user_canister_for_upgrade(
             qstash_client
                 .upgrade_sns_creator_dao_canister(sns_canisters)
                 .await
-                .map_err(|e| <anyhow::Error as Into<Box<dyn Error + Send + Sync>>>::into(e))?;
+                .map_err(<anyhow::Error as Into<Box<dyn Error + Send + Sync>>>::into)?;
 
             Ok::<(), Box<dyn Error + Send + Sync>>(())
         })
@@ -340,8 +337,7 @@ async fn setup_neurons_for_admin_principal(
         .map_err(|e| e.to_string())?
         .neurons;
 
-    let first_neuron = neuron_list
-        .get(0)
+    let first_neuron = neuron_list.first()
         .ok_or("first neuron not found")?
         .id
         .as_ref()
@@ -465,23 +461,19 @@ fn check_if_version_matches_deployed_canister_version(deployed_version: Version)
         .to_vec()
         .encode_hex::<String>();
 
-    let hashes = vec![
-        governance_hash,
+    let hashes = [governance_hash,
         index_hash,
         swap_hash,
         ledger_hash,
         root_hash,
-        archive_hash,
-    ];
+        archive_hash];
 
-    let final_hashes = vec![
-        SNS_TOKEN_ARCHIVE_MODULE_HASH.to_owned(),
+    let final_hashes = [SNS_TOKEN_ARCHIVE_MODULE_HASH.to_owned(),
         SNS_TOKEN_GOVERNANCE_MODULE_HASH.to_owned(),
         SNS_TOKEN_INDEX_MODULE_HASH.to_owned(),
         SNS_TOKEN_LEDGER_MODULE_HASH.to_owned(),
         SNS_TOKEN_ROOT_MODULE_HASH.to_owned(),
-        SNS_TOKEN_SWAP_MODULE_HASH.to_owned(),
-    ];
+        SNS_TOKEN_SWAP_MODULE_HASH.to_owned()];
 
     let result = hashes.iter().all(|val| final_hashes.contains(val));
 
@@ -521,7 +513,7 @@ pub async fn check_if_the_proposal_executed_successfully(
             sns_governance::Result1::Error(e) => Err(e.error_message.into()),
         }
     } else {
-        return Err("Proposal not found".to_owned().into());
+        Err("Proposal not found".to_owned().into())
     }
 }
 
@@ -593,12 +585,11 @@ async fn check_and_recharge_canisters_for_sns_upgrade(
 
     let root_canister_cycle_balance = sns_canister_summary
         .root
-        .map(|canister_res| {
+        .and_then(|canister_res| {
             canister_res
                 .status
                 .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
-        })
-        .flatten();
+        });
 
     if let Some(root_canister_balance) = root_canister_cycle_balance {
         let _ =
@@ -608,12 +599,11 @@ async fn check_and_recharge_canisters_for_sns_upgrade(
 
     let swap_canister_cycle_balance = sns_canister_summary
         .swap
-        .map(|canister_res| {
+        .and_then(|canister_res| {
             canister_res
                 .status
                 .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
-        })
-        .flatten();
+        });
 
     if let Some(swap_canister_balance) = swap_canister_cycle_balance {
         let _ =
@@ -623,12 +613,11 @@ async fn check_and_recharge_canisters_for_sns_upgrade(
 
     let ledger_canister_cycle_balance = sns_canister_summary
         .ledger
-        .map(|canister_res| {
+        .and_then(|canister_res| {
             canister_res
                 .status
                 .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
-        })
-        .flatten();
+        });
 
     if let Some(ledger_canister_balance) = ledger_canister_cycle_balance {
         let _ = recharge_if_sns_canister_threshold(
@@ -641,12 +630,11 @@ async fn check_and_recharge_canisters_for_sns_upgrade(
 
     let index_cansiter_cycle_balance = sns_canister_summary
         .index
-        .map(|canister_res| {
+        .and_then(|canister_res| {
             canister_res
                 .status
                 .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
-        })
-        .flatten();
+        });
 
     if let Some(index_canister_balance) = index_cansiter_cycle_balance {
         let _ =
@@ -656,12 +644,11 @@ async fn check_and_recharge_canisters_for_sns_upgrade(
 
     let governance_canister_cycle_balance = sns_canister_summary
         .governance
-        .map(|canister_res| {
+        .and_then(|canister_res| {
             canister_res
                 .status
                 .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
-        })
-        .flatten();
+        });
 
     if let Some(governance_canister_balance) = governance_canister_cycle_balance {
         let _ = recharge_if_sns_canister_threshold(
@@ -700,8 +687,7 @@ pub async fn upgrade_user_token_sns_canister_impl(
         .map_err(|e| e.to_string())?
         .neurons;
 
-    let first_neuron = neuron_list
-        .get(0)
+    let first_neuron = neuron_list.first()
         .ok_or("first neuron not found")?
         .id
         .as_ref()
@@ -725,7 +711,7 @@ pub async fn upgrade_user_token_sns_canister_impl(
         let proposal_id_u64 = proposal_id.proposal_id.ok_or("proposal id not found")?.id;
 
         let verify_request = VerifyUpgradeProposalRequest {
-            sns_canisters: sns_canisters,
+            sns_canisters,
             proposal_id: proposal_id_u64,
         };
 

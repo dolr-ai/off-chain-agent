@@ -78,7 +78,7 @@ pub async fn handle_login_successful(
         })?;
 
     if let Some(errors) = res.insert_errors {
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             log::error!("canister_user_principal insert response : {:?}", errors);
             return Err(anyhow::anyhow!(
                 "Failed to insert canister_user_principal row to bigquery"
