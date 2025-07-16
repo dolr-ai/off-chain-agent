@@ -56,7 +56,8 @@ impl TryFrom<DelegatedIdentityWire> for DelegatedIdentity {
             value.from_key,
             Box::new(to_identity),
             value.delegation_chain,
-        ))
+        )
+        .map_err(|err| err.to_string())?)
     }
 
     type Error = String;
