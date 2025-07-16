@@ -39,7 +39,7 @@ pub static OFF_CHAIN_AGENT_URL: Lazy<Url> = Lazy::new(|| {
 
 pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
 
-pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
+pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server-staging.fly.dev:443";
 
 pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
     Url::parse("https://storjinterw96bdfdvg3-194a96f1998dcf7a.tec-s1.onthetaedgecloud.com/")

@@ -75,7 +75,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
+source = "git+https://github.com/yral-dapp/yral-common?rev=58e82be4dbe7231768dc61288a9fc5056d39859b#58e82be4dbe7231768dc61288a9fc5056d39859b"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -4557,7 +4557,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.2.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
+source = "git+https://github.com/yral-dapp/yral-common?rev=58e82be4dbe7231768dc61288a9fc5056d39859b#58e82be4dbe7231768dc61288a9fc5056d39859b"
 dependencies = [
  "anyhow",
  "bb8",
@@ -4568,6 +4568,7 @@ dependencies = [
  "serde-redis",
  "serde_json",
  "utoipa",
+ "yral-types",
 ]
 
 [[package]]
@@ -8749,7 +8750,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
+source = "git+https://github.com/yral-dapp/yral-common?rev=58e82be4dbe7231768dc61288a9fc5056d39859b#58e82be4dbe7231768dc61288a9fc5056d39859b"
 dependencies = [
  "anyhow",
  "candid",
@@ -8821,7 +8822,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
+source = "git+https://github.com/yral-dapp/yral-common?rev=58e82be4dbe7231768dc61288a9fc5056d39859b#58e82be4dbe7231768dc61288a9fc5056d39859b"
 dependencies = [
  "candid",
  "log",
@@ -8836,7 +8837,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
+source = "git+https://github.com/yral-dapp/yral-common?rev=58e82be4dbe7231768dc61288a9fc5056d39859b#58e82be4dbe7231768dc61288a9fc5056d39859b"
 dependencies = [
  "candid",
  "serde",
@@ -8854,11 +8855,16 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#8705726c5e36aefdf790442cf161e3b8762991de"
+source = "git+https://github.com/yral-dapp/yral-common?rev=58e82be4dbe7231768dc61288a9fc5056d39859b#58e82be4dbe7231768dc61288a9fc5056d39859b"
 dependencies = [
  "ic-agent",
  "k256",
+ "redis 0.29.5",
+ "redis-macros",
  "serde",
+ "serde_json",
+ "utoipa",
+ "utoipa-swagger-ui",
 ]
 
 [[package]]
