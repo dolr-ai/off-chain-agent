@@ -147,7 +147,7 @@ pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
 }
 
 pub async fn init_agent() -> Agent {
-    // #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
+    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     {
         let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
@@ -169,7 +169,8 @@ pub async fn init_agent() -> Agent {
                 println!(
                     "RECLAIM_CANISTER_PEM principal: {:?}",
                     agent.get_principal().map(|p| p.to_text())
-                )
+                );
+                agent
             }
             Err(err) => {
                 panic!("Unable to create agent, error: {:?}", err);
