@@ -149,7 +149,8 @@ pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
 pub async fn init_agent() -> Agent {
     #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     {
-        let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+        let pk =
+            env::var("CANISTERS_GLOBAL_ADMIN_PEM").expect("$CANISTERS_GLOBAL_ADMIN_PEM is not set");
 
         let identity = match ic_agent::identity::BasicIdentity::from_pem(
             stringreader::StringReader::new(pk.as_str()),
@@ -159,8 +160,6 @@ pub async fn init_agent() -> Agent {
                 panic!("Unable to create identity, error: {:?}", err);
             }
         };
-
-        
 
         match Agent::builder()
             .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
