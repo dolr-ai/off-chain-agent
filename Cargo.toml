@@ -99,13 +99,13 @@ async-channel = "2.3.1"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "feat/dedup-index", features = [
     "full",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/dedup-index", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/dedup-index", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "feat/dedup-index" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/dedup-index" }
 
 # Local (Path) - uncomment to use local development versions
 # yral-canisters-client = { path = "../yral-common/canisters-client", features = [

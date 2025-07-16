@@ -1,6 +1,5 @@
 #[cfg(not(feature = "local-bin"))]
 use crate::async_backend;
-use crate::async_dedup_index;
 use crate::canister::utils::deleted_canister::WrappedContextCanisters;
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
@@ -50,8 +49,6 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
     #[cfg(not(feature = "local-bin"))]
-    pub dedup_index_ctx: async_dedup_index::WrappedContext,
-    #[cfg(not(feature = "local-bin"))]
     pub backend_ctx: async_backend::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
@@ -84,8 +81,6 @@ impl AppState {
             metrics: init_metrics(),
             #[cfg(not(feature = "local-bin"))]
             alloydb_client: init_alloydb_client().await,
-            #[cfg(not(feature = "local-bin"))]
-            dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             backend_ctx: init_backend_ctx().await,
             #[cfg(not(feature = "local-bin"))]
@@ -160,8 +155,6 @@ pub async fn init_agent() -> Agent {
             }
         };
 
-        
-
         match Agent::builder()
             .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
             .with_identity(identity)
@@ -233,10 +226,6 @@ pub async fn init_nsfw_detect_channel() -> Channel {
 pub async fn init_qstash_client() -> QStashClient {
     let auth_token = env::var("QSTASH_AUTH_TOKEN").expect("QSTASH_AUTH_TOKEN is required");
     QStashClient::new(auth_token.as_str())
-}
-
-pub async fn init_dedup_index_ctx() -> async_dedup_index::WrappedContext {
-    async_dedup_index::WrappedContext::new().expect("Stdb dedup index to be connected")
 }
 
 pub async fn init_backend_ctx() -> async_backend::WrappedContext {

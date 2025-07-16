@@ -37,7 +37,6 @@ use error::*;
 
 mod app_state;
 mod async_backend;
-pub(crate) mod async_dedup_index;
 mod auth;
 pub mod canister;
 mod config;
