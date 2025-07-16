@@ -1,13 +1,12 @@
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{
-    app_state, async_dedup_index, consts::OFF_CHAIN_AGENT_URL,
-    duplicate_video::videohash::VideoHash,
-};
-use anyhow::{anyhow, Context};
+use crate::{app_state, consts::OFF_CHAIN_AGENT_URL, duplicate_video::videohash::VideoHash};
+use anyhow::Context;
+use candid::Principal;
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use http::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
+use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSystemTime};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VideoPublisherData {
@@ -121,7 +120,7 @@ impl<'a> VideoHashDuplication<'a> {
 
     pub async fn process_video_deduplication(
         &self,
-        dedup_index_ctx: &async_dedup_index::WrappedContext,
+        agent: &ic_agent::Agent,
         bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         video_url: &str,
@@ -142,7 +141,7 @@ impl<'a> VideoHashDuplication<'a> {
 
         // Store the original hash regardless of duplication status
         let res = self
-            .store_videohash_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
+            .store_videohash_to_dedup_index(agent, video_id, &video_hash.hash)
             .await;
         match res {
             Ok(_) => log::info!("stored the video hash to stdb"),
@@ -264,21 +263,29 @@ impl<'a> VideoHashDuplication<'a> {
         Ok(())
     }
 
-    async fn store_videohash_to_spacetime(
+    async fn store_videohash_to_dedup_index(
         &self,
-        ctx: &async_dedup_index::WrappedContext,
+        agent: &ic_agent::Agent,
         video_id: &str,
         hash: &str,
     ) -> anyhow::Result<()> {
-        ctx.add(video_id, hash, SystemTime::now())
-            .await
-            .context("Couldn't send request to stdb")?
-            .map_err(|err| anyhow!("{err}"))
-            .context("Module returned error")
-            .inspect_err(|err| {
-                log::error!("module error: {err:#?}");
-            })?;
+        let dedup_index = DedupIndex(Principal::anonymous(), agent);
+        let now = SystemTime::now();
 
+        let now = now.duration_since(UNIX_EPOCH).unwrap();
+        dedup_index
+            .add_video_to_index(
+                video_id.into(),
+                (
+                    hash.into(),
+                    CanisterSystemTime {
+                        nanos_since_epoch: now.subsec_nanos(),
+                        secs_since_epoch: now.as_secs(),
+                    },
+                ),
+            )
+            .await
+            .context("Couldn't add video to dedup index")?;
         Ok(())
     }
 
