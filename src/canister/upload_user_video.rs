@@ -2,12 +2,11 @@ use std::{error::Error, sync::Arc};
 
 use axum::{extract::State, Json};
 use ic_agent::{
-    identity::{DelegatedIdentity, Secp256k1Identity, SignedDelegation},
+    identity::{DelegatedIdentity, Secp256k1Identity},
     Agent, Identity,
 };
-use k256::{elliptic_curve::JwkEcKey, SecretKey};
+use k256::SecretKey;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::{
     app_state::AppState, events::VideoUploadSuccessful, types::DelegatedIdentityWire,
@@ -52,12 +51,12 @@ impl TryFrom<DelegatedIdentityWire> for DelegatedIdentity {
     fn try_from(value: DelegatedIdentityWire) -> Result<Self, Self::Error> {
         let secret_key = SecretKey::from_jwk(&value.to_secret).map_err(|e| e.to_string())?;
         let to_identity = Secp256k1Identity::from_private_key(secret_key);
-        Ok(DelegatedIdentity::new(
+        DelegatedIdentity::new(
             value.from_key,
             Box::new(to_identity),
             value.delegation_chain,
         )
-        .map_err(|err| err.to_string())?)
+        .map_err(|err| err.to_string())
     }
 
     type Error = String;

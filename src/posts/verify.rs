@@ -5,10 +5,8 @@ use axum::{
     http::StatusCode,
     middleware::Next,
     response::Response,
-    Json,
 };
 use candid::Principal;
-use ic_agent::{identity::DelegatedIdentity, Identity};
 use serde::{Deserialize, Serialize};
 
 use crate::{

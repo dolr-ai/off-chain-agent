@@ -19,7 +19,7 @@ use crate::{
     consts::OFF_CHAIN_AGENT_URL,
     events::event::UploadVideoInfo,
     posts::report_post::ReportPostRequestV2,
-    qstash::duplicate::{DuplicateVideoEvent, VideoHashDuplication, VideoPublisherData},
+    qstash::duplicate::{DuplicateVideoEvent, VideoHashDuplication},
 };
 
 #[derive(Clone, Debug)]
@@ -192,7 +192,7 @@ impl QStashClient {
             20 - current_minute
         };
 
-        let jitter = (now.nanosecond() % 601) as u32;
+        let jitter = now.nanosecond() % 601;
         let delay_seconds = minutes_until_20 * 60 + jitter + 3600;
 
         self.client
@@ -282,9 +282,7 @@ impl QStashClient {
         &self,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join(&format!(
-                "qstash/upgrade_user_token_sns_canister_for_entire_network",
-            ))
+            .join("qstash/upgrade_user_token_sns_canister_for_entire_network")
             .unwrap();
 
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;

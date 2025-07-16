@@ -1,8 +1,4 @@
-use crate::AppState;
-use crate::{
-    app_state,
-    qstash::duplicate::{VideoHashDuplication, VideoPublisherData},
-};
+use crate::app_state;
 use axum::{extract::Query, extract::State, http::HeaderMap, Json};
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use log::{error, info, warn};

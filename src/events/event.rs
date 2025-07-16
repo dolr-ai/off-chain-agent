@@ -5,7 +5,6 @@ use crate::{
     app_state::AppState,
     consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
     events::warehouse_events::WarehouseEvent,
-    qstash::duplicate::VideoPublisherData,
     utils::cf_images::upload_base64_image,
     AppError,
 };
@@ -347,7 +346,6 @@ impl Event {
                     .await
                 {
                     Ok(true) => {
-                        return;
                     }
                     Ok(false) => {
                         // add_user_buffer_items
@@ -355,7 +353,7 @@ impl Event {
                             .add_user_buffer_items(vec![BufferItem {
                                 publisher_canister_id: publisher_canister_id.to_string(),
                                 post_id,
-                                video_id: video_id,
+                                video_id,
                                 item_type,
                                 percent_watched: watch_history_item.percent_watched,
                                 user_canister_id: user_canister_id.to_string(),
@@ -458,7 +456,6 @@ impl Event {
                     .await
                 {
                     Ok(true) => {
-                        return;
                     }
                     Ok(false) => {
                         // add_user_buffer_items
@@ -466,7 +463,7 @@ impl Event {
                             .add_user_buffer_items_v2(vec![BufferItemV2 {
                                 publisher_user_id: publisher_user_id.to_string(),
                                 post_id,
-                                video_id: video_id,
+                                video_id,
                                 item_type,
                                 percent_watched: watch_history_item.percent_watched,
                                 user_id: user_id.to_string(),
@@ -616,7 +613,6 @@ impl Event {
                     .await
                 {
                     Ok(true) => {
-                        return;
                     }
                     Ok(false) => {
                         // add_user_buffer_items
@@ -721,7 +717,6 @@ impl Event {
                     .await
                 {
                     Ok(true) => {
-                        return;
                     }
                     Ok(false) => {
                         // add_user_buffer_items
