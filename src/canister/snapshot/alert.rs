@@ -84,7 +84,7 @@ pub async fn snapshot_alert_job_impl(
         canisters_backups.push((canister_data, date_str.clone()));
     }
 
-    if canisters_backups.len() == 0 {
+    if canisters_backups.is_empty() {
         log::info!("Snapshot alert job finished: All canisters have recent backups.");
     } else {
         log::warn!(
@@ -122,7 +122,7 @@ pub async fn retry_backup_canisters(
             async move {
                 let canister_id = canister_data.canister_id.to_string();
                 if let Err(e) =
-                    backup_canister_impl(&agent, &redis_pool, canister_data, date_str.clone()).await
+                    backup_canister_impl(&agent, redis_pool, canister_data, date_str.clone()).await
                 {
                     let err_str = e.to_string();
                     Err((err_str, canister_id, old_date_str))

@@ -5,18 +5,15 @@ use axum::{
     http::StatusCode,
     middleware::Next,
     response::Response,
-    Json,
 };
 use candid::Principal;
-use ic_agent::{identity::DelegatedIdentity, Identity};
-use serde::{Deserialize, Serialize};
 use yral_metrics::metrics::sealed_metric::SealedMetric;
 
 use crate::{
     app_state::AppState, utils::delegated_identity::get_user_info_from_delegated_identity_wire,
 };
 
-use super::{types::AnalyticsEvent, EventBulkRequest, VerifiedEventBulkRequest};
+use super::{EventBulkRequest, VerifiedEventBulkRequest};
 
 pub async fn verify_event_bulk_request(
     State(state): State<Arc<AppState>>,

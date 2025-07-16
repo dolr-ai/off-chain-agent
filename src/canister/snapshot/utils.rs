@@ -67,7 +67,7 @@ pub async fn get_user_canister_list_for_backup(
     canister_backup_redis_pool: &RedisPool,
     date_str: String,
 ) -> Result<Vec<Principal>, anyhow::Error> {
-    let user_canister_list = get_user_canisters_list_v2(&agent).await?;
+    let user_canister_list = get_user_canisters_list_v2(agent).await?;
 
     log::info!("User canister list length: {:?}", user_canister_list.len());
 
@@ -97,7 +97,7 @@ pub async fn get_subnet_orch_ids_list_for_backup(
     canister_backup_redis_pool: &RedisPool,
     date_str: String,
 ) -> Result<Vec<Principal>, anyhow::Error> {
-    let subnet_orch_ids_list = get_subnet_orch_ids(&agent).await?;
+    let subnet_orch_ids_list = get_subnet_orch_ids(agent).await?;
 
     log::info!(
         "Subnet orch ids list length: {:?}",

@@ -14,7 +14,7 @@ fn create_test_video(
     fs::create_dir_all(dir_path)?;
 
     let status = Command::new("ffmpeg")
-        .args(&[
+        .args([
             "-f",
             "lavfi",
             "-i",
@@ -122,7 +122,7 @@ async fn test_hash_consistency() -> Result<(), Box<dyn std::error::Error + Send 
     let video_path = "tests/resources/sample_video.mp4";
     let path = Path::new(video_path);
 
-    if (!path.exists()) {
+    if !path.exists() {
         println!("Test video file not found. Skipping test.");
         return Ok(());
     }

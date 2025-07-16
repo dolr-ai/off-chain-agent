@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    consts::{NSFW_SERVER_URL, NSFW_THRESHOLD, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL},
+    consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
     qstash::client::QStashClient,
 };
 use anyhow::Error;
@@ -186,7 +186,7 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     });
     let res = client.detect_nsfw_video_id(req).await?;
 
-    let mut nsfw_info = NSFWInfo::from(res.into_inner());
+    let nsfw_info = NSFWInfo::from(res.into_inner());
 
     Ok(nsfw_info)
 }
@@ -602,7 +602,7 @@ pub async fn push_nsfw_data_bigquery_v2(
 
     // insert into bigquery
     let insert_request = InsertAllRequest {
-        rows: rows,
+        rows,
         ..Default::default()
     };
 

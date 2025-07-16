@@ -333,7 +333,7 @@ async fn upgrade_sns_creator_dao_canister(
         Ok(()) => {
             let response = Response::builder()
                 .status(StatusCode::OK)
-                .body(format!("upgrade proposal id submitted").into())
+                .body("upgrade proposal id submitted".to_string().into())
                 .unwrap();
 
             Ok(response)
@@ -342,7 +342,7 @@ async fn upgrade_sns_creator_dao_canister(
             log::error!(
                 "Error submitting upgrade proposal to governance canister: {:?}. Error: {}",
                 req.governance,
-                e.to_string()
+                e
             );
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
