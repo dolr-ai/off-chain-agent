@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::app_state::AppState;
 use axum::{extract::State, http::StatusCode, response::IntoResponse};
 #[cfg(not(feature = "local-bin"))]
@@ -15,12 +16,18 @@ pub struct ProfileScore {
 // Extension trait for AlloyDbInstance
 #[cfg(not(feature = "local-bin"))]
 pub trait AlloyDbInstanceExt {
-    async fn increment_decrement_profile_scores(&self, scores: Vec<ProfileScore>) -> Result<(), anyhow::Error>;
+    async fn increment_decrement_profile_scores(
+        &self,
+        scores: Vec<ProfileScore>,
+    ) -> Result<(), anyhow::Error>;
 }
 
 #[cfg(not(feature = "local-bin"))]
 impl AlloyDbInstanceExt for AlloyDbInstance {
-    async fn increment_decrement_profile_scores(&self, scores: Vec<ProfileScore>) -> Result<(), anyhow::Error> {
+    async fn increment_decrement_profile_scores(
+        &self,
+        scores: Vec<ProfileScore>,
+    ) -> Result<(), anyhow::Error> {
         // TODO: Implement actual profile score increment/decrement logic
         // For now, just log and return success
         log::info!("Profile scores to update: {:?}", scores);
@@ -30,11 +37,9 @@ impl AlloyDbInstanceExt for AlloyDbInstance {
 #[cfg(not(feature = "local-bin"))]
 use std::collections::{HashMap, HashSet};
 #[cfg(not(feature = "local-bin"))]
-use yral_ml_feed_cache::{
-    consts::{
-        USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
-        USER_WATCH_HISTORY_CLEAN_SUFFIX, USER_WATCH_HISTORY_NSFW_SUFFIX,
-    },
+use yral_ml_feed_cache::consts::{
+    USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
+    USER_WATCH_HISTORY_CLEAN_SUFFIX, USER_WATCH_HISTORY_NSFW_SUFFIX,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +51,7 @@ pub struct HotOrNotProcessPayload {
 
 #[deprecated(note = "Use start_hotornot_job_v2 instead. will be removed post redis migration")]
 #[cfg(not(feature = "local-bin"))]
+#[allow(dead_code)]
 pub async fn start_hotornot_job(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -60,11 +66,7 @@ pub async fn start_hotornot_job(
     // create the inmem index
 
     let user_buffer_items = ml_feed_cache
-        .get_history_items(
-            "_success_buffer",
-            0,
-            timestamps_secs,
-        )
+        .get_history_items_v2("_success_buffer", 0, timestamps_secs)
         .await
         .map_err(|e| {
             (
@@ -87,11 +89,7 @@ pub async fn start_hotornot_job(
     }
 
     let user_buffer_items = ml_feed_cache
-        .get_history_items(
-            "_watch_buffer",
-            0,
-            timestamps_secs,
-        )
+        .get_history_items_v2("_watch_buffer", 0, timestamps_secs)
         .await
         .map_err(|e| {
             (
@@ -145,7 +143,10 @@ pub async fn start_hotornot_job(
         },
     ]);
     let res_result = res.await;
-    log::info!("Result of increment/decrement profile scores: {:?}", res_result);
+    log::info!(
+        "Result of increment/decrement profile scores: {:?}",
+        res_result
+    );
 
     if res_result.is_err() {
         let err_str = format!(
@@ -198,11 +199,7 @@ pub async fn start_hotornot_job_v2(
     // create the inmem index
 
     let user_buffer_items = ml_feed_cache
-        .get_history_items_v2(
-            &USER_SUCCESS_HISTORY_CLEAN_SUFFIX,
-            0,
-            timestamps_secs,
-        )
+        .get_history_items_v2(&USER_SUCCESS_HISTORY_CLEAN_SUFFIX, 0, timestamps_secs)
         .await
         .map_err(|e| {
             (
@@ -212,11 +209,7 @@ pub async fn start_hotornot_job_v2(
         })?;
 
     let user_buffer_items_nsfw = ml_feed_cache
-        .get_history_items_v2(
-            &USER_SUCCESS_HISTORY_NSFW_SUFFIX,
-            0,
-            timestamps_secs,
-        )
+        .get_history_items_v2(&USER_SUCCESS_HISTORY_NSFW_SUFFIX, 0, timestamps_secs)
         .await
         .map_err(|e| {
             (
@@ -226,11 +219,7 @@ pub async fn start_hotornot_job_v2(
         })?;
 
     let user_buffer_items_watch = ml_feed_cache
-        .get_history_items_v2(
-            &USER_WATCH_HISTORY_CLEAN_SUFFIX,
-            0,
-            timestamps_secs,
-        )
+        .get_history_items_v2(&USER_WATCH_HISTORY_CLEAN_SUFFIX, 0, timestamps_secs)
         .await
         .map_err(|e| {
             (
@@ -240,11 +229,7 @@ pub async fn start_hotornot_job_v2(
         })?;
 
     let user_buffer_items_watch_nsfw = ml_feed_cache
-        .get_history_items_v2(
-            &USER_WATCH_HISTORY_NSFW_SUFFIX,
-            0,
-            timestamps_secs,
-        )
+        .get_history_items_v2(&USER_WATCH_HISTORY_NSFW_SUFFIX, 0, timestamps_secs)
         .await
         .map_err(|e| {
             (
@@ -261,8 +246,10 @@ pub async fn start_hotornot_job_v2(
         .chain(user_buffer_items_watch.iter())
         .chain(user_buffer_items_watch_nsfw.iter())
     {
-        let user_principal = Principal::from_text(&item.canister_id).expect("Failed to parse user principal");
-        let publisher_principal = Principal::from_text(&item.publisher_user_id).expect("Failed to parse publisher principal");
+        let user_principal =
+            Principal::from_text(&item.canister_id).expect("Failed to parse user principal");
+        let publisher_principal = Principal::from_text(&item.publisher_user_id)
+            .expect("Failed to parse publisher principal");
         let post_id = item.post_id;
         score_update_map
             .entry((publisher_principal, post_id))
@@ -294,10 +281,12 @@ pub async fn start_hotornot_job_v2(
 
     let posts_to_update: Vec<UpdateProfileScoresBulkPayload> = score_update_map
         .iter()
-        .map(|((publisher_principal, post_id), _)| UpdateProfileScoresBulkPayload {
-            publisher_user_id: publisher_principal.to_string(),
-            post_id: *post_id,
-        })
+        .map(
+            |((publisher_principal, post_id), _)| UpdateProfileScoresBulkPayload {
+                publisher_user_id: publisher_principal.to_string(),
+                post_id: *post_id,
+            },
+        )
         .collect();
 
     let client = state.qstash_client.clone();
@@ -318,5 +307,8 @@ pub async fn start_hotornot_job_v2(
 pub async fn start_hotornot_job_v2(
     State(_state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    Ok((StatusCode::OK, "Hotornot job not available in local-bin mode"))
+    Ok((
+        StatusCode::OK,
+        "Hotornot job not available in local-bin mode",
+    ))
 }

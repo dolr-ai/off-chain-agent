@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
@@ -103,7 +104,7 @@ pub async fn delete_canister_data(
     {
         if let Err(e) = state
             .ml_feed_cache
-            .delete_user_caches(&canister_id.to_string())
+            .delete_user_caches_v2(&canister_id.to_string())
             .await
         {
             log::error!(

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{

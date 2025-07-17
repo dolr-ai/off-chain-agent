@@ -15,10 +15,12 @@ pub const FRAME_SIZE: u32 = 144;
 /// Grid size for hash generation (8x8)
 pub const GRID_SIZE: u32 = 8;
 /// Default sample rate in seconds between frames
+#[allow(dead_code)]
 pub const SAMPLE_RATE: f32 = 1.0;
 /// Maximum number of frames to process
 pub const MAX_FRAMES: usize = 60;
 /// Size of the generated hash in bits
+#[allow(dead_code)]
 pub const HASH_SIZE: usize = 64;
 
 struct TempDir {
@@ -465,6 +467,7 @@ impl VideoHash {
     }
 
     /// Calculate the Hamming distance between this hash and another
+    #[allow(dead_code)]
     pub fn hamming_distance(&self, other: &VideoHash) -> u32 {
         self.hash
             .chars()
@@ -474,6 +477,7 @@ impl VideoHash {
     }
 
     /// Calculate similarity percentage between hashes (100% = identical)
+    #[allow(dead_code)]
     pub fn similarity(&self, other: &VideoHash) -> f64 {
         let distance = self.hamming_distance(other) as f64;
         let max_distance = self.hash.len() as f64;
@@ -481,6 +485,7 @@ impl VideoHash {
     }
 
     /// Determine if two videos are likely duplicates based on threshold
+    #[allow(dead_code)]
     pub fn is_duplicate(&self, other: &VideoHash, threshold: Option<f64>) -> bool {
         let threshold = threshold.unwrap_or(85.0);
         self.similarity(other) >= threshold

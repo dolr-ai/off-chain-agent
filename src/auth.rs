@@ -13,6 +13,7 @@ use tonic::metadata::MetadataValue;
 use tonic::{Request, Status};
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum AuthError {
     WrongCredentials,
     MissingCredentials,
@@ -20,6 +21,7 @@ pub enum AuthError {
     InvalidToken,
 }
 
+#[allow(dead_code)]
 pub struct AuthBearer(pub String);
 
 impl<S> FromRequestParts<S> for AuthBearer
@@ -78,6 +80,7 @@ pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
     }
 }
 
+#[allow(dead_code)]
 pub fn check_auth_grpc_test(req: Request<()>) -> Result<Request<()>, Status> {
     Ok(req)
 }
@@ -88,6 +91,7 @@ pub struct MLFeedClaims {
     pub company: String,
 }
 
+#[allow(dead_code)]
 pub fn check_auth_grpc_offchain_mlfeed(req: Request<()>) -> Result<Request<()>, Status> {
     let token = req
         .metadata()

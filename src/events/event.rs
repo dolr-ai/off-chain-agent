@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::consts::{OFF_CHAIN_AGENT_URL, CLOUDFLARE_ACCOUNT_ID};
 use crate::events::types::VideoDurationWatchedPayload;
 use crate::events::queries::get_icpump_insert_query;
@@ -34,7 +35,7 @@ use yral_ml_feed_cache::consts::{
 #[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::types::{BufferItem, PlainPostItem};
 #[cfg(not(feature = "local-bin"))]
-use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2, PlainPostItemV2};
+use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2};
 #[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::{
     consts::{
@@ -282,6 +283,7 @@ impl Event {
         note = "Use update_watch_history_v2 instead. will be removed post redis migration"
     )]
     #[cfg(not(feature = "local-bin"))]
+    #[allow(dead_code)]
     pub fn update_watch_history(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
             let params: Result<VideoDurationWatchedPayload, _> =
@@ -462,10 +464,11 @@ impl Event {
                 );
 
                 match ml_feed_cache
-                    .is_user_history_plain_item_exists_v2(
+                    .is_user_history_plain_item_exists(
                         plain_key.as_str(),
-                        PlainPostItemV2 {
-                            video_id: video_id.clone(),
+                        PlainPostItem {
+                            canister_id: publisher_canister_id.to_string(),
+                            post_id,
                         },
                     )
                     .await
@@ -562,6 +565,7 @@ impl Event {
         note = "Use update_success_history_v2 instead. will be removed post redis migration"
     )]
     #[cfg(not(feature = "local-bin"))]
+    #[allow(dead_code)]
     pub fn update_success_history(&self, app_state: &AppState) {
         let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
         let app_state = app_state.clone();
@@ -654,7 +658,15 @@ impl Event {
 
                         // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
                         if let Err(e) = ml_feed_cache
-                            .add_user_history_plain_items(&plain_key, vec![success_history_item])
+                            .add_user_history_plain_items(&plain_key, vec![MLFeedCacheHistoryItem {
+                                canister_id: success_history_item.canister_id.clone(),
+                                item_type: success_history_item.item_type.clone(),
+                                post_id: success_history_item.post_id,
+                                video_id: success_history_item.video_id.clone(),
+                                timestamp: success_history_item.timestamp,
+                                percent_watched: success_history_item.percent_watched,
+                                nsfw_probability: 0.0,
+                            }])
                             .await
                         {
                             error!("Error adding user like history plain items: {:?}", e);
@@ -730,10 +742,11 @@ impl Event {
                 );
 
                 match ml_feed_cache
-                    .is_user_history_plain_item_exists_v2(
+                    .is_user_history_plain_item_exists(
                         plain_key.as_str(),
-                        PlainPostItemV2 {
-                            video_id: params.video_id.clone(),
+                        PlainPostItem {
+                            canister_id: params.publisher_user_id.clone(),
+                            post_id: params.post_id,
                         },
                     )
                     .await
@@ -759,7 +772,15 @@ impl Event {
 
                         // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
                         if let Err(e) = ml_feed_cache
-                            .add_user_history_plain_items_v2(&plain_key, vec![success_history_item])
+                            .add_user_history_plain_items(&plain_key, vec![MLFeedCacheHistoryItem {
+                                canister_id: success_history_item.canister_id.clone(),
+                                item_type: success_history_item.item_type.clone(),
+                                post_id: success_history_item.post_id,
+                                video_id: success_history_item.video_id.clone(),
+                                timestamp: success_history_item.timestamp,
+                                percent_watched: success_history_item.percent_watched,
+                                nsfw_probability: 0.0,
+                            }])
                             .await
                         {
                             error!("Error adding user like history plain items: {:?}", e);

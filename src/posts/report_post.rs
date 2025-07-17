@@ -59,6 +59,7 @@ pub struct ReportPostRequest {
     )
 )]
 #[deprecated = "Check /report_v2 instead"]
+#[allow(dead_code)]
 pub async fn handle_report_post(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<ReportPostRequest>>,

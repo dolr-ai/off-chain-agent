@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -386,6 +387,7 @@ pub struct ReferPayload {
     pub refer_location: Option<String>,
 }
 
+#[allow(dead_code)]
 pub type ReferShareLinkPayload = ReferPayload;
 
 // --------------------------------------------------
@@ -442,6 +444,7 @@ pub struct LogoutClickedPayload {
     pub canister_id: Principal,
 }
 
+#[allow(dead_code)]
 pub type LogoutConfirmationPayload = LogoutClickedPayload;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -561,6 +564,7 @@ pub struct SatsWithdrawnPayload {
 // ----------------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum EventPayload {
     VideoDurationWatched(VideoDurationWatchedPayload),
     VideoViewed(VideoViewedPayload),

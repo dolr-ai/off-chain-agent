@@ -60,6 +60,7 @@ pub fn get_icpump_insert_query(
 }
 
 // used for backfilling data
+#[allow(dead_code)]
 pub fn get_icpump_insert_query_created_at(
     canister_id: String,
     description: String,
