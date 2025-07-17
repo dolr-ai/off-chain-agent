@@ -33,14 +33,12 @@ pub struct DuplicateVideoEvent {
 struct VideoHashIndexerResponse {
     match_found: bool,
     match_details: Option<MatchDetails>,
-    hash_added: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct MatchDetails {
     video_id: String,
     similarity_percentage: f64,
-    is_duplicate: bool,
 }
 
 // The VideoHashDuplication struct will contain the deduplication logic
@@ -70,42 +68,6 @@ impl<'a> VideoHashDuplication<'a> {
             duplicate_event.original_video_id,
             duplicate_event.parent_video_id,
             duplicate_event.similarity_percentage
-        );
-
-        self.client
-            .post(url.clone())
-            .json(&req)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .send()
-            .await?;
-
-        Ok(())
-    }
-
-    pub async fn publish_deduplication_completed(
-        &self,
-        video_id: &str,
-        canister_id: &str,
-        post_id: u64,
-        publisher_user_id: &str,
-    ) -> Result<(), anyhow::Error> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join("qstash/deduplication_completed")
-            .unwrap();
-
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
-        let req = serde_json::json!({
-            "video_id": video_id,
-            "canister_id": canister_id,
-            "post_id": post_id,
-            "publisher_user_id": publisher_user_id,
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        });
-
-        log::info!(
-            "Publishing deduplication completed event for video_id [{}]",
-            video_id
         );
 
         self.client
