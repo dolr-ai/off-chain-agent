@@ -360,7 +360,7 @@ async fn setup_neurons_for_admin_principal(
             })),
         })
         .await
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| format!("{e:?}"))?;
 
     let _set_dissolve_delay = sns_governance
         .manage_neuron(ManageNeuron {
@@ -372,7 +372,7 @@ async fn setup_neurons_for_admin_principal(
             })),
         })
         .await
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| format!("{e:?}"))?;
 
     let function_id_for_upgrading_sns_to_next_version = sns_governance
         .list_nervous_system_functions()
@@ -720,6 +720,6 @@ pub async fn upgrade_user_token_sns_canister_impl(
             .await?;
         Ok(())
     } else {
-        Err(format!("{:?}", proposal_id).into())
+        Err(format!("{proposal_id:?}").into())
     }
 }

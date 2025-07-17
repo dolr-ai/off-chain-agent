@@ -45,6 +45,7 @@ pub struct WrappedContext {
 }
 
 impl WrappedContext {
+    #[allow(dead_code)]
     pub fn new() -> anyhow::Result<Self> {
         let conn = dedup_index::DbConnection::builder()
             .with_uri(STDB_URL)

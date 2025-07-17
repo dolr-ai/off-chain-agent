@@ -41,7 +41,7 @@ pub async fn upload_base64_image(
             "https://api.cloudflare.com/client/v4/accounts/{}/images/v1",
             account_id
         ))
-        .header("Authorization", format!("Bearer {}", api_token))
+        .header("Authorization", format!("Bearer {api_token}"))
         .multipart(form)
         .send()
         .await?;

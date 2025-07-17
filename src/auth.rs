@@ -68,9 +68,9 @@ pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
     grpc_token.retain(|c| !c.is_whitespace());
     yral_cloudflare_workers_grpc_auth_token.retain(|c| !c.is_whitespace());
 
-    let token: MetadataValue<_> = format!("Bearer {}", grpc_token).parse().unwrap();
+    let token: MetadataValue<_> = format!("Bearer {grpc_token}").parse().unwrap();
     let yral_cloudflare_worker_token: MetadataValue<_> =
-        format!("Bearer {}", yral_cloudflare_workers_grpc_auth_token)
+        format!("Bearer {yral_cloudflare_workers_grpc_auth_token}")
             .parse()
             .unwrap();
 
@@ -105,8 +105,7 @@ pub fn check_auth_grpc_offchain_mlfeed(req: Request<()>) -> Result<Request<()>, 
         env::var("MLFEED_JWT_PUBLIC_KEY").expect("MLFEED_JWT_PUBLIC_KEY is required");
 
     mlfeed_public_key = format!(
-        "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----",
-        mlfeed_public_key
+        "-----BEGIN PUBLIC KEY-----\n{mlfeed_public_key}\n-----END PUBLIC KEY-----"
     );
 
     let decoding_key = DecodingKey::from_ed_pem(mlfeed_public_key.as_bytes())

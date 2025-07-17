@@ -41,7 +41,7 @@ impl TempDir {
 impl Drop for TempDir {
     fn drop(&mut self) {
         if self.path.exists() {
-            log::debug!("Cleaning up temporary directory: {:?}", self.path);
+            log::debug!("Cleaning up temporary directory: {path:?}", path = self.path);
             let _ = fs::remove_dir_all(&self.path);
         }
     }
@@ -58,7 +58,7 @@ fn create_ram_temp_dir(prefix: &str) -> Result<PathBuf, Box<dyn Error + Send + S
             PathBuf::from("/dev/shm")
         } else if Path::new("/run/user").exists() {
             match std::env::var("UID") {
-                Ok(uid) => PathBuf::from(format!("/run/user/{}", uid)),
+                Ok(uid) => PathBuf::from(format!("/run/user/{uid}")),
                 Err(_) => std::env::temp_dir(),
             }
         } else {
@@ -81,7 +81,7 @@ fn create_ram_temp_dir(prefix: &str) -> Result<PathBuf, Box<dyn Error + Send + S
     let dir_path = base_dir.join(unique_id);
     fs::create_dir_all(&dir_path)?;
 
-    log::debug!("Created RAM-based temp directory at: {:?}", dir_path);
+    log::debug!("Created RAM-based temp directory at: {dir_path:?}");
     Ok(dir_path)
 }
 
@@ -104,7 +104,7 @@ impl VideoHash {
     }
 
     pub async fn from_url(url: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        log::info!("Generating video hash from URL: {}", url);
+        log::info!("Generating video hash from URL: {url}");
 
         if url.starts_with("file://") {
             if let Some(path_str) = url.strip_prefix("file://") {
@@ -119,8 +119,7 @@ impl VideoHash {
         let temp_file = temp_dir.path().join("temp_video.mp4");
 
         log::info!(
-            "Downloading video from URL to temporary file: {:?}",
-            temp_file
+            "Downloading video from URL to temporary file: {temp_file:?}"
         );
 
         // Clone needed values for the spawn_blocking closure
@@ -150,7 +149,7 @@ impl VideoHash {
         let start = Instant::now();
 
         let temp_dir = TempDir::new("videohash")?;
-        log::debug!("Using temp directory: {:?}", temp_dir.path());
+        log::debug!("Using temp directory: {path:?}", path = temp_dir.path());
 
         let output_pattern = temp_dir
             .path()
@@ -213,10 +212,10 @@ impl VideoHash {
             output_pattern
         );
 
-        log::debug!("Running FFmpeg with args: {}", ffmpeg_args);
+        log::debug!("Running FFmpeg with args: {ffmpeg_args}");
 
         let status = Command::new("sh")
-            .args(["-c", &format!("timeout 300 ffmpeg {}", ffmpeg_args)])
+            .args(["-c", &format!("timeout 300 ffmpeg {ffmpeg_args}")])
             .stderr(Stdio::null())
             .stdout(Stdio::null())
             .status()?;

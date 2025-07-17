@@ -1,8 +1,6 @@
 #![allow(deprecated)]
-use crate::consts::{OFF_CHAIN_AGENT_URL, CLOUDFLARE_ACCOUNT_ID};
+use crate::consts::OFF_CHAIN_AGENT_URL;
 use crate::events::types::VideoDurationWatchedPayload;
-use crate::events::queries::get_icpump_insert_query;
-use crate::utils::cf_images::upload_base64_image;
 #[cfg(not(feature = "local-bin"))]
 use crate::events::utils::parse_success_history_params;
 use crate::{
@@ -21,9 +19,19 @@ use log::error;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc, env};
+use std::{collections::HashMap, sync::Arc};
+#[cfg(not(feature = "local-bin"))]
+use std::env;
+#[cfg(not(feature = "local-bin"))]
 use firestore::errors::FirestoreError;
+#[cfg(not(feature = "local-bin"))]
 use google_cloud_bigquery::http::job::query::QueryRequest;
+#[cfg(not(feature = "local-bin"))]
+use crate::utils::cf_images::upload_base64_image;
+#[cfg(not(feature = "local-bin"))]
+use crate::consts::CLOUDFLARE_ACCOUNT_ID;
+#[cfg(not(feature = "local-bin"))]
+use crate::events::queries::get_icpump_insert_query;
 use tracing::instrument;
 #[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::consts::{
@@ -141,10 +149,12 @@ impl Event {
     }
 
     #[cfg(feature = "local-bin")]
+    #[allow(dead_code)]
     pub fn stream_to_bigquery(&self, _app_state: &AppState) {
         // No-op for local-bin
     }
 
+    #[allow(dead_code)]
     pub fn stream_to_bigquery_token_metadata(&self, app_state: &AppState) {
         if self.event.event == "token_creation_completed" {
             let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
@@ -183,8 +193,7 @@ impl Event {
                 Ok(params) => params,
                 Err(e) => {
                     error!(
-                        "Failed to parse video_upload_successful event params: {}",
-                        e
+                        "Failed to parse video_upload_successful event params: {e}"
                     );
                     return;
                 }
@@ -229,11 +238,10 @@ impl Event {
 
                 // Construct video URL
                 let video_url = format!(
-                    "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-                    video_id
+                    "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
                 );
 
-                log::info!("Sending video for deduplication check: {}", video_id);
+                log::info!("Sending video for deduplication check: {video_id}");
 
                 // Create request for video_deduplication endpoint
                 let off_chain_ep = OFF_CHAIN_AGENT_URL
@@ -241,7 +249,7 @@ impl Event {
                     .unwrap();
                 let url = qstash_client
                     .base_url
-                    .join(&format!("publish/{}", off_chain_ep))
+                    .join(&format!("publish/{off_chain_ep}"))
                     .unwrap();
 
                 let request_data = serde_json::json!({
@@ -267,12 +275,10 @@ impl Event {
 
                 match result {
                     Ok(_) => log::info!(
-                        "Video deduplication check successfully queued for video_id: {}",
-                        video_id
+                        "Video deduplication check successfully queued for video_id: {video_id}"
                     ),
                     Err(e) => error!(
-                        "Failed to queue video deduplication check for video_id {}: {:?}",
-                        video_id, e
+                        "Failed to queue video deduplication check for video_id {video_id}: {e:?}"
                     ),
                 }
             });
@@ -292,7 +298,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -397,7 +403,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -508,7 +514,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -522,7 +528,7 @@ impl Event {
 
                 let percentage_watched = params.percentage_watched as u8;
                 if percentage_watched == 0 || percentage_watched > 100 {
-                    error!("Invalid percentage_watched: {}", percentage_watched);
+                    error!("Invalid percentage_watched: {percentage_watched}");
                     return;
                 }
                 let post_id = params.post_id.unwrap_or_default();
@@ -800,6 +806,7 @@ impl Event {
     }
 
     #[cfg(feature = "local-bin")]
+    #[allow(dead_code)]
     pub fn stream_to_firestore(&self, _app_state: &AppState) {
         // No-op for local-bin feature
     }
@@ -893,11 +900,12 @@ async fn stream_to_bigquery(
 
     match response.status().is_success() {
         true => Ok(()),
-        false => Err(format!("Failed to stream data - {:?}", response.text().await?).into()),
+        false => Err(format!("Failed to stream data - {response_text:?}", response_text = response.text().await?).into()),
     }
 }
 
 #[cfg(feature = "local-bin")]
+#[allow(dead_code)]
 pub async fn stream_to_bigquery_token_metadata_impl_v2(
     _app_state: &AppState,
     _data: ICPumpTokenMetadata,

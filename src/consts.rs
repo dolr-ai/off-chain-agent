@@ -3,6 +3,7 @@ use reqwest::Url;
 
 pub const STDB_URL: &str = "https://maincloud.spacetimedb.com";
 
+#[allow(dead_code)]
 pub const DEDUP_INDEX_MODULE_IDENTITY: &str = "yral-dedup-index";
 pub const DELETED_CANISTERS_MODULE_IDENTITY: &str = "yral-canisters";
 
@@ -11,8 +12,10 @@ pub static STDB_ACCESS_TOKEN: Lazy<String> = Lazy::new(|| {
 });
 
 /// with nsfw detection v2, nsfw probablity greater or equal to this is considered nsfw
+#[cfg(not(feature = "local-bin"))]
 pub const NSFW_THRESHOLD: f32 = 0.4;
 
+#[cfg(not(feature = "local-bin"))]
 pub static BIGQUERY_INGESTION_URL: Lazy<Url> = Lazy::new(|| {
     Url::parse("https://bigquery.googleapis.com/bigquery/v2/projects/hot-or-not-feed-intelligence/datasets/analytics_335143420/tables/test_events_analytics/insertAll").unwrap()
 });
@@ -28,6 +31,7 @@ pub const RECYCLE_THRESHOLD_SECS: u64 = 15 * 24 * 60 * 60; // 15 days
 pub const GOOGLE_CHAT_REPORT_SPACE_URL: &str =
     "https://chat.googleapis.com/v1/spaces/AAAA1yDLYO4/messages";
 
+#[allow(dead_code)]
 pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
 
 pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";

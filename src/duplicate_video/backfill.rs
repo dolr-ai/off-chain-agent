@@ -157,7 +157,7 @@ async fn execute_backfill(
             google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
             other => {
                 // For other types, use debug formatting but extract just the ID
-                let raw = format!("{:?}", other);
+                let raw = format!("{other:?}");
                 // Extract just the ID from String("ID") format
                 if raw.contains("String(\"") {
                     raw.trim_start_matches("String(\"")

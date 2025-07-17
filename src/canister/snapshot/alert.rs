@@ -191,6 +191,7 @@ pub async fn retry_backup_canisters(
     Ok(HashMap::new())
 }
 
+#[cfg(not(feature = "local-bin"))]
 async fn send_google_chat_alert(
     canisters_retry_backup_results: HashMap<String, Vec<(String, String)>>,
 ) -> Result<(), anyhow::Error> {

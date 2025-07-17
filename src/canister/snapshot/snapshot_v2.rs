@@ -125,7 +125,7 @@ pub async fn backup_user_canisters_bulk(
     let completed_counter = Arc::new(AtomicUsize::new(0));
     let failed_counter = Arc::new(AtomicUsize::new(0));
 
-    log::info!("Starting backup for {} canisters", total_canisters);
+    log::info!("Starting backup for {total_canisters} canisters");
 
     let futures = user_canister_list.into_iter().map(|canister_id| {
         let agent = agent.clone();

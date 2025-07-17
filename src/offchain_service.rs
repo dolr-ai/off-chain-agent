@@ -224,7 +224,7 @@ pub async fn report_approved_handler(
 
     // send confirmation to Google Chat
     let confirmation_msg = json!({
-        "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
+        "text": format!("Successfully banned post : {canister_id}/{post_id}")
     });
     send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
 

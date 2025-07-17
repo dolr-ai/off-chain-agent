@@ -28,9 +28,7 @@ pub async fn handle_login_successful(
     // check if its unique
     let request = QueryRequest {
         query: format!(
-            "SELECT * FROM `hot-or-not-feed-intelligence.yral_ds.canister_user_principal` WHERE canister_id = '{}' AND user_principal_id = '{}'",
-            canister_id,
-            user_id
+            "SELECT * FROM `hot-or-not-feed-intelligence.yral_ds.canister_user_principal` WHERE canister_id = '{canister_id}' AND user_principal_id = '{user_id}'"
         ),
         ..Default::default()
     };
@@ -79,7 +77,7 @@ pub async fn handle_login_successful(
 
     if let Some(errors) = res.insert_errors {
         if !errors.is_empty() {
-            log::error!("canister_user_principal insert response : {:?}", errors);
+            log::error!("canister_user_principal insert response : {errors:?}");
             return Err(anyhow::anyhow!(
                 "Failed to insert canister_user_principal row to bigquery"
             ));

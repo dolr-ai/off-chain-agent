@@ -5,6 +5,7 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use candid::Principal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+#[cfg(not(feature = "local-bin"))]
 use yral_alloydb_client::AlloyDbInstance;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

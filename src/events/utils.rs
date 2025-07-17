@@ -19,7 +19,7 @@ pub fn parse_success_history_params(
     match event_type {
         "video_duration_watched" => {
             let params: VideoDurationWatchedPayload = serde_json::from_str(params_str)
-                .map_err(|e| format!("Failed to parse video_duration_watched params: {:?}", e))?;
+                .map_err(|e| format!("Failed to parse video_duration_watched params: {e:?}"))?;
 
             let percent_watched = params.percentage_watched;
             if percent_watched < 30.0 {
@@ -44,7 +44,7 @@ pub fn parse_success_history_params(
         }
         "like_video" => {
             let params: LikeVideoPayload = serde_json::from_str(params_str)
-                .map_err(|e| format!("Failed to parse like_video params: {:?}", e))?;
+                .map_err(|e| format!("Failed to parse like_video params: {e:?}"))?;
 
             Ok(Some(SuccessHistoryParams {
                 publisher_canister_id: params.publisher_canister_id.to_string(),

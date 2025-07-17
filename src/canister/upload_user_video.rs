@@ -115,7 +115,7 @@ pub async fn upload_user_video_impl(
                 .await;
 
             if let Err(e) = upload_event_result {
-                println!("Error in sending event upload_video_successful {}", e);
+                println!("Error in sending event upload_video_successful {e}");
             }
 
             Ok(post_id)

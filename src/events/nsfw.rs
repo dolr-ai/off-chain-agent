@@ -5,8 +5,10 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(not(feature = "local-bin"))]
+use crate::consts::NSFW_THRESHOLD;
 use crate::{
-    consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
+    consts::NSFW_SERVER_URL,
     qstash::client::QStashClient,
 };
 use anyhow::Error;
