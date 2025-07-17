@@ -1,6 +1,6 @@
 use crate::{
     app_state::AppState,
-    events::types::{self, deserialize_event_payload, EventPayload},
+    events::types::{deserialize_event_payload, EventPayload},
 };
 use anyhow::Result;
 use candid::Principal;

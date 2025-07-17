@@ -52,7 +52,7 @@ pub async fn start_hotornot_job(
         let post_id = user_buffer_item.post_id;
         let res = inmem_index
             .entry(user_canister_id)
-            .or_insert(HashMap::new());
+            .or_default();
         let post_item = PlainPostItem {
             canister_id: publisher_canister_id.clone(),
             post_id,
@@ -193,7 +193,7 @@ pub async fn start_hotornot_job_v2(
         let publisher_user_id = user_buffer_item.publisher_user_id;
         let post_id = user_buffer_item.post_id;
         let video_id = user_buffer_item.video_id;
-        let res = inmem_index.entry(user_id).or_insert(HashMap::new());
+        let res = inmem_index.entry(user_id).or_default();
         let post_item = PlainPostItemV2 {
             video_id: video_id.clone(),
         };

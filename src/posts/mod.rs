@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, middleware, response::IntoResponse, Json};
+use axum::middleware;
 use candid::Principal;
 use delete_post::handle_delete_post;
 use report_post::{
@@ -14,8 +14,7 @@ use utoipa_axum::{
     router::{OpenApiRouter, UtoipaMethodRouterExt},
     routes,
 };
-use verify::{verify_post_request, VerifiedPostRequest};
-use yral_canisters_client::individual_user_template::{IndividualUserTemplate, Result_};
+use verify::verify_post_request;
 
 use crate::app_state::AppState;
 use crate::posts::delete_post::__path_handle_delete_post;

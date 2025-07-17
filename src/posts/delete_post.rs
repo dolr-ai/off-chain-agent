@@ -22,7 +22,7 @@ use crate::{
     user::utils::get_agent_from_delegated_identity_wire,
 };
 
-use super::{types, utils, verify, DeletePostRequest};
+use super::{types, verify, DeletePostRequest};
 
 #[utoipa::path(
     delete,
@@ -194,7 +194,7 @@ pub async fn handle_duplicate_post_on_delete(
             .map_err(|e| anyhow::anyhow!("Failed to insert video unique row to bigquery: {}", e))?;
 
         if let Some(errors) = res.insert_errors {
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 log::error!("video_unique insert response : {:?}", errors);
                 return Err(anyhow::anyhow!(
                     "Failed to insert video unique row to bigquery"
@@ -219,7 +219,7 @@ pub async fn handle_duplicate_post_on_delete(
         .map_err(|e| anyhow::anyhow!("Failed to delete video unique row to bigquery: {}", e))?;
 
     if let Some(errors) = res.errors {
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             log::error!("video_unique delete response : {:?}", errors);
             return Err(anyhow::anyhow!(
                 "Failed to delete video unique row to bigquery"
