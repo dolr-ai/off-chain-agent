@@ -6,6 +6,7 @@ use candid::Principal;
 use chrono::Utc;
 use futures::stream::StreamExt;
 use ic_agent::Agent;
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;

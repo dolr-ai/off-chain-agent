@@ -670,7 +670,7 @@ impl EventPayload {
 
                 app_state
                     .notification_client
-                    .send_notification(notif_payload, payload.publisher_user_id)
+                    .send_notification(&notif_payload, payload.publisher_user_id)
                     .await;
             }
             EventPayload::LikeVideo(payload) => {
@@ -737,7 +737,7 @@ impl EventPayload {
 
                 app_state
                     .notification_client
-                    .send_notification(notif_payload, payload.publisher_user_id)
+                    .send_notification(&notif_payload, payload.publisher_user_id)
                     .await;
             }
 
