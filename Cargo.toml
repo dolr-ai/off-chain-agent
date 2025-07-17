@@ -10,7 +10,7 @@ axum = { version = "0.8.0", features = ["macros", "json"] }
 candid = "0.10.6"
 chrono = { version = "=0.4.38", features = ["serde"] }
 futures = "0.3.30"
-ic-agent = "0.38.1"
+ic-agent = "0.41.0"
 serde = "1.0.197"
 serde_json = { version = "1.0.114", default-features = false }
 stringreader = "0.1.1"
@@ -52,8 +52,8 @@ google-cloud-bigquery = { version = "0.13.1", default-features = false, features
     "rustls-tls",
 ] }
 hex = "0.4.3"
-ic-sns-governance = { git = "https://github.com/dfinity/ic", rev = "tags/release-2024-10-17_03-07-base" }
-ic-utils = "0.38.1"
+ic-sns-governance = { git = "https://github.com/dfinity/ic", rev = "tags/release-2025-07-11_03-31-base" }
+ic-utils = "0.41.0"
 utoipa = "5.3.1"
 utoipa-axum = "0.2.0"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
