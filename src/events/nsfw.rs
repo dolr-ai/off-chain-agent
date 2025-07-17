@@ -5,8 +5,10 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(not(feature = "local-bin"))]
+use crate::consts::NSFW_THRESHOLD;
 use crate::{
-    consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
+    consts::NSFW_SERVER_URL,
     qstash::client::QStashClient,
 };
 use anyhow::Error;
@@ -84,6 +86,7 @@ pub async fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec
     Ok(frames)
 }
 
+#[allow(dead_code)]
 #[instrument(skip(gcs_client, frames))]
 pub async fn upload_frames_to_gcs(
     gcs_client: &cloud_storage::Client,
@@ -94,7 +97,7 @@ pub async fn upload_frames_to_gcs(
 
     // Create a vector of futures for concurrent uploads
     let upload_futures = frames.into_iter().enumerate().map(|(i, frame)| {
-        let frame_path = format!("{}/frame-{}.jpg", video_id, i);
+        let frame_path = format!("{video_id}/frame-{i}.jpg");
         let bucket_name = bucket_name.to_string();
 
         async move {
@@ -130,13 +133,18 @@ pub async fn extract_frames_and_upload(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id;
     let video_path = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        video_id
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
     );
     let output_dir = create_output_directory(&video_id)?;
-    let frames = extract_frames(&video_path, output_dir.clone()).await?;
     #[cfg(not(feature = "local-bin"))]
-    upload_frames_to_gcs(&state.gcs_client, frames, &video_id).await?;
+    {
+        let frames = extract_frames(&video_path, output_dir.clone()).await?;
+        upload_frames_to_gcs(&state.gcs_client, frames, &video_id).await?;
+    }
+    #[cfg(feature = "local-bin")]
+    {
+        let _frames = extract_frames(&video_path, output_dir.clone()).await?;
+    }
     // delete output directory
     fs::remove_dir_all(output_dir)?;
 
@@ -159,6 +167,7 @@ pub struct NSFWInfo {
     pub csam_detected: bool,
 }
 
+#[allow(dead_code)]
 #[instrument]
 pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
@@ -171,7 +180,7 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
         .expect("Couldn't connect to nsfw agent");
 
     let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
-    let token: MetadataValue<_> = format!("Bearer {}", nsfw_grpc_auth_token).parse()?;
+    let token: MetadataValue<_> = format!("Bearer {nsfw_grpc_auth_token}").parse()?;
 
     let mut client = nsfw_detector::nsfw_detector_client::NsfwDetectorClient::with_interceptor(
         channel,
@@ -191,6 +200,7 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     Ok(nsfw_info)
 }
 
+#[allow(dead_code)]
 #[derive(Serialize)]
 struct VideoNSFWData {
     video_id: String,
@@ -201,8 +211,8 @@ struct VideoNSFWData {
 }
 #[cfg(feature = "local-bin")]
 pub async fn nsfw_job(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<VideoRequest>,
+    State(_state): State<Arc<AppState>>,
+    Json(_payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     Err(anyhow::anyhow!("not implemented for local binary").into())
 }
@@ -232,6 +242,7 @@ pub async fn nsfw_job(
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
 
+#[allow(dead_code)]
 #[instrument(skip(qstash))]
 async fn duplicate_to_storj(
     qstash: &QStashClient,
@@ -255,6 +266,7 @@ async fn duplicate_to_storj(
     Ok(())
 }
 
+#[allow(dead_code)]
 #[instrument(skip(bigquery_client))]
 pub async fn push_nsfw_data_bigquery(
     bigquery_client: google_cloud_bigquery::client::Client,
@@ -263,7 +275,7 @@ pub async fn push_nsfw_data_bigquery(
 ) -> Result<(), Error> {
     let row_data = VideoNSFWData {
         video_id: video_id.clone(),
-        gcs_video_id: format!("gs://yral-videos/{}.mp4", video_id),
+        gcs_video_id: format!("gs://yral-videos/{video_id}.mp4"),
         is_nsfw: nsfw_info.is_nsfw,
         nsfw_ec: nsfw_info.nsfw_ec,
         nsfw_gore: nsfw_info.nsfw_gore,
@@ -312,8 +324,8 @@ impl From<nsfw_detector::NsfwDetectorResponse> for NSFWInfo {
 
 #[cfg(feature = "local-bin")]
 pub async fn nsfw_job_v2(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<VideoRequest>,
+    State(_state): State<Arc<AppState>>,
+    Json(_payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     Err(anyhow::anyhow!("not implemented for local binary").into())
 }
@@ -340,6 +352,7 @@ pub async fn nsfw_job_v2(
     ))
 }
 
+#[allow(dead_code)]
 #[instrument]
 pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
@@ -352,7 +365,7 @@ pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
         .expect("Couldn't connect to nsfw agent");
 
     let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
-    let token: MetadataValue<_> = format!("Bearer {}", nsfw_grpc_auth_token).parse()?;
+    let token: MetadataValue<_> = format!("Bearer {nsfw_grpc_auth_token}").parse()?;
 
     let mut client = nsfw_detector::nsfw_detector_client::NsfwDetectorClient::with_interceptor(
         channel,
@@ -371,6 +384,7 @@ pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
     Ok(embedding_res.into_inner().probability)
 }
 
+#[allow(dead_code)]
 #[derive(Serialize)]
 struct VideoNSFWDataV2 {
     video_id: String,
@@ -381,12 +395,14 @@ struct VideoNSFWDataV2 {
     probability: f32,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Debug)]
 struct VideoEmbeddingMetadata {
     name: String,
     value: String,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Debug)]
 struct VideoEmbeddingAgg {
     ml_generate_embedding_result: Vec<f64>,
@@ -407,6 +423,7 @@ struct VideoEmbeddingAgg {
     video_id: Option<String>,
 }
 
+#[allow(dead_code)]
 #[instrument(skip(bigquery_client))]
 pub async fn push_nsfw_data_bigquery_v2(
     bigquery_client: google_cloud_bigquery::client::Client,
@@ -417,8 +434,7 @@ pub async fn push_nsfw_data_bigquery_v2(
     let query = format!(
         "SELECT video_id, gcs_video_id, is_nsfw, nsfw_ec, nsfw_gore 
          FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw`
-         WHERE video_id = '{}'",
-        video_id
+         WHERE video_id = '{video_id}'"
     );
 
     let request = QueryRequest {
@@ -494,8 +510,7 @@ pub async fn push_nsfw_data_bigquery_v2(
     // and push to bigquery hot-or-not-feed-intelligence.yral_ds.video_embeddings_agg table
 
     let embedding_query = format!(
-        "SELECT * FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE uri = '{}'",
-        gcs_video_id
+        "SELECT * FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE uri = '{gcs_video_id}'"
     );
 
     let embedding_request = QueryRequest {

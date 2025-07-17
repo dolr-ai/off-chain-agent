@@ -1,7 +1,11 @@
+#![allow(dead_code)]
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+#[cfg(not(feature = "local-bin"))]
+use serde_json::json;
+use serde_json::Value;
 use utoipa::ToSchema;
+#[cfg(not(feature = "local-bin"))]
 use yral_metadata_types::{
     AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
     SendNotificationReq, WebpushConfig, WebpushFcmOptions,
@@ -48,8 +52,7 @@ impl<'de> Deserialize<'de> for AnalyticsEvent {
                 Ok(AnalyticsEvent::LikeVideo(like_video))
             }
             Some(event_type) => Err(serde::de::Error::custom(format!(
-                "Unknown event type: {}",
-                event_type
+                "Unknown event type: {event_type}"
             ))),
             None => Err(serde::de::Error::custom("Missing 'event' field")),
         }
@@ -383,6 +386,7 @@ pub struct ReferPayload {
     pub refer_location: Option<String>,
 }
 
+#[allow(dead_code)]
 pub type ReferShareLinkPayload = ReferPayload;
 
 // --------------------------------------------------
@@ -439,6 +443,7 @@ pub struct LogoutClickedPayload {
     pub canister_id: Principal,
 }
 
+#[allow(dead_code)]
 pub type LogoutConfirmationPayload = LogoutClickedPayload;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -558,6 +563,7 @@ pub struct SatsWithdrawnPayload {
 // ----------------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum EventPayload {
     VideoDurationWatched(VideoDurationWatchedPayload),
     VideoViewed(VideoViewedPayload),
@@ -597,8 +603,8 @@ pub enum EventPayload {
 /// * Returns `serde_json::Error` if the event name is unknown OR the payload cannot
 ///   be deserialized into the expected structure.
 ///
-
 impl EventPayload {
+    #[cfg(not(feature = "local-bin"))]
     pub async fn send_notification(&self, app_state: &AppState) {
         match self {
             EventPayload::VideoUploadSuccessful(payload) => {
@@ -664,7 +670,7 @@ impl EventPayload {
 
                 app_state
                     .notification_client
-                    .send_notification(notif_payload, payload.publisher_user_id)
+                    .send_notification(&notif_payload, payload.publisher_user_id)
                     .await;
             }
             EventPayload::LikeVideo(payload) => {
@@ -731,12 +737,17 @@ impl EventPayload {
 
                 app_state
                     .notification_client
-                    .send_notification(notif_payload, payload.publisher_user_id)
+                    .send_notification(&notif_payload, payload.publisher_user_id)
                     .await;
             }
 
             _ => {}
         }
+    }
+
+    #[cfg(feature = "local-bin")]
+    pub async fn send_notification(&self, _app_state: &AppState) {
+        // No-op for local-bin
     }
 }
 

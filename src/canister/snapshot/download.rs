@@ -32,8 +32,8 @@ pub async fn get_user_canister_snapshot(
     let user_canister = IndividualUserTemplate(canister_id, agent);
 
     let snapshot_size = user_canister.save_snapshot_json_v_2().await.map_err(|e| {
-        log::error!("Failed to save user canister snapshot: {}", e);
-        anyhow::anyhow!("Failed to save user canister snapshot: {}", e)
+        log::error!("Failed to save user canister snapshot: {e}");
+        anyhow::anyhow!("Failed to save user canister snapshot: {e}")
     })?;
 
     // delay 2-3 seconds with jitter
@@ -58,8 +58,8 @@ pub async fn get_user_canister_snapshot(
             .download_snapshot(start as u64, (end - start) as u64)
             .await
             .map_err(|e| {
-                log::error!("Failed to download user canister snapshot: {}", e);
-                anyhow::anyhow!("Failed to download user canister snapshot: {}", e)
+                log::error!("Failed to download user canister snapshot: {e}");
+                anyhow::anyhow!("Failed to download user canister snapshot: {e}")
             })?;
 
         snapshot_bytes.extend(res);
@@ -67,8 +67,8 @@ pub async fn get_user_canister_snapshot(
 
     // clear snapshot
     user_canister.clear_snapshot().await.map_err(|e| {
-        log::error!("Failed to clear user canister snapshot: {}", e);
-        anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
+        log::error!("Failed to clear user canister snapshot: {e}");
+        anyhow::anyhow!("Failed to clear user canister snapshot: {e}")
     })?;
 
     Ok(snapshot_bytes)
@@ -82,8 +82,8 @@ pub async fn get_subnet_orchestrator_snapshot(
     let subnet_orch = UserIndex(canister_id, agent);
 
     let snapshot_size = subnet_orch.save_snapshot_json().await.map_err(|e| {
-        log::error!("Failed to save subnet orchestrator snapshot: {}", e);
-        anyhow::anyhow!("Failed to save subnet orchestrator snapshot: {}", e)
+        log::error!("Failed to save subnet orchestrator snapshot: {e}");
+        anyhow::anyhow!("Failed to save subnet orchestrator snapshot: {e}")
     })?;
 
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
@@ -104,8 +104,8 @@ pub async fn get_subnet_orchestrator_snapshot(
             .download_snapshot(start as u64, (end - start) as u64)
             .await
             .map_err(|e| {
-                log::error!("Failed to download subnet orchestrator snapshot: {}", e);
-                anyhow::anyhow!("Failed to download subnet orchestrator snapshot: {}", e)
+                log::error!("Failed to download subnet orchestrator snapshot: {e}");
+                anyhow::anyhow!("Failed to download subnet orchestrator snapshot: {e}")
             })?;
 
         snapshot_bytes.extend(res);
@@ -113,8 +113,8 @@ pub async fn get_subnet_orchestrator_snapshot(
 
     // clear snapshot
     subnet_orch.clear_snapshot().await.map_err(|e| {
-        log::error!("Failed to clear subnet orchestrator snapshot: {}", e);
-        anyhow::anyhow!("Failed to clear subnet orchestrator snapshot: {}", e)
+        log::error!("Failed to clear subnet orchestrator snapshot: {e}");
+        anyhow::anyhow!("Failed to clear subnet orchestrator snapshot: {e}")
     })?;
 
     Ok(snapshot_bytes)
@@ -131,8 +131,8 @@ pub async fn get_platform_orchestrator_snapshot(
         .save_snapshot_json()
         .await
         .map_err(|e| {
-            log::error!("Failed to save platform orchestrator snapshot: {}", e);
-            anyhow::anyhow!("Failed to save platform orchestrator snapshot: {}", e)
+            log::error!("Failed to save platform orchestrator snapshot: {e}");
+            anyhow::anyhow!("Failed to save platform orchestrator snapshot: {e}")
         })?;
 
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
@@ -153,8 +153,8 @@ pub async fn get_platform_orchestrator_snapshot(
             .download_snapshot(start as u64, (end - start) as u64)
             .await
             .map_err(|e| {
-                log::error!("Failed to download platform orchestrator snapshot: {}", e);
-                anyhow::anyhow!("Failed to download platform orchestrator snapshot: {}", e)
+                log::error!("Failed to download platform orchestrator snapshot: {e}");
+                anyhow::anyhow!("Failed to download platform orchestrator snapshot: {e}")
             })?;
 
         snapshot_bytes.extend(res);
@@ -162,8 +162,8 @@ pub async fn get_platform_orchestrator_snapshot(
 
     // clear snapshot
     platform_orchestrator.clear_snapshot().await.map_err(|e| {
-        log::error!("Failed to clear platform orchestrator snapshot: {}", e);
-        anyhow::anyhow!("Failed to clear platform orchestrator snapshot: {}", e)
+        log::error!("Failed to clear platform orchestrator snapshot: {e}");
+        anyhow::anyhow!("Failed to clear platform orchestrator snapshot: {e}")
     })?;
 
     Ok(snapshot_bytes)

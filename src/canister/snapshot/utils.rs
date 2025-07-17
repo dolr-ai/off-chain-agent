@@ -41,8 +41,7 @@ pub async fn get_canister_backup_date_list(
     let mut conn = canister_backup_redis_pool.get().await?;
     let len = conn
         .llen::<String, usize>(format!(
-            "canister_backup_date:{:?}:{}",
-            canister_type, date_str
+            "canister_backup_date:{canister_type:?}:{date_str}"
         ))
         .await?;
 
@@ -51,7 +50,7 @@ pub async fn get_canister_backup_date_list(
     for i in (0..len).step_by(10000) {
         let chunk = conn
             .lrange::<String, Vec<String>>(
-                format!("canister_backup_date:{:?}:{}", canister_type, date_str),
+                format!("canister_backup_date:{canister_type:?}:{date_str}"),
                 i as isize,
                 (i + 9999) as isize,
             )
@@ -129,7 +128,7 @@ pub async fn get_subnet_orch_ids_list_for_backup(
 }
 
 pub async fn get_platform_orch_ids_list_for_backup(
-    agent: &Agent,
+    _agent: &Agent,
     canister_backup_redis_pool: &RedisPool,
     date_str: String,
 ) -> Result<Vec<Principal>, anyhow::Error> {

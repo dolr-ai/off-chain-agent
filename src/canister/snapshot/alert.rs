@@ -1,23 +1,35 @@
 use axum::{extract::State, response::IntoResponse, Json};
+#[cfg(not(feature = "local-bin"))]
 use futures::StreamExt;
 use http::StatusCode;
 use ic_agent::Agent;
+#[cfg(not(feature = "local-bin"))]
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+#[cfg(not(feature = "local-bin"))]
 use serde_json::json;
-use std::{collections::HashMap, env, sync::Arc};
+use std::collections::HashMap;
+#[cfg(not(feature = "local-bin"))]
+use std::env;
+use std::sync::Arc;
+#[cfg(not(feature = "local-bin"))]
 use tracing::instrument;
 
 use crate::{
     app_state::AppState,
-    canister::snapshot::utils::{
-        get_platform_orch_ids_list_for_backup, get_subnet_orch_ids_list_for_backup,
-        get_user_canister_list_for_backup,
-    },
     types::RedisPool,
 };
+#[cfg(not(feature = "local-bin"))]
+use crate::canister::snapshot::utils::{
+    get_platform_orch_ids_list_for_backup, get_subnet_orch_ids_list_for_backup,
+    get_user_canister_list_for_backup,
+};
 
-use super::{snapshot_v2::backup_canister_impl, CanisterData, CanisterType};
+use super::CanisterData;
+#[cfg(not(feature = "local-bin"))]
+use super::CanisterType;
+#[cfg(not(feature = "local-bin"))]
+use super::snapshot_v2::backup_canister_impl;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SnapshotAlertJobPayload {
@@ -25,6 +37,7 @@ pub struct SnapshotAlertJobPayload {
 }
 
 #[instrument(skip(state))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn snapshot_alert_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<SnapshotAlertJobPayload>,
@@ -41,7 +54,16 @@ pub async fn snapshot_alert_job(
     Ok(StatusCode::OK)
 }
 
+#[cfg(feature = "local-bin")]
+pub async fn snapshot_alert_job(
+    State(_state): State<Arc<AppState>>,
+    Json(_payload): Json<SnapshotAlertJobPayload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok(StatusCode::OK)
+}
+
 #[instrument(skip(agent))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn snapshot_alert_job_impl(
     agent: &Agent,
     redis_pool: &RedisPool,
@@ -101,6 +123,7 @@ pub async fn snapshot_alert_job_impl(
     Ok(())
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn retry_backup_canisters(
     agent: &Agent,
     redis_pool: &RedisPool,
@@ -150,7 +173,7 @@ pub async fn retry_backup_canisters(
                 let final_err_key = if cleaned_err_str.is_empty() && !original_err_str.is_empty() {
                     original_err_str.clone()
                 } else {
-                    cleaned_err_str.clone()
+                    cleaned_err_str
                 };
 
                 let err_vec = results.entry(final_err_key).or_insert_with(Vec::new);
@@ -162,6 +185,17 @@ pub async fn retry_backup_canisters(
     Ok(results)
 }
 
+#[cfg(feature = "local-bin")]
+pub async fn retry_backup_canisters(
+    _agent: &Agent,
+    _redis_pool: &RedisPool,
+    _canister_list: Vec<(CanisterData, String)>,
+    _date_str: String,
+) -> Result<HashMap<String, Vec<(String, String)>>, anyhow::Error> {
+    Ok(HashMap::new())
+}
+
+#[cfg(not(feature = "local-bin"))]
 async fn send_google_chat_alert(
     canisters_retry_backup_results: HashMap<String, Vec<(String, String)>>,
 ) -> Result<(), anyhow::Error> {
@@ -193,8 +227,7 @@ async fn send_google_chat_alert(
     let max_chars_per_message = 10000; // Google Chat message character limit
     let mut messages_to_send = Vec::new();
     let mut current_message = format!(
-        "🚨 Snapshot Retry Job Finished: *{}* canisters still require attention after retry!\n\n",
-        total_attention_count
+        "🚨 Snapshot Retry Job Finished: *{total_attention_count}* canisters still require attention after retry!\n\n"
     );
     let mut current_char_count = current_message.len();
 
@@ -210,8 +243,8 @@ async fn send_google_chat_alert(
         // Sort canisters within the error group by date string ("missing" will typically be sorted after dates)
         canister_list.sort_by(|a, b| a.1.cmp(&b.1));
 
-        let section_header = format!("*Error: {}*\n", error_str);
-        let continuation_header = format!("*(Cont...) Error: {}*\n", error_str);
+        let section_header = format!("*Error: {error_str}*\n");
+        let continuation_header = format!("*(Cont...) Error: {error_str}*\n");
 
         // Check if header fits in the current message
         if current_char_count + section_header.len() > max_chars_per_message {
@@ -239,7 +272,7 @@ async fn send_google_chat_alert(
         }
 
         for (canister_id, date_str) in canister_list {
-            let item_line = format!("- {}    {}\n", canister_id, date_str);
+            let item_line = format!("- {canister_id}    {date_str}\n");
             let chars_to_add = item_line.len();
 
             if current_char_count + chars_to_add > max_chars_per_message {

@@ -38,10 +38,9 @@ pub async fn upload_base64_image(
 
     let response = client
         .post(format!(
-            "https://api.cloudflare.com/client/v4/accounts/{}/images/v1",
-            account_id
+            "https://api.cloudflare.com/client/v4/accounts/{account_id}/images/v1"
         ))
-        .header("Authorization", format!("Bearer {}", api_token))
+        .header("Authorization", format!("Bearer {api_token}"))
         .multipart(form)
         .send()
         .await?;

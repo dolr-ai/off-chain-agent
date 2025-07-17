@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 pub fn get_icpump_insert_query(
     canister_id: String,
     description: String,
@@ -21,7 +23,7 @@ pub fn get_icpump_insert_query(
           ML.GENERATE_EMBEDDING(
           MODEL `hot-or-not-feed-intelligence.icpumpfun.text_embed`,
           (
-              SELECT \"{}\" AS content
+              SELECT \"{description}\" AS content
           ),
           STRUCT(FALSE AS flatten_json_output, 'RETRIEVAL_QUERY' AS task_type, 256 AS output_dimensionality)
           )
@@ -36,30 +38,32 @@ pub fn get_icpump_insert_query(
             ML.GENERATE_EMBEDDING(
             MODEL `hot-or-not-feed-intelligence.icpumpfun.text_embed`,
             (
-                SELECT \"{}\" AS content
+                SELECT \"{token_name}\" AS content
             ),
             STRUCT(FALSE AS flatten_json_output, 'RETRIEVAL_QUERY' AS task_type, 256 AS output_dimensionality)
             )
     )
 
     SELECT
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    {},
+    \"{canister_id}\",
+    \"{description}\",
+    \"{host}\",
+    \"{link}\",
+    \"{logo}\",
+    \"{token_name}\",
+    \"{token_symbol}\",
+    \"{user_id}\",
+    {is_nsfw},
     CURRENT_TIMESTAMP(),
     token_name_embedding.embedding,
     token_description_embedding.embedding
     FROM `token_name_embedding`, `token_description_embedding`;
-    ", description, token_name, canister_id, description, host, link, logo, token_name, token_symbol, user_id, is_nsfw)
+    ")
 }
 
 // used for backfilling data
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 pub fn get_icpump_insert_query_created_at(
     canister_id: String,
     description: String,
@@ -83,7 +87,7 @@ pub fn get_icpump_insert_query_created_at(
           ML.GENERATE_EMBEDDING(
           MODEL `hot-or-not-feed-intelligence.icpumpfun.text_embed`,
           (
-              SELECT \"{}\" AS content
+              SELECT \"{description}\" AS content
           ),
           STRUCT(FALSE AS flatten_json_output, 'RETRIEVAL_QUERY' AS task_type, 256 AS output_dimensionality)
           )
@@ -98,24 +102,24 @@ pub fn get_icpump_insert_query_created_at(
             ML.GENERATE_EMBEDDING(
             MODEL `hot-or-not-feed-intelligence.icpumpfun.text_embed`,
             (
-                SELECT \"{}\" AS content
+                SELECT \"{token_name}\" AS content
             ),
             STRUCT(FALSE AS flatten_json_output, 'RETRIEVAL_QUERY' AS task_type, 256 AS output_dimensionality)
             )
     )
 
     SELECT
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    \"{}\",
-    PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E6S%Ez', '{}'),
+    \"{canister_id}\",
+    \"{description}\",
+    \"{host}\",
+    \"{link}\",
+    \"{logo}\",
+    \"{token_name}\",
+    \"{token_symbol}\",
+    \"{user_id}\",
+    PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E6S%Ez', '{created_at}'),
     token_name_embedding.embedding,
     token_description_embedding.embedding
     FROM `token_name_embedding`, `token_description_embedding`;
-    ", description, token_name, canister_id, description, host, link, logo, token_name, token_symbol, user_id, created_at)
+    ")
 }

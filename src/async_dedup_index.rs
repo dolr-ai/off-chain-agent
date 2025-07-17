@@ -30,7 +30,7 @@ fn fast_hash<H: std::hash::Hash>(data: H) -> u128 {
 #[cfg(not(feature = "prod-bin"))]
 fn fast_hash<H: std::hash::Hash>(data: H) -> u128 {
     use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use std::hash::Hasher;
 
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
@@ -45,6 +45,7 @@ pub struct WrappedContext {
 }
 
 impl WrappedContext {
+    #[allow(dead_code)]
     pub fn new() -> anyhow::Result<Self> {
         let conn = dedup_index::DbConnection::builder()
             .with_uri(STDB_URL)

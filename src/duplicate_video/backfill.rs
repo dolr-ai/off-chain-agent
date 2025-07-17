@@ -1,14 +1,20 @@
 use crate::app_state;
 use axum::{extract::Query, extract::State, http::HeaderMap, Json};
+#[cfg(not(feature = "local-bin"))]
 use google_cloud_bigquery::http::job::query::QueryRequest;
+#[cfg(not(feature = "local-bin"))]
 use log::{error, info, warn};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use std::{env, sync::Arc};
+#[cfg(not(feature = "local-bin"))]
+use std::env;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
 pub struct BackfillQueryParams {
+    #[allow(dead_code)]
     batch_size: Option<usize>,
+    #[allow(dead_code)]
     parallelism: Option<usize>,
 }
 
@@ -18,6 +24,7 @@ pub struct BackfillResponse {
     videos_queued: usize,
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn trigger_videohash_backfill(
     State(state): State<Arc<app_state::AppState>>,
     headers: HeaderMap,
@@ -50,27 +57,38 @@ pub async fn trigger_videohash_backfill(
     let parallelism = params.parallelism.unwrap_or(10);
 
     info!(
-        "Starting videohash backfill job with batch_size={}, parallelism={}",
-        batch_size, parallelism
+        "Starting videohash backfill job with batch_size={batch_size}, parallelism={parallelism}"
     );
 
     // Execute the backfill
     let videos_queued = execute_backfill(&state, batch_size, parallelism)
         .await
         .map_err(|e| {
-            error!("Backfill execution error: {}", e);
+            error!("Backfill execution error: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
     Ok(Json(BackfillResponse {
         message: format!(
-            "Queued {} videos for processing with parallelism {}",
-            videos_queued, parallelism
+            "Queued {videos_queued} videos for processing with parallelism {parallelism}"
         ),
         videos_queued,
     }))
 }
 
+#[cfg(feature = "local-bin")]
+pub async fn trigger_videohash_backfill(
+    _state: State<Arc<app_state::AppState>>,
+    _headers: HeaderMap,
+    _params: Query<BackfillQueryParams>,
+) -> Result<Json<BackfillResponse>, StatusCode> {
+    Ok(Json(BackfillResponse {
+        message: "Backfill is not available in local-bin mode".to_string(),
+        videos_queued: 0,
+    }))
+}
+
+#[cfg(not(feature = "local-bin"))]
 async fn execute_backfill(
     state: &Arc<app_state::AppState>,
     batch_size: usize,
@@ -92,10 +110,9 @@ async fn execute_backfill(
           )
           AND t.size > 10000  /* Require at least 10KB for videos */
         ORDER BY updated ASC
-        LIMIT {}",
-        batch_size
+        LIMIT {batch_size}"
     );
-    info!("Executing BigQuery query: {}", query);
+    info!("Executing BigQuery query: {query}");
 
     let request = QueryRequest {
         query,
@@ -114,7 +131,7 @@ async fn execute_backfill(
             resp
         }
         Err(e) => {
-            error!("BigQuery query failed: {}", e);
+            error!("BigQuery query failed: {e}");
             return Err(anyhow::anyhow!("BigQuery query failed: {}", e));
         }
     };
@@ -139,7 +156,7 @@ async fn execute_backfill(
             google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
             other => {
                 // For other types, use debug formatting but extract just the ID
-                let raw = format!("{:?}", other);
+                let raw = format!("{other:?}");
                 // Extract just the ID from String("ID") format
                 if raw.contains("String(\"") {
                     raw.trim_start_matches("String(\"")
@@ -164,8 +181,7 @@ async fn execute_backfill(
             Ok(id) => id,
             Err(e) => {
                 warn!(
-                    "Invalid post_id format for video {}: {} - {}",
-                    video_id, post_id_str, e
+                    "Invalid post_id format for video {video_id}: {post_id_str} - {e}"
                 );
                 0
             }
@@ -181,17 +197,18 @@ async fn execute_backfill(
         )
         .await
         {
-            error!("Failed to queue video {}: {}", video_id, e);
+            error!("Failed to queue video {video_id}: {e}");
             continue;
         }
 
         queued_count += 1;
     }
 
-    info!("Successfully queued {} videos for processing", queued_count);
+    info!("Successfully queued {queued_count} videos for processing");
     Ok(queued_count)
 }
 
+#[cfg(not(feature = "local-bin"))]
 async fn queue_video_to_qstash(
     qstash_client: &crate::qstash::client::QStashClient,
     video_id: &str,
@@ -204,8 +221,7 @@ async fn queue_video_to_qstash(
 
     // Prepare the video URL
     let video_url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        video_id
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
     );
 
     // Create request payload - this is specifically for backfill
@@ -226,7 +242,7 @@ async fn queue_video_to_qstash(
         .unwrap();
     let url = qstash_client
         .base_url
-        .join(&format!("publish/{}", off_chain_ep))?;
+        .join(&format!("publish/{off_chain_ep}"))?;
 
     // Send to QStash with flow control
     qstash_client
@@ -238,11 +254,11 @@ async fn queue_video_to_qstash(
         .header("Upstash-Flow-Control-Key", "VIDEOHASH_BACKFILL")
         .header(
             "Upstash-Flow-Control-Value",
-            format!("Parallelism={}", parallelism),
+            format!("Parallelism={parallelism}"),
         )
         .send()
         .await?;
 
-    info!("Queued video_id [{}] for processing", video_id);
+    info!("Queued video_id [{video_id}] for processing");
     Ok(())
 }

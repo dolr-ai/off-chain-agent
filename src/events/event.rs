@@ -1,33 +1,50 @@
+#![allow(deprecated)]
 use crate::consts::OFF_CHAIN_AGENT_URL;
 use crate::events::types::VideoDurationWatchedPayload;
+#[cfg(not(feature = "local-bin"))]
 use crate::events::utils::parse_success_history_params;
 use crate::{
     app_state::AppState,
-    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
     events::warehouse_events::WarehouseEvent,
-    utils::cf_images::upload_base64_image,
     AppError,
 };
+#[cfg(not(feature = "local-bin"))]
+use crate::consts::BIGQUERY_INGESTION_URL;
 use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
-use firestore::errors::FirestoreError;
-use google_cloud_bigquery::http::job::query::QueryRequest;
 use http::header::CONTENT_TYPE;
 use log::error;
+#[cfg(not(feature = "local-bin"))]
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
+#[cfg(not(feature = "local-bin"))]
+use std::env;
+#[cfg(not(feature = "local-bin"))]
+use firestore::errors::FirestoreError;
+#[cfg(not(feature = "local-bin"))]
+use google_cloud_bigquery::http::job::query::QueryRequest;
+#[cfg(not(feature = "local-bin"))]
+use crate::utils::cf_images::upload_base64_image;
+#[cfg(not(feature = "local-bin"))]
+use crate::consts::CLOUDFLARE_ACCOUNT_ID;
+#[cfg(not(feature = "local-bin"))]
+use crate::events::queries::get_icpump_insert_query;
 use tracing::instrument;
+#[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::consts::{
     USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
     USER_SUCCESS_HISTORY_CLEAN_SUFFIX_V2, USER_SUCCESS_HISTORY_NSFW_SUFFIX_V2,
     USER_WATCH_HISTORY_CLEAN_SUFFIX_V2, USER_WATCH_HISTORY_NSFW_SUFFIX_V2,
     USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
 };
+#[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::types::{BufferItem, PlainPostItem};
-use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2, PlainPostItemV2};
+#[cfg(not(feature = "local-bin"))]
+use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2};
+#[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::{
     consts::{
         USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
@@ -36,7 +53,6 @@ use yral_ml_feed_cache::{
     types::MLFeedCacheHistoryItem,
 };
 
-use super::queries::get_icpump_insert_query;
 
 pub mod login_successful;
 pub mod storj;
@@ -103,6 +119,7 @@ impl Event {
         Self { event }
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn stream_to_bigquery(&self, app_state: &AppState) {
         let event_str = self.event.event.clone();
         let params_str = self.event.params.clone();
@@ -131,6 +148,13 @@ impl Event {
         });
     }
 
+    #[cfg(feature = "local-bin")]
+    #[allow(dead_code)]
+    pub fn stream_to_bigquery(&self, _app_state: &AppState) {
+        // No-op for local-bin
+    }
+
+    #[allow(dead_code)]
     pub fn stream_to_bigquery_token_metadata(&self, app_state: &AppState) {
         if self.event.event == "token_creation_completed" {
             let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
@@ -169,8 +193,7 @@ impl Event {
                 Ok(params) => params,
                 Err(e) => {
                     error!(
-                        "Failed to parse video_upload_successful event params: {}",
-                        e
+                        "Failed to parse video_upload_successful event params: {e}"
                     );
                     return;
                 }
@@ -215,11 +238,10 @@ impl Event {
 
                 // Construct video URL
                 let video_url = format!(
-                    "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-                    video_id
+                    "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
                 );
 
-                log::info!("Sending video for deduplication check: {}", video_id);
+                log::info!("Sending video for deduplication check: {video_id}");
 
                 // Create request for video_deduplication endpoint
                 let off_chain_ep = OFF_CHAIN_AGENT_URL
@@ -227,7 +249,7 @@ impl Event {
                     .unwrap();
                 let url = qstash_client
                     .base_url
-                    .join(&format!("publish/{}", off_chain_ep))
+                    .join(&format!("publish/{off_chain_ep}"))
                     .unwrap();
 
                 let request_data = serde_json::json!({
@@ -253,12 +275,10 @@ impl Event {
 
                 match result {
                     Ok(_) => log::info!(
-                        "Video deduplication check successfully queued for video_id: {}",
-                        video_id
+                        "Video deduplication check successfully queued for video_id: {video_id}"
                     ),
                     Err(e) => error!(
-                        "Failed to queue video deduplication check for video_id {}: {:?}",
-                        video_id, e
+                        "Failed to queue video deduplication check for video_id {video_id}: {e:?}"
                     ),
                 }
             });
@@ -268,6 +288,8 @@ impl Event {
     #[deprecated(
         note = "Use update_watch_history_v2 instead. will be removed post redis migration"
     )]
+    #[cfg(not(feature = "local-bin"))]
+    #[allow(dead_code)]
     pub fn update_watch_history(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
             let params: Result<VideoDurationWatchedPayload, _> =
@@ -276,7 +298,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -331,8 +353,7 @@ impl Event {
                 // else add to history and user buffer
 
                 let plain_key = format!(
-                    "{}{}",
-                    user_canister_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX
+                    "{user_canister_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX}"
                 );
 
                 match ml_feed_cache
@@ -361,17 +382,18 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user watch history buffer items: {:?}", e);
+                            error!("Error adding user watch history buffer items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user watch history plain item: {:?}", e);
+                        error!("Error checking user watch history plain item: {e:?}");
                     }
                 }
             });
         }
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn update_watch_history_v2(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
             let params: Result<VideoDurationWatchedPayload, _> =
@@ -380,7 +402,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -442,15 +464,15 @@ impl Event {
                 // else add to history and user buffer
 
                 let plain_key = format!(
-                    "{}{}",
-                    user_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2
+                    "{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}"
                 );
 
                 match ml_feed_cache
-                    .is_user_history_plain_item_exists_v2(
+                    .is_user_history_plain_item_exists(
                         plain_key.as_str(),
-                        PlainPostItemV2 {
-                            video_id: video_id.clone(),
+                        PlainPostItem {
+                            canister_id: publisher_canister_id.to_string(),
+                            post_id,
                         },
                     )
                     .await
@@ -471,11 +493,11 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user watch history buffer items: {:?}", e);
+                            error!("Error adding user watch history buffer items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user watch history plain item: {:?}", e);
+                        error!("Error checking user watch history plain item: {e:?}");
                     }
                 }
             });
@@ -490,7 +512,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -504,7 +526,7 @@ impl Event {
 
                 let percentage_watched = params.percentage_watched as u8;
                 if percentage_watched == 0 || percentage_watched > 100 {
-                    error!("Invalid percentage_watched: {}", percentage_watched);
+                    error!("Invalid percentage_watched: {percentage_watched}");
                     return;
                 }
                 let post_id = params.post_id.unwrap_or_default();
@@ -530,17 +552,23 @@ impl Event {
                     .await
                 {
                     error!(
-                        "Failed to update view details for post {} in canister {}: {:?}",
-                        post_id, publisher_canister_id, e
+                        "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
                     );
                 }
             });
         }
     }
 
+    #[cfg(feature = "local-bin")]
+    pub fn update_watch_history_v2(&self, _app_state: &AppState) {
+        // No-op for local-bin
+    }
+
     #[deprecated(
         note = "Use update_success_history_v2 instead. will be removed post redis migration"
     )]
+    #[cfg(not(feature = "local-bin"))]
+    #[allow(dead_code)]
     pub fn update_success_history(&self, app_state: &AppState) {
         let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
         let app_state = app_state.clone();
@@ -598,8 +626,7 @@ impl Event {
             // add to history plain items
             if item_type == "like_video" {
                 let plain_key = format!(
-                    "{}{}",
-                    user_canister_id, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX
+                    "{user_canister_id}{USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX}"
                 );
 
                 match ml_feed_cache
@@ -628,25 +655,34 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user like history buffer items: {:?}", e);
+                            error!("Error adding user like history buffer items: {e:?}");
                         }
 
                         // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
                         if let Err(e) = ml_feed_cache
-                            .add_user_history_plain_items(&plain_key, vec![success_history_item])
+                            .add_user_history_plain_items(&plain_key, vec![MLFeedCacheHistoryItem {
+                                canister_id: success_history_item.canister_id.clone(),
+                                item_type: success_history_item.item_type.clone(),
+                                post_id: success_history_item.post_id,
+                                video_id: success_history_item.video_id.clone(),
+                                timestamp: success_history_item.timestamp,
+                                percent_watched: success_history_item.percent_watched,
+                                nsfw_probability: 0.0,
+                            }])
                             .await
                         {
-                            error!("Error adding user like history plain items: {:?}", e);
+                            error!("Error adding user like history plain items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user like history plain item: {:?}", e);
+                        error!("Error checking user like history plain item: {e:?}");
                     }
                 }
             }
         });
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn update_success_history_v2(&self, app_state: &AppState) {
         if self.event.event != "video_duration_watched" && self.event.event != "like_video" {
             return;
@@ -665,7 +701,7 @@ impl Event {
                 Ok(Some(p)) => p,
                 Ok(None) => return, // Early return for video_duration_watched < 30%
                 Err(e) => {
-                    error!("Failed to parse params in update_success_history_v2: {}", e);
+                    error!("Failed to parse params in update_success_history_v2: {e}");
                     return;
                 }
             };
@@ -708,10 +744,11 @@ impl Event {
                 );
 
                 match ml_feed_cache
-                    .is_user_history_plain_item_exists_v2(
+                    .is_user_history_plain_item_exists(
                         plain_key.as_str(),
-                        PlainPostItemV2 {
-                            video_id: params.video_id.clone(),
+                        PlainPostItem {
+                            canister_id: params.publisher_user_id.clone(),
+                            post_id: params.post_id,
                         },
                     )
                     .await
@@ -732,23 +769,42 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user like history buffer items: {:?}", e);
+                            error!("Error adding user like history buffer items: {e:?}");
                         }
 
                         // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
                         if let Err(e) = ml_feed_cache
-                            .add_user_history_plain_items_v2(&plain_key, vec![success_history_item])
+                            .add_user_history_plain_items(&plain_key, vec![MLFeedCacheHistoryItem {
+                                canister_id: success_history_item.canister_id.clone(),
+                                item_type: success_history_item.item_type.clone(),
+                                post_id: success_history_item.post_id,
+                                video_id: success_history_item.video_id.clone(),
+                                timestamp: success_history_item.timestamp,
+                                percent_watched: success_history_item.percent_watched,
+                                nsfw_probability: 0.0,
+                            }])
                             .await
                         {
-                            error!("Error adding user like history plain items: {:?}", e);
+                            error!("Error adding user like history plain items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user like history plain item: {:?}", e);
+                        error!("Error checking user like history plain item: {e:?}");
                     }
                 }
             }
         });
+    }
+
+    #[cfg(feature = "local-bin")]
+    pub fn update_success_history_v2(&self, _app_state: &AppState) {
+        // No-op for local-bin
+    }
+
+    #[cfg(feature = "local-bin")]
+    #[allow(dead_code)]
+    pub fn stream_to_firestore(&self, _app_state: &AppState) {
+        // No-op for local-bin feature
     }
 
     #[cfg(not(feature = "local-bin"))]
@@ -793,6 +849,7 @@ impl Event {
         }
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn handle_login_successful(&self, app_state: &AppState) -> Result<(), anyhow::Error> {
         if self.event.event == "login_successful" {
             let params: LoginSuccessfulParams = serde_json::from_str(&self.event.params)?;
@@ -806,15 +863,21 @@ impl Event {
                     login_successful::handle_login_successful(bigquery_client, canister_id, user_id)
                         .await
                 {
-                    log::error!("Error handling login successful: {:?}", e);
+                    log::error!("Error handling login successful: {e:?}");
                 }
             });
         }
 
         Ok(())
     }
+
+    #[cfg(feature = "local-bin")]
+    pub fn handle_login_successful(&self, _app_state: &AppState) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
 }
 
+#[cfg(not(feature = "local-bin"))]
 async fn stream_to_bigquery(
     app_state: &AppState,
     data: Value,
@@ -833,14 +896,15 @@ async fn stream_to_bigquery(
 
     match response.status().is_success() {
         true => Ok(()),
-        false => Err(format!("Failed to stream data - {:?}", response.text().await?).into()),
+        false => Err(format!("Failed to stream data - {response_text:?}", response_text = response.text().await?).into()),
     }
 }
 
 #[cfg(feature = "local-bin")]
+#[allow(dead_code)]
 pub async fn stream_to_bigquery_token_metadata_impl_v2(
-    app_state: &AppState,
-    data: ICPumpTokenMetadata,
+    _app_state: &AppState,
+    _data: ICPumpTokenMetadata,
 ) -> Result<(), anyhow::Error> {
     Ok(())
 }
@@ -898,7 +962,7 @@ pub async fn stream_to_bigquery_token_metadata_impl_v2(
     {
         Ok(_) => Ok(()),
         Err(e) => {
-            log::error!("Error streaming to BigQuery: {:?}", e);
+            log::error!("Error streaming to BigQuery: {e:?}");
             Err(anyhow::anyhow!("Error streaming to BigQuery"))
         }
     }
@@ -946,10 +1010,9 @@ pub async fn upload_gcs_impl(
     timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
     let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        uid
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{uid}/downloads/default.mp4"
     );
-    let name = format!("{}.mp4", uid);
+    let name = format!("{uid}.mp4");
 
     let file = reqwest::Client::new()
         .get(&url)

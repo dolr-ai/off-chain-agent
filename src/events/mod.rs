@@ -5,7 +5,9 @@ use candid::Principal;
 use event::Event;
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(not(feature = "local-bin"))]
+use serde_json::Value;
 use std::error::Error;
 use std::sync::Arc;
 use types::AnalyticsEvent;
@@ -54,7 +56,7 @@ impl WarehouseEvents for WarehouseEventsService {
         let event = event::Event::new(request);
 
         process_event_impl(event, shared_state).await.map_err(|e| {
-            log::error!("Failed to process event grpc: {}", e);
+            log::error!("Failed to process event grpc: {e}");
             tonic::Status::internal("Failed to process event")
         })?;
 
@@ -67,6 +69,7 @@ pub struct VideoUploadSuccessful {
 }
 
 impl VideoUploadSuccessful {
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_event(
         &self,
         user_principal: Principal,
@@ -163,7 +166,7 @@ async fn post_event(
     process_event_impl(event, state.clone())
         .await
         .map_err(|e| {
-            log::error!("Failed to process event rest: {}", e);
+            log::error!("Failed to process event rest: {e}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to process event".to_string(),
@@ -182,9 +185,6 @@ async fn process_event_impl(
 
     event.check_video_deduplication(&shared_state.clone());
 
-    event.update_watch_history(&shared_state.clone());
-    event.update_success_history(&shared_state.clone());
-
     event.update_watch_history_v2(&shared_state.clone());
     event.update_success_history_v2(&shared_state.clone());
 
@@ -195,7 +195,7 @@ async fn process_event_impl(
     event.stream_to_bigquery_token_metadata(&shared_state.clone());
 
     if let Err(e) = event.handle_login_successful(&shared_state.clone()) {
-        log::error!("Error handling login successful: {:?}", e);
+        log::error!("Error handling login successful: {e:?}");
     }
 
     event.update_view_count_canister(&shared_state.clone());
@@ -203,13 +203,13 @@ async fn process_event_impl(
     #[cfg(not(feature = "local-bin"))]
     {
         let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
-            log::error!("Failed to parse params: {}", e);
+            log::error!("Failed to parse params: {e}");
             anyhow::anyhow!("Failed to parse params: {}", e)
         })?;
 
         let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
         if let Err(e) = res {
-            log::error!("Failed to dispatch notification: {:?}", e);
+            log::error!("Failed to dispatch notification: {e:?}");
         }
     }
 
@@ -253,7 +253,7 @@ async fn handle_bulk_events(
         metric_events.push(req_event);
 
         if let Err(e) = process_event_impl(event, state.clone()).await {
-            log::error!("Failed to process event rest: {}", e); // not sending any error to the client as it is a bulk request
+            log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
     }
 
@@ -262,7 +262,7 @@ async fn handle_bulk_events(
         .push_list("metrics_list".into(), metric_events)
         .await
     {
-        log::error!("Failed to push metrics to vector: {}", e);
+        log::error!("Failed to push metrics to vector: {e}");
     }
 
     Ok((StatusCode::OK, "Events processed".to_string()))

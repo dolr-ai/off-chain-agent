@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
@@ -68,7 +69,7 @@ impl OffChain for OffChainService {
         repost_post_common_impl(shared_state.clone(), post_report_request)
             .await
             .map_err(|e| {
-                log::error!("Failed to report post: {}", e);
+                log::error!("Failed to report post: {e}");
                 tonic::Status::new(tonic::Code::Unknown, "Failed to report post")
             })?;
 
@@ -109,11 +110,11 @@ pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
         .await;
 
     if response.is_err() {
-        log::error!("Error sending data to Google Chat: {:?}", response);
+        log::error!("Error sending data to Google Chat: {response:?}");
         return Err(anyhow::anyhow!("Error sending data to Google Chat"));
     }
 
-    let body = response.unwrap().text().await.unwrap();
+    let _body = response.unwrap().text().await.unwrap();
 
     Ok(())
 }
@@ -190,7 +191,7 @@ pub async fn report_approved_handler(
 
     let mut valid = false;
 
-    for (k, v) in &certs {
+    for v in certs.values() {
         let jwt = jsonwebtoken::decode::<GoogleJWT>(
             auth_token,
             &DecodingKey::from_rsa_pem(v.as_bytes())?,
@@ -223,7 +224,7 @@ pub async fn report_approved_handler(
 
     // send confirmation to Google Chat
     let confirmation_msg = json!({
-        "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
+        "text": format!("Successfully banned post : {canister_id}/{post_id}")
     });
     send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
 

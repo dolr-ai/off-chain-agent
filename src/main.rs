@@ -154,7 +154,7 @@ async fn main_impl() -> Result<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50051));
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
-    log::info!("listening on {}", addr);
+    log::info!("listening on {addr}");
 
     axum::serve(listener, Shared::new(http_grpc)).await.unwrap();
 

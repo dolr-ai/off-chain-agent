@@ -1,5 +1,6 @@
 #[cfg(not(feature = "local-bin"))]
 use crate::async_backend;
+#[cfg(not(feature = "local-bin"))]
 use crate::async_dedup_index;
 use crate::canister::utils::deleted_canister::WrappedContextCanisters;
 use crate::config::AppConfig;
@@ -9,25 +10,36 @@ use crate::events::push_notifications::NotificationClient;
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
+#[cfg(not(feature = "local-bin"))]
 use crate::types::RedisPool;
-use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
+#[cfg(not(feature = "local-bin"))]
 use firestore::{FirestoreDb, FirestoreDbOptions};
+#[cfg(not(feature = "local-bin"))]
 use google_cloud_alloydb_v1::client::AlloyDBAdmin;
+#[cfg(not(feature = "local-bin"))]
 use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
+#[cfg(not(feature = "local-bin"))]
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
 use std::env;
+#[cfg(not(feature = "local-bin"))]
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
+#[cfg(not(feature = "local-bin"))]
 use yral_alloydb_client::AlloyDbInstance;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
-use yral_ml_feed_cache::MLFeedCacheState;
+#[cfg(not(feature = "local-bin"))]
 use yup_oauth2::hyper_rustls::HttpsConnector;
+#[cfg(not(feature = "local-bin"))]
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
+#[cfg(not(feature = "local-bin"))]
+use crate::yral_auth::YralAuthRedis;
+#[cfg(not(feature = "local-bin"))]
+use yral_ml_feed_cache::MLFeedCacheState;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -100,7 +112,7 @@ impl AppState {
         }
     }
 
-    pub async fn get_access_token(&self, scopes: &[&str]) -> String {
+    pub async fn get_access_token(&self, _scopes: &[&str]) -> String {
         #[cfg(feature = "local-bin")]
         {
             "localtoken".into()
@@ -109,7 +121,7 @@ impl AppState {
         #[cfg(not(feature = "local-bin"))]
         {
             let auth = &self.auth;
-            let token = auth.token(scopes).await.unwrap();
+            let token = auth.token(_scopes).await.unwrap();
 
             match token.token() {
                 Some(t) => t.to_string(),
@@ -124,7 +136,7 @@ impl AppState {
     ) -> Result<Principal> {
         let meta = self
             .yral_metadata_client
-            .get_user_metadata(user_principal)
+            .get_user_metadata_v2(user_principal.to_string())
             .await
             .context("Failed to get user_metadata from yral_metadata_client")?;
 
@@ -156,7 +168,7 @@ pub async fn init_agent() -> Agent {
         ) {
             Ok(identity) => identity,
             Err(err) => {
-                panic!("Unable to create identity, error: {:?}", err);
+                panic!("Unable to create identity, error: {err:?}");
             }
         };
 
@@ -169,24 +181,23 @@ pub async fn init_agent() -> Agent {
         {
             Ok(agent) => agent,
             Err(err) => {
-                panic!("Unable to create agent, error: {:?}", err);
+                panic!("Unable to create agent, error: {err:?}");
             }
         }
     }
 
     #[cfg(any(feature = "local-bin", feature = "use-local-agent"))]
     {
-        let agent = Agent::builder()
-            .with_url("https://ic0.app")
-            .build()
-            .unwrap();
-
         // agent.fetch_root_key().await.unwrap();
 
-        agent
+        Agent::builder()
+            .with_url("https://ic0.app")
+            .build()
+            .unwrap()
     }
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
     let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
 
@@ -199,6 +210,7 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
         .unwrap()
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn init_firestoredb() -> FirestoreDb {
     let options = FirestoreDbOptions::new("hot-or-not-feed-intelligence".to_string())
         .with_database_id("ic-pump-fun".to_string());
@@ -235,14 +247,17 @@ pub async fn init_qstash_client() -> QStashClient {
     QStashClient::new(auth_token.as_str())
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn init_dedup_index_ctx() -> async_dedup_index::WrappedContext {
     async_dedup_index::WrappedContext::new().expect("Stdb dedup index to be connected")
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn init_backend_ctx() -> async_backend::WrappedContext {
     async_backend::WrappedContext::new().expect("Stdb backend to be connected")
 }
 
+#[cfg(not(feature = "local-bin"))]
 async fn init_alloydb_client() -> AlloyDbInstance {
     let sa_json_raw = env::var("ALLOYDB_SERVICE_ACCOUNT_JSON")
         .expect("`ALLOYDB_SERVICE_ACCOUNT_JSON` is required!");
@@ -266,6 +281,7 @@ async fn init_alloydb_client() -> AlloyDbInstance {
     AlloyDbInstance::new(client, instance, db_name, db_user, db_password)
 }
 
+#[cfg(not(feature = "local-bin"))]
 async fn init_canister_backup_redis_pool() -> RedisPool {
     let redis_url = std::env::var("CANISTER_BACKUP_CACHE_REDIS_URL")
         .expect("CANISTER_BACKUP_CACHE_REDIS_URL must be set");
