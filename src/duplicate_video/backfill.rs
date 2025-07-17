@@ -1,10 +1,14 @@
 use crate::app_state;
 use axum::{extract::Query, extract::State, http::HeaderMap, Json};
+#[cfg(not(feature = "local-bin"))]
 use google_cloud_bigquery::http::job::query::QueryRequest;
+#[cfg(not(feature = "local-bin"))]
 use log::{error, info, warn};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use std::{env, sync::Arc};
+#[cfg(not(feature = "local-bin"))]
+use std::env;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
 pub struct BackfillQueryParams {
@@ -18,6 +22,7 @@ pub struct BackfillResponse {
     videos_queued: usize,
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn trigger_videohash_backfill(
     State(state): State<Arc<app_state::AppState>>,
     headers: HeaderMap,
@@ -71,6 +76,19 @@ pub async fn trigger_videohash_backfill(
     }))
 }
 
+#[cfg(feature = "local-bin")]
+pub async fn trigger_videohash_backfill(
+    _state: State<Arc<app_state::AppState>>,
+    _headers: HeaderMap,
+    _params: Query<BackfillQueryParams>,
+) -> Result<Json<BackfillResponse>, StatusCode> {
+    Ok(Json(BackfillResponse {
+        message: "Backfill is not available in local-bin mode".to_string(),
+        videos_queued: 0,
+    }))
+}
+
+#[cfg(not(feature = "local-bin"))]
 async fn execute_backfill(
     state: &Arc<app_state::AppState>,
     batch_size: usize,
@@ -192,6 +210,7 @@ async fn execute_backfill(
     Ok(queued_count)
 }
 
+#[cfg(not(feature = "local-bin"))]
 async fn queue_video_to_qstash(
     qstash_client: &crate::qstash::client::QStashClient,
     video_id: &str,

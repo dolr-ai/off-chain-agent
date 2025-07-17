@@ -14,18 +14,18 @@ use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
+use std::sync::Arc;
+use yral_ml_feed_cache::MLFeedCacheState;
 use google_cloud_alloydb_v1::client::AlloyDBAdmin;
 use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
 use std::env;
-use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 use yral_alloydb_client::AlloyDbInstance;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
-use yral_ml_feed_cache::MLFeedCacheState;
 use yup_oauth2::hyper_rustls::HttpsConnector;
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
 
@@ -124,7 +124,7 @@ impl AppState {
     ) -> Result<Principal> {
         let meta = self
             .yral_metadata_client
-            .get_user_metadata(user_principal)
+            .get_user_metadata_v2(user_principal.to_string())
             .await
             .context("Failed to get user_metadata from yral_metadata_client")?;
 
@@ -239,6 +239,7 @@ pub async fn init_dedup_index_ctx() -> async_dedup_index::WrappedContext {
     async_dedup_index::WrappedContext::new().expect("Stdb dedup index to be connected")
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn init_backend_ctx() -> async_backend::WrappedContext {
     async_backend::WrappedContext::new().expect("Stdb backend to be connected")
 }

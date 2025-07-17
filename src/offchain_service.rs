@@ -113,7 +113,7 @@ pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
         return Err(anyhow::anyhow!("Error sending data to Google Chat"));
     }
 
-    let body = response.unwrap().text().await.unwrap();
+    let _body = response.unwrap().text().await.unwrap();
 
     Ok(())
 }
@@ -190,7 +190,7 @@ pub async fn report_approved_handler(
 
     let mut valid = false;
 
-    for (k, v) in &certs {
+    for (_k, v) in &certs {
         let jwt = jsonwebtoken::decode::<GoogleJWT>(
             auth_token,
             &DecodingKey::from_rsa_pem(v.as_bytes())?,

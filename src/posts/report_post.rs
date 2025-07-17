@@ -14,7 +14,7 @@ use crate::{
     consts::{GOOGLE_CHAT_REPORT_SPACE_URL, ML_FEED_SERVER_GRPC_URL},
     offchain_service::send_message_gchat,
     utils::grpc_clients::ml_feed::{
-        ml_feed_client::MlFeedClient, VideoReportRequest, VideoReportRequestV3,
+        ml_feed_client::MlFeedClient, VideoReportRequestV3,
     },
 };
 

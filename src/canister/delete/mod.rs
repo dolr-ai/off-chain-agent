@@ -5,9 +5,9 @@ use candid::Principal;
 use chrono::Utc;
 use futures::stream::StreamExt;
 use ic_agent::Agent;
-use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
+use redis::AsyncCommands;
 use utoipa::ToSchema;
 use yral_canisters_client::{
     individual_user_template::IndividualUserTemplate,
@@ -16,8 +16,10 @@ use yral_canisters_client::{
 
 use crate::{
     app_state::AppState,
-    posts::{delete_post::bulk_insert_video_delete_rows, types::UserPost},
+    posts::types::UserPost,
 };
+#[cfg(not(feature = "local-bin"))]
+use crate::posts::delete_post::bulk_insert_video_delete_rows;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CanisterInfo {
@@ -75,6 +77,7 @@ pub async fn delete_canister_data(
 
     // Step 3: Bulk insert into video_deleted table if posts exist
     //       : Handle duplicate posts cleanup (spawn as background task)
+    #[cfg(not(feature = "local-bin"))]
     if !posts.is_empty() {
         bulk_insert_video_delete_rows(&state.bigquery_client, posts.clone()).await?;
 
@@ -96,28 +99,31 @@ pub async fn delete_canister_data(
 
     // Step 5: Delete from Redis caches
     // Wont return error if cache deletion fails, just log it
-    if let Err(e) = state
-        .ml_feed_cache
-        .delete_user_caches(&canister_id.to_string())
-        .await
+    #[cfg(not(feature = "local-bin"))]
     {
-        log::error!(
-            "Failed to delete Redis caches for canister {}: {}",
-            canister_id,
-            e
-        );
-    }
+        if let Err(e) = state
+            .ml_feed_cache
+            .delete_user_caches(&canister_id.to_string())
+            .await
+        {
+            log::error!(
+                "Failed to delete Redis caches for canister {}: {}",
+                canister_id,
+                e
+            );
+        }
 
-    if let Err(e) = state
-        .ml_feed_cache
-        .delete_user_caches_v2(&user_principal.to_string())
-        .await
-    {
-        log::error!(
-            "Failed to delete Redis caches for canister {}: {}",
-            canister_id,
-            e
-        );
+        if let Err(e) = state
+            .ml_feed_cache
+            .delete_user_caches_v2(&user_principal.to_string())
+            .await
+        {
+            log::error!(
+                "Failed to delete Redis caches for canister {}: {}",
+                canister_id,
+                e
+            );
+        }
     }
 
     Ok(())
@@ -196,6 +202,7 @@ async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPost>) {
     }
 }
 
+#[cfg(not(feature = "local-bin"))]
 async fn handle_duplicate_posts_cleanup(
     bigquery_client: google_cloud_bigquery::client::Client,
     video_ids: Vec<String>,

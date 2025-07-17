@@ -84,7 +84,7 @@ pub async fn upload_user_video_impl(
         .with_url("https://ic0.app")
         .build()?;
     let user_meta_data = yral_metadata_client
-        .get_user_metadata(user_principal)
+        .get_user_metadata_v2(user_principal.to_string())
         .await?
         .ok_or("metadata for principal not found")?;
     let individual_user_template = IndividualUserTemplate(user_meta_data.user_canister_id, &agent);

@@ -1,7 +1,10 @@
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
+#[cfg(not(feature = "local-bin"))]
+use serde_json::json;
 use utoipa::ToSchema;
+#[cfg(not(feature = "local-bin"))]
 use yral_metadata_types::{
     AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
     SendNotificationReq, WebpushConfig, WebpushFcmOptions,
@@ -597,8 +600,8 @@ pub enum EventPayload {
 /// * Returns `serde_json::Error` if the event name is unknown OR the payload cannot
 ///   be deserialized into the expected structure.
 ///
-
 impl EventPayload {
+    #[cfg(not(feature = "local-bin"))]
     pub async fn send_notification(&self, app_state: &AppState) {
         match self {
             EventPayload::VideoUploadSuccessful(payload) => {
@@ -737,6 +740,11 @@ impl EventPayload {
 
             _ => {}
         }
+    }
+
+    #[cfg(feature = "local-bin")]
+    pub async fn send_notification(&self, _app_state: &AppState) {
+        // No-op for local-bin
     }
 }
 

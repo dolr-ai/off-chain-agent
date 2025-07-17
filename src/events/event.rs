@@ -1,33 +1,41 @@
-use crate::consts::OFF_CHAIN_AGENT_URL;
+use crate::consts::{OFF_CHAIN_AGENT_URL, CLOUDFLARE_ACCOUNT_ID};
 use crate::events::types::VideoDurationWatchedPayload;
+use crate::events::queries::get_icpump_insert_query;
+use crate::utils::cf_images::upload_base64_image;
+#[cfg(not(feature = "local-bin"))]
 use crate::events::utils::parse_success_history_params;
 use crate::{
     app_state::AppState,
-    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
     events::warehouse_events::WarehouseEvent,
-    utils::cf_images::upload_base64_image,
     AppError,
 };
+#[cfg(not(feature = "local-bin"))]
+use crate::consts::BIGQUERY_INGESTION_URL;
 use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
-use firestore::errors::FirestoreError;
-use google_cloud_bigquery::http::job::query::QueryRequest;
 use http::header::CONTENT_TYPE;
 use log::error;
+#[cfg(not(feature = "local-bin"))]
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, sync::Arc, env};
+use firestore::errors::FirestoreError;
+use google_cloud_bigquery::http::job::query::QueryRequest;
 use tracing::instrument;
+#[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::consts::{
     USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
     USER_SUCCESS_HISTORY_CLEAN_SUFFIX_V2, USER_SUCCESS_HISTORY_NSFW_SUFFIX_V2,
     USER_WATCH_HISTORY_CLEAN_SUFFIX_V2, USER_WATCH_HISTORY_NSFW_SUFFIX_V2,
     USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
 };
+#[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::types::{BufferItem, PlainPostItem};
+#[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2, PlainPostItemV2};
+#[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::{
     consts::{
         USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
@@ -36,7 +44,6 @@ use yral_ml_feed_cache::{
     types::MLFeedCacheHistoryItem,
 };
 
-use super::queries::get_icpump_insert_query;
 
 pub mod login_successful;
 pub mod storj;
@@ -103,6 +110,7 @@ impl Event {
         Self { event }
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn stream_to_bigquery(&self, app_state: &AppState) {
         let event_str = self.event.event.clone();
         let params_str = self.event.params.clone();
@@ -129,6 +137,11 @@ impl Event {
                 error!("Error sending data to BigQuery: {}", res.err().unwrap());
             }
         });
+    }
+
+    #[cfg(feature = "local-bin")]
+    pub fn stream_to_bigquery(&self, _app_state: &AppState) {
+        // No-op for local-bin
     }
 
     pub fn stream_to_bigquery_token_metadata(&self, app_state: &AppState) {
@@ -268,6 +281,7 @@ impl Event {
     #[deprecated(
         note = "Use update_watch_history_v2 instead. will be removed post redis migration"
     )]
+    #[cfg(not(feature = "local-bin"))]
     pub fn update_watch_history(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
             let params: Result<VideoDurationWatchedPayload, _> =
@@ -372,6 +386,7 @@ impl Event {
         }
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn update_watch_history_v2(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
             let params: Result<VideoDurationWatchedPayload, _> =
@@ -538,9 +553,15 @@ impl Event {
         }
     }
 
+    #[cfg(feature = "local-bin")]
+    pub fn update_watch_history_v2(&self, _app_state: &AppState) {
+        // No-op for local-bin
+    }
+
     #[deprecated(
         note = "Use update_success_history_v2 instead. will be removed post redis migration"
     )]
+    #[cfg(not(feature = "local-bin"))]
     pub fn update_success_history(&self, app_state: &AppState) {
         let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
         let app_state = app_state.clone();
@@ -647,6 +668,7 @@ impl Event {
         });
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn update_success_history_v2(&self, app_state: &AppState) {
         if self.event.event != "video_duration_watched" && self.event.event != "like_video" {
             return;
@@ -751,6 +773,16 @@ impl Event {
         });
     }
 
+    #[cfg(feature = "local-bin")]
+    pub fn update_success_history_v2(&self, _app_state: &AppState) {
+        // No-op for local-bin
+    }
+
+    #[cfg(feature = "local-bin")]
+    pub fn stream_to_firestore(&self, _app_state: &AppState) {
+        // No-op for local-bin feature
+    }
+
     #[cfg(not(feature = "local-bin"))]
     pub fn stream_to_firestore(&self, app_state: &AppState) {
         if self.event.event == "token_creation_completed" {
@@ -793,6 +825,7 @@ impl Event {
         }
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn handle_login_successful(&self, app_state: &AppState) -> Result<(), anyhow::Error> {
         if self.event.event == "login_successful" {
             let params: LoginSuccessfulParams = serde_json::from_str(&self.event.params)?;
@@ -813,8 +846,14 @@ impl Event {
 
         Ok(())
     }
+
+    #[cfg(feature = "local-bin")]
+    pub fn handle_login_successful(&self, _app_state: &AppState) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
 }
 
+#[cfg(not(feature = "local-bin"))]
 async fn stream_to_bigquery(
     app_state: &AppState,
     data: Value,
@@ -839,8 +878,8 @@ async fn stream_to_bigquery(
 
 #[cfg(feature = "local-bin")]
 pub async fn stream_to_bigquery_token_metadata_impl_v2(
-    app_state: &AppState,
-    data: ICPumpTokenMetadata,
+    _app_state: &AppState,
+    _data: ICPumpTokenMetadata,
 ) -> Result<(), anyhow::Error> {
     Ok(())
 }

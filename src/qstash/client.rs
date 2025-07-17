@@ -402,4 +402,73 @@ impl QStashClient {
 
         Ok(())
     }
+
+    #[instrument(skip(self))]
+    pub async fn publish_json<T: serde::Serialize + std::fmt::Debug>(
+        &self,
+        topic: &str,
+        payload: &T,
+        delay: Option<String>,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL.join(&format!("qstash/{}", topic)).unwrap();
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+
+        let mut request = self.client
+            .post(url)
+            .json(payload)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST");
+
+        if let Some(delay_value) = delay {
+            request = request.header("upstash-delay", delay_value);
+        }
+
+        request.send().await?;
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn publish_json_batch<T: serde::Serialize + std::fmt::Debug>(
+        &self,
+        topic: &str,
+        payloads: Vec<T>,
+        delay: Option<String>,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL.join(&format!("qstash/{}", topic)).unwrap();
+        let _url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+
+        let requests: Vec<serde_json::Value> = payloads
+            .iter()
+            .map(|payload| {
+                let body_str = serde_json::to_string(payload).unwrap_or_else(|e| {
+                    tracing::error!("Failed to serialize payload: {}", e);
+                    "{}".to_string()
+                });
+
+                let mut headers = json!({
+                    "Upstash-Forward-Content-Type": "application/json",
+                    "Upstash-Forward-Method": "POST",
+                });
+
+                if let Some(delay_value) = &delay {
+                    headers["Upstash-Delay"] = json!(delay_value);
+                }
+
+                json!({
+                    "destination": off_chain_ep.to_string(),
+                    "headers": headers,
+                    "body": body_str,
+                })
+            })
+            .collect();
+
+        let batch_url = self.base_url.join("batch")?;
+        self.client
+            .post(batch_url)
+            .json(&requests)
+            .send()
+            .await?;
+
+        Ok(())
+    }
 }

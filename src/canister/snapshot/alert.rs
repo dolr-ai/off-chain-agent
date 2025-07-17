@@ -1,23 +1,31 @@
 use axum::{extract::State, response::IntoResponse, Json};
+#[cfg(not(feature = "local-bin"))]
 use futures::StreamExt;
 use http::StatusCode;
 use ic_agent::Agent;
+#[cfg(not(feature = "local-bin"))]
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::HashMap, env, sync::Arc};
+#[cfg(not(feature = "local-bin"))]
 use tracing::instrument;
 
 use crate::{
     app_state::AppState,
-    canister::snapshot::utils::{
-        get_platform_orch_ids_list_for_backup, get_subnet_orch_ids_list_for_backup,
-        get_user_canister_list_for_backup,
-    },
     types::RedisPool,
 };
+#[cfg(not(feature = "local-bin"))]
+use crate::canister::snapshot::utils::{
+    get_platform_orch_ids_list_for_backup, get_subnet_orch_ids_list_for_backup,
+    get_user_canister_list_for_backup,
+};
 
-use super::{snapshot_v2::backup_canister_impl, CanisterData, CanisterType};
+use super::CanisterData;
+#[cfg(not(feature = "local-bin"))]
+use super::CanisterType;
+#[cfg(not(feature = "local-bin"))]
+use super::snapshot_v2::backup_canister_impl;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SnapshotAlertJobPayload {
@@ -25,6 +33,7 @@ pub struct SnapshotAlertJobPayload {
 }
 
 #[instrument(skip(state))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn snapshot_alert_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<SnapshotAlertJobPayload>,
@@ -41,7 +50,16 @@ pub async fn snapshot_alert_job(
     Ok(StatusCode::OK)
 }
 
+#[cfg(feature = "local-bin")]
+pub async fn snapshot_alert_job(
+    State(_state): State<Arc<AppState>>,
+    Json(_payload): Json<SnapshotAlertJobPayload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok(StatusCode::OK)
+}
+
 #[instrument(skip(agent))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn snapshot_alert_job_impl(
     agent: &Agent,
     redis_pool: &RedisPool,
@@ -101,6 +119,7 @@ pub async fn snapshot_alert_job_impl(
     Ok(())
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn retry_backup_canisters(
     agent: &Agent,
     redis_pool: &RedisPool,
@@ -150,7 +169,7 @@ pub async fn retry_backup_canisters(
                 let final_err_key = if cleaned_err_str.is_empty() && !original_err_str.is_empty() {
                     original_err_str.clone()
                 } else {
-                    cleaned_err_str.clone()
+                    cleaned_err_str
                 };
 
                 let err_vec = results.entry(final_err_key).or_insert_with(Vec::new);
@@ -160,6 +179,16 @@ pub async fn retry_backup_canisters(
     }
 
     Ok(results)
+}
+
+#[cfg(feature = "local-bin")]
+pub async fn retry_backup_canisters(
+    _agent: &Agent,
+    _redis_pool: &RedisPool,
+    _canister_list: Vec<(CanisterData, String)>,
+    _date_str: String,
+) -> Result<HashMap<String, Vec<(String, String)>>, anyhow::Error> {
+    Ok(HashMap::new())
 }
 
 async fn send_google_chat_alert(

@@ -134,9 +134,15 @@ pub async fn extract_frames_and_upload(
         video_id
     );
     let output_dir = create_output_directory(&video_id)?;
-    let frames = extract_frames(&video_path, output_dir.clone()).await?;
     #[cfg(not(feature = "local-bin"))]
-    upload_frames_to_gcs(&state.gcs_client, frames, &video_id).await?;
+    {
+        let frames = extract_frames(&video_path, output_dir.clone()).await?;
+        upload_frames_to_gcs(&state.gcs_client, frames, &video_id).await?;
+    }
+    #[cfg(feature = "local-bin")]
+    {
+        let _frames = extract_frames(&video_path, output_dir.clone()).await?;
+    }
     // delete output directory
     fs::remove_dir_all(output_dir)?;
 
@@ -201,8 +207,8 @@ struct VideoNSFWData {
 }
 #[cfg(feature = "local-bin")]
 pub async fn nsfw_job(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<VideoRequest>,
+    State(_state): State<Arc<AppState>>,
+    Json(_payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     Err(anyhow::anyhow!("not implemented for local binary").into())
 }
@@ -312,8 +318,8 @@ impl From<nsfw_detector::NsfwDetectorResponse> for NSFWInfo {
 
 #[cfg(feature = "local-bin")]
 pub async fn nsfw_job_v2(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<VideoRequest>,
+    State(_state): State<Arc<AppState>>,
+    Json(_payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     Err(anyhow::anyhow!("not implemented for local binary").into())
 }

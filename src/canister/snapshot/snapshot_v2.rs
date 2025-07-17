@@ -1,31 +1,42 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+#[cfg(not(feature = "local-bin"))]
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
+#[cfg(not(feature = "local-bin"))]
 use chrono::Utc;
+#[cfg(not(feature = "local-bin"))]
 use futures::StreamExt;
 use http::StatusCode;
+#[cfg(not(feature = "local-bin"))]
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
+#[cfg(not(feature = "local-bin"))]
 use tracing::instrument;
 
+#[cfg(not(feature = "local-bin"))]
 use yral_canisters_client::ic::PLATFORM_ORCHESTRATOR_ID;
 
+use crate::app_state::AppState;
+#[cfg(not(feature = "local-bin"))]
+use crate::canister::snapshot::utils::insert_canister_backup_date_into_redis;
+#[cfg(not(feature = "local-bin"))]
 use crate::{
-    app_state::AppState,
     canister::snapshot::{
         alert::snapshot_alert_job_impl,
         download::get_canister_snapshot,
         upload::upload_snapshot_to_storj_v2,
-        utils::{get_user_canister_list_for_backup, insert_canister_backup_date_into_redis},
     },
     types::RedisPool,
 };
 
-use super::{utils::get_subnet_orch_ids_list_for_backup, CanisterData, CanisterType};
+#[cfg(not(feature = "local-bin"))]
+use super::CanisterData;
+#[cfg(not(feature = "local-bin"))]
+use super::{utils::get_subnet_orch_ids_list_for_backup, CanisterType};
+#[cfg(not(feature = "local-bin"))]
+use crate::canister::snapshot::utils::get_user_canister_list_for_backup;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupCanistersJobPayload {
@@ -34,6 +45,7 @@ pub struct BackupCanistersJobPayload {
 }
 
 #[instrument(skip(state))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn backup_canisters_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<BackupCanistersJobPayload>,
@@ -79,17 +91,29 @@ pub async fn backup_canisters_job_v2(
 
         log::info!("Successfully backed up PF and subnet orchs. Starting snapshot alert job");
 
-        if let Err(e) =
-            snapshot_alert_job_impl(&agent, &canister_backup_redis_pool, date_str.clone()).await
+        #[cfg(not(feature = "local-bin"))]
         {
-            log::error!("Failed to run snapshot alert job: {}", e);
+            if let Err(e) =
+                snapshot_alert_job_impl(&agent, &canister_backup_redis_pool, date_str.clone()).await
+            {
+                log::error!("Failed to run snapshot alert job: {}", e);
+            }
         }
     });
 
     Ok((StatusCode::OK, "Backup started".to_string()))
 }
 
+#[cfg(feature = "local-bin")]
+pub async fn backup_canisters_job_v2(
+    State(_state): State<Arc<AppState>>,
+    Json(_payload): Json<BackupCanistersJobPayload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok((StatusCode::OK, "Backup not available in local-bin mode".to_string()))
+}
+
 #[instrument(skip(agent, user_canister_list, canister_backup_redis_pool))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn backup_user_canisters_bulk(
     agent: &Agent,
     user_canister_list: Vec<Principal>,
@@ -175,6 +199,7 @@ pub struct BackupUserCanisterPayload {
 }
 
 #[instrument(skip(state))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn backup_user_canister(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<BackupUserCanisterPayload>,
@@ -199,7 +224,16 @@ pub async fn backup_user_canister(
     Ok((StatusCode::OK, "Backup successful".to_string()))
 }
 
+#[cfg(feature = "local-bin")]
+pub async fn backup_user_canister(
+    State(_state): State<Arc<AppState>>,
+    Json(_payload): Json<BackupUserCanisterPayload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok((StatusCode::OK, "Backup not available in local-bin mode".to_string()))
+}
+
 #[instrument(skip(agent))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn backup_pf_and_subnet_orchs(
     agent: &Agent,
     canister_backup_redis_pool: &RedisPool,
@@ -247,6 +281,7 @@ pub async fn backup_pf_and_subnet_orchs(
 }
 
 #[instrument(skip(agent))]
+#[cfg(not(feature = "local-bin"))]
 pub async fn backup_canister_impl(
     agent: &Agent,
     canister_backup_redis_pool: &RedisPool,

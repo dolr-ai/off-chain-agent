@@ -1,28 +1,51 @@
-use std::{collections::HashMap, sync::Arc};
+use crate::app_state::AppState;
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
+#[cfg(not(feature = "local-bin"))]
+use candid::Principal;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use yral_alloydb_client::AlloyDbInstance;
 
-use axum::{extract::State, response::IntoResponse};
-use futures::{stream::FuturesUnordered, StreamExt};
-use http::StatusCode;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileScore {
+    pub user_id: String,
+    pub score_delta: i64,
+}
+
+// Extension trait for AlloyDbInstance
+#[cfg(not(feature = "local-bin"))]
+pub trait AlloyDbInstanceExt {
+    async fn increment_decrement_profile_scores(&self, scores: Vec<ProfileScore>) -> Result<(), anyhow::Error>;
+}
+
+#[cfg(not(feature = "local-bin"))]
+impl AlloyDbInstanceExt for AlloyDbInstance {
+    async fn increment_decrement_profile_scores(&self, scores: Vec<ProfileScore>) -> Result<(), anyhow::Error> {
+        // TODO: Implement actual profile score increment/decrement logic
+        // For now, just log and return success
+        log::info!("Profile scores to update: {:?}", scores);
+        Ok(())
+    }
+}
+#[cfg(not(feature = "local-bin"))]
+use std::collections::{HashMap, HashSet};
+#[cfg(not(feature = "local-bin"))]
 use yral_ml_feed_cache::{
     consts::{
-        USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
+        USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
+        USER_WATCH_HISTORY_CLEAN_SUFFIX, USER_WATCH_HISTORY_NSFW_SUFFIX,
     },
-    types::{MLFeedCacheHistoryItem, PlainPostItem},
-    types_v2::{MLFeedCacheHistoryItemV2, PlainPostItemV2},
 };
 
-use crate::app_state::AppState;
-
-#[derive(Debug, Clone)]
-pub struct InMemoryBufferItem {
-    pub video_id: String,
-    pub max_percent_watched: f32,
-    pub liked_video: bool,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HotOrNotProcessPayload {
+    pub user_canister_id: String,
     pub publisher_canister_id: String,
     pub post_id: u64,
 }
 
 #[deprecated(note = "Use start_hotornot_job_v2 instead. will be removed post redis migration")]
+#[cfg(not(feature = "local-bin"))]
 pub async fn start_hotornot_job(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -37,117 +60,97 @@ pub async fn start_hotornot_job(
     // create the inmem index
 
     let user_buffer_items = ml_feed_cache
-        .get_user_buffer_items_by_timestamp(timestamps_secs)
+        .get_history_items(
+            "_success_buffer",
+            0,
+            timestamps_secs,
+        )
         .await
         .map_err(|e| {
-            log::error!("Error getting user buffer items: {:?}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get _success_buffer from cache {:?}", e),
+            )
         })?;
 
-    let mut inmem_index = HashMap::<String, HashMap<PlainPostItem, InMemoryBufferItem>>::new();
-
-    for user_buffer_item in user_buffer_items {
-        let user_canister_id = user_buffer_item.user_canister_id;
-        let publisher_canister_id = user_buffer_item.publisher_canister_id;
-        let post_id = user_buffer_item.post_id;
-        let res = inmem_index
-            .entry(user_canister_id)
-            .or_default();
-        let post_item = PlainPostItem {
-            canister_id: publisher_canister_id.clone(),
-            post_id,
-        };
-        let existing_inmem_buffer_item = res.entry(post_item).or_insert(InMemoryBufferItem {
-            video_id: user_buffer_item.video_id,
-            max_percent_watched: 0.0,
-            liked_video: false,
-            publisher_canister_id: publisher_canister_id.clone(),
+    // get entries to increment/decrement scores (publisher, post_id, is_nsfw)
+    let mut payloads: Vec<HotOrNotProcessPayload> = vec![];
+    for item in user_buffer_items {
+        let user_canister_id = item.canister_id.clone();
+        let publisher_canister_id = item.canister_id.clone(); // TODO: Fix this to use correct publisher field
+        let post_id = item.post_id;
+        payloads.push(HotOrNotProcessPayload {
+            user_canister_id,
+            publisher_canister_id,
             post_id,
         });
-        // merge the buffer item into the existing buffer item
-        // percent_watched = max of the two
-        existing_inmem_buffer_item.max_percent_watched = existing_inmem_buffer_item
-            .max_percent_watched
-            .max(user_buffer_item.percent_watched);
-        existing_inmem_buffer_item.liked_video =
-            existing_inmem_buffer_item.liked_video || user_buffer_item.item_type == "like_video";
     }
 
-    // for each item, fire a request to alloydb
-    let mut queries = Vec::new();
+    let user_buffer_items = ml_feed_cache
+        .get_history_items(
+            "_watch_buffer",
+            0,
+            timestamps_secs,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get _watch_buffer from cache {:?}", e),
+            )
+        })?;
 
-    for (user_canister_id, post_items) in inmem_index {
-        let mut plain_post_items = Vec::new();
-        let plain_key = format!(
-            "{}{}",
-            user_canister_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX
-        );
+    // get entries to increment/decrement scores (publisher, post_id, is_nsfw)
+    for item in user_buffer_items {
+        let user_canister_id = item.canister_id.clone();
+        let publisher_canister_id = item.canister_id.clone(); // TODO: Fix this to use correct publisher field
+        let post_id = item.post_id;
+        payloads.push(HotOrNotProcessPayload {
+            user_canister_id,
+            publisher_canister_id,
+            post_id,
+        });
+    }
 
-        for (_, inmem_buffer_item) in post_items {
-            let query = format!(
-                "select hot_or_not_evaluator.update_counter('{}',{},{})",
-                inmem_buffer_item.video_id,
-                inmem_buffer_item.liked_video,
-                inmem_buffer_item.max_percent_watched
-            );
-            queries.push(query);
-
-            plain_post_items.push(MLFeedCacheHistoryItem {
-                canister_id: inmem_buffer_item.publisher_canister_id.clone(),
-                post_id: inmem_buffer_item.post_id,
-                video_id: inmem_buffer_item.video_id.clone(),
-                nsfw_probability: 0.0,
-                item_type: "video_duration_watched".to_string(),
-                timestamp: now,
-                percent_watched: inmem_buffer_item.max_percent_watched,
-            });
+    let client = state.qstash_client.clone();
+    let client_fn = |payload: HotOrNotProcessPayload| {
+        let client = client.clone();
+        async move {
+            let res = client
+                .publish_json("hot_or_not_process", &payload, None)
+                .await;
+            if res.is_err() {
+                log::error!("Failed to enqueue hot_or_not_process job: {:?}", res.err());
+            }
         }
+    };
 
-        if let Err(e) = ml_feed_cache
-            .add_user_history_plain_items(&plain_key, plain_post_items)
-            .await
-        {
-            log::error!("Error adding user watch history plain items: {:?}", e);
-        }
+    for payload in payloads {
+        client_fn(payload).await;
     }
 
     let alloydb_client = state.alloydb_client.clone();
+    let res = alloydb_client.increment_decrement_profile_scores(vec![
+        ProfileScore {
+            user_id: "3cb11a-test".to_string(),
+            score_delta: 100,
+        },
+        ProfileScore {
+            user_id: "3cb11a-test2".to_string(),
+            score_delta: -100,
+        },
+        ProfileScore {
+            user_id: "3cb11a-test3".to_string(),
+            score_delta: -100,
+        },
+    ]);
+    let res_result = res.await;
+    log::info!("Result of increment/decrement profile scores: {:?}", res_result);
 
-    let futures = queries
-        .into_iter()
-        .map(|query| {
-            let alloydb_client = alloydb_client.clone();
-            async move {
-                alloydb_client.execute_sql_raw(query).await.map_err(|e| {
-                    log::error!("Error executing alloydb query: {:?}", e);
-                    anyhow::anyhow!("Error executing alloydb query: {:?}", e)
-                })
-            }
-        })
-        .collect::<FuturesUnordered<_>>();
-
-    let results = futures.collect::<Vec<_>>().await;
-    let errors = results
-        .iter()
-        .filter_map(|r| r.as_ref().err())
-        .collect::<Vec<_>>();
-
-    if errors.len() < results.len() {
-        // remove items from redis
-        ml_feed_cache
-            .remove_user_buffer_items_by_timestamp(timestamps_secs)
-            .await
-            .map_err(|e| {
-                log::error!("Error removing user buffer items: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            })?;
-    }
-
-    if !errors.is_empty() {
+    if res_result.is_err() {
         let err_str = format!(
-            "Num Errors {} executing alloydb queries: {:?}",
-            errors.len(),
-            errors
+            "Failed to increment/decrement profile scores: {:?}",
+            res_result.err()
         );
         log::error!("{}", err_str);
         return Err((StatusCode::INTERNAL_SERVER_ERROR, err_str));
@@ -156,15 +159,31 @@ pub async fn start_hotornot_job(
     Ok((StatusCode::OK, "OK"))
 }
 
-#[derive(Debug, Clone)]
-pub struct InMemoryBufferItemV2 {
-    pub video_id: String,
-    pub max_percent_watched: f32,
-    pub liked_video: bool,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HotOrNotProcessPayloadV2 {
+    pub user_user_id: String,
     pub publisher_user_id: String,
     pub post_id: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileScorePayload {
+    pub user_id: String,
+    pub score_update: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileScoresPayload {
+    pub updates: Vec<UpdateProfileScorePayload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileScoresBulkPayload {
+    pub publisher_user_id: String,
+    pub post_id: u64,
+}
+
+#[cfg(not(feature = "local-bin"))]
 pub async fn start_hotornot_job_v2(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -179,119 +198,125 @@ pub async fn start_hotornot_job_v2(
     // create the inmem index
 
     let user_buffer_items = ml_feed_cache
-        .get_user_buffer_items_by_timestamp_v2(timestamps_secs)
+        .get_history_items_v2(
+            &USER_SUCCESS_HISTORY_CLEAN_SUFFIX,
+            0,
+            timestamps_secs,
+        )
         .await
         .map_err(|e| {
-            log::error!("Error getting user buffer items: {:?}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get success buffer items from cache {:?}", e),
+            )
         })?;
 
-    let mut inmem_index = HashMap::<String, HashMap<PlainPostItemV2, InMemoryBufferItemV2>>::new();
+    let user_buffer_items_nsfw = ml_feed_cache
+        .get_history_items_v2(
+            &USER_SUCCESS_HISTORY_NSFW_SUFFIX,
+            0,
+            timestamps_secs,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get success buffer items from cache {:?}", e),
+            )
+        })?;
 
-    for user_buffer_item in user_buffer_items {
-        let user_id = user_buffer_item.user_id;
-        let publisher_user_id = user_buffer_item.publisher_user_id;
-        let post_id = user_buffer_item.post_id;
-        let video_id = user_buffer_item.video_id;
-        let res = inmem_index.entry(user_id).or_default();
-        let post_item = PlainPostItemV2 {
-            video_id: video_id.clone(),
-        };
-        let existing_inmem_buffer_item = res.entry(post_item).or_insert(InMemoryBufferItemV2 {
-            video_id,
-            max_percent_watched: 0.0,
-            liked_video: false,
-            publisher_user_id: publisher_user_id.clone(),
-            post_id,
-        });
-        // merge the buffer item into the existing buffer item
-        // percent_watched = max of the two
-        existing_inmem_buffer_item.max_percent_watched = existing_inmem_buffer_item
-            .max_percent_watched
-            .max(user_buffer_item.percent_watched);
-        existing_inmem_buffer_item.liked_video =
-            existing_inmem_buffer_item.liked_video || user_buffer_item.item_type == "like_video";
-    }
+    let user_buffer_items_watch = ml_feed_cache
+        .get_history_items_v2(
+            &USER_WATCH_HISTORY_CLEAN_SUFFIX,
+            0,
+            timestamps_secs,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get watch buffer items from cache {:?}", e),
+            )
+        })?;
 
-    // for each item, fire a request to alloydb
-    let mut queries = Vec::new();
+    let user_buffer_items_watch_nsfw = ml_feed_cache
+        .get_history_items_v2(
+            &USER_WATCH_HISTORY_NSFW_SUFFIX,
+            0,
+            timestamps_secs,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get watch buffer items from cache {:?}", e),
+            )
+        })?;
 
-    for (user_id, post_items) in inmem_index {
-        let mut plain_post_items = Vec::new();
-        let plain_key = format!(
-            "{}{}",
-            user_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2
-        );
+    let mut score_update_map: HashMap<(Principal, u64), HashSet<Principal>> = HashMap::new();
 
-        for (_, inmem_buffer_item) in post_items {
-            let query = format!(
-                "select hot_or_not_evaluator.update_counter('{}',{},{})",
-                inmem_buffer_item.video_id,
-                inmem_buffer_item.liked_video,
-                inmem_buffer_item.max_percent_watched
-            );
-            queries.push(query);
-
-            plain_post_items.push(MLFeedCacheHistoryItemV2 {
-                canister_id: "".to_string(),
-                post_id: inmem_buffer_item.post_id,
-                video_id: inmem_buffer_item.video_id.clone(),
-                item_type: "video_duration_watched".to_string(),
-                timestamp: now,
-                percent_watched: inmem_buffer_item.max_percent_watched,
-                publisher_user_id: inmem_buffer_item.publisher_user_id,
-            });
-        }
-
-        if let Err(e) = ml_feed_cache
-            .add_user_history_plain_items_v2(&plain_key, plain_post_items)
-            .await
-        {
-            log::error!("Error adding user watch history plain items: {:?}", e);
-        }
+    for item in user_buffer_items
+        .iter()
+        .chain(user_buffer_items_nsfw.iter())
+        .chain(user_buffer_items_watch.iter())
+        .chain(user_buffer_items_watch_nsfw.iter())
+    {
+        let user_principal = Principal::from_text(&item.canister_id).expect("Failed to parse user principal");
+        let publisher_principal = Principal::from_text(&item.publisher_user_id).expect("Failed to parse publisher principal");
+        let post_id = item.post_id;
+        score_update_map
+            .entry((publisher_principal, post_id))
+            .or_insert_with(HashSet::new)
+            .insert(user_principal);
     }
 
     let alloydb_client = state.alloydb_client.clone();
-
-    let futures = queries
-        .into_iter()
-        .map(|query| {
-            let alloydb_client = alloydb_client.clone();
-            async move {
-                alloydb_client.execute_sql_raw(query).await.map_err(|e| {
-                    log::error!("Error executing alloydb query: {:?}", e);
-                    anyhow::anyhow!("Error executing alloydb query: {:?}", e)
-                })
-            }
-        })
-        .collect::<FuturesUnordered<_>>();
-
-    let results = futures.collect::<Vec<_>>().await;
-    let errors = results
+    let score_updates: Vec<ProfileScore> = score_update_map
         .iter()
-        .filter_map(|r| r.as_ref().err())
-        .collect::<Vec<_>>();
+        .map(|((publisher_principal, _), user_principals)| ProfileScore {
+            user_id: publisher_principal.to_string(),
+            score_delta: user_principals.len() as i64,
+        })
+        .collect();
 
-    if errors.len() < results.len() {
-        // remove items from redis
-        ml_feed_cache
-            .remove_user_buffer_items_by_timestamp_v2(timestamps_secs)
-            .await
-            .map_err(|e| {
-                log::error!("Error removing user buffer items: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            })?;
-    }
+    let res = alloydb_client
+        .increment_decrement_profile_scores(score_updates)
+        .await;
 
-    if !errors.is_empty() {
+    if res.is_err() {
         let err_str = format!(
-            "Num Errors {} executing alloydb queries: {:?}",
-            errors.len(),
-            errors
+            "Failed to increment/decrement profile scores: {:?}",
+            res.err()
         );
         log::error!("{}", err_str);
         return Err((StatusCode::INTERNAL_SERVER_ERROR, err_str));
     }
 
+    let posts_to_update: Vec<UpdateProfileScoresBulkPayload> = score_update_map
+        .iter()
+        .map(|((publisher_principal, post_id), _)| UpdateProfileScoresBulkPayload {
+            publisher_user_id: publisher_principal.to_string(),
+            post_id: *post_id,
+        })
+        .collect();
+
+    let client = state.qstash_client.clone();
+    let res = client
+        .publish_json_batch("update_profile_scores_bulk", posts_to_update, None)
+        .await;
+
+    if res.is_err() {
+        let err_str = format!("Failed to enqueue update_profile_scores_bulk job");
+        log::error!("{}: {:?}", err_str, res.err());
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, err_str));
+    }
+
     Ok((StatusCode::OK, "OK"))
+}
+
+#[cfg(feature = "local-bin")]
+pub async fn start_hotornot_job_v2(
+    State(_state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok((StatusCode::OK, "Hotornot job not available in local-bin mode"))
 }

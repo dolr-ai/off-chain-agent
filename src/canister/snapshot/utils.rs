@@ -129,7 +129,7 @@ pub async fn get_subnet_orch_ids_list_for_backup(
 }
 
 pub async fn get_platform_orch_ids_list_for_backup(
-    agent: &Agent,
+    _agent: &Agent,
     canister_backup_redis_pool: &RedisPool,
     date_str: String,
 ) -> Result<Vec<Principal>, anyhow::Error> {

@@ -10,7 +10,7 @@ use axum::{
     Json, Router,
 };
 use candid::{Decode, Encode, Nat, Principal};
-use hotornot_job::{start_hotornot_job, start_hotornot_job_v2};
+use hotornot_job::start_hotornot_job_v2;
 use http::StatusCode;
 use ic_agent::{identity::DelegatedIdentity, Identity};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
@@ -100,7 +100,7 @@ async fn get_user_canister(
     user_principal: Principal,
 ) -> Result<Principal, StatusCode> {
     let meta = metadata
-        .get_user_metadata(user_principal)
+        .get_user_metadata_v2(user_principal.to_string())
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::UNAUTHORIZED)?;
@@ -426,6 +426,7 @@ struct VideoHashIndexingRequest {
 }
 
 #[instrument(skip(state))]
+#[cfg(not(feature = "local-bin"))]
 async fn video_deduplication_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VideoHashIndexingRequest>,
@@ -491,6 +492,19 @@ async fn video_deduplication_handler(
     Ok(response)
 }
 
+#[instrument(skip(_state))]
+#[cfg(feature = "local-bin")]
+async fn video_deduplication_handler(
+    State(_state): State<Arc<AppState>>,
+    Json(_req): Json<VideoHashIndexingRequest>,
+) -> Result<Response, StatusCode> {
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body("Video deduplication not available in local-bin mode".into())
+        .unwrap();
+    Ok(response)
+}
+
 #[instrument(skip(app_state))]
 // QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
@@ -526,7 +540,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
-        .route("/start_hotornot_job", post(start_hotornot_job))
         .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
         .route(
             "/delete_and_reclaim_canisters",
