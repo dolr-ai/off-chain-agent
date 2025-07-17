@@ -1,6 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
+#[cfg(not(feature = "local-bin"))]
+use std::collections::HashMap;
 
 use axum::{extract::State, response::IntoResponse};
+#[cfg(not(feature = "local-bin"))]
 use futures::{stream::FuturesUnordered, StreamExt};
 use http::StatusCode;
 

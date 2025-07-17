@@ -6,8 +6,12 @@ use ic_agent::Agent;
 #[cfg(not(feature = "local-bin"))]
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+#[cfg(not(feature = "local-bin"))]
 use serde_json::json;
-use std::{collections::HashMap, env, sync::Arc};
+use std::collections::HashMap;
+#[cfg(not(feature = "local-bin"))]
+use std::env;
+use std::sync::Arc;
 #[cfg(not(feature = "local-bin"))]
 use tracing::instrument;
 

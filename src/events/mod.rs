@@ -5,7 +5,9 @@ use candid::Principal;
 use event::Event;
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(not(feature = "local-bin"))]
+use serde_json::Value;
 use std::error::Error;
 use std::sync::Arc;
 use types::AnalyticsEvent;
