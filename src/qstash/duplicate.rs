@@ -63,7 +63,7 @@ impl<'a> VideoHashDuplication<'a> {
             .join("qstash/duplicate_video_detected")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!(duplicate_event);
 
         log::info!(
@@ -95,7 +95,7 @@ impl<'a> VideoHashDuplication<'a> {
             .join("qstash/deduplication_completed")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "canister_id": canister_id,
@@ -105,8 +105,7 @@ impl<'a> VideoHashDuplication<'a> {
         });
 
         log::info!(
-            "Publishing deduplication completed event for video_id [{}]",
-            video_id
+            "Publishing deduplication completed event for video_id [{video_id}]"
         );
 
         self.client
@@ -136,7 +135,7 @@ impl<'a> VideoHashDuplication<'a> {
         )
             -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
     ) -> Result<(), anyhow::Error> {
-        log::info!("Calculating videohash for video URL: {}", video_url);
+        log::info!("Calculating videohash for video URL: {video_url}");
         let video_hash = VideoHash::from_url(video_url)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
@@ -178,9 +177,7 @@ impl<'a> VideoHashDuplication<'a> {
 
         let indexer_response: VideoHashIndexerResponse = response.json().await?;
         log::info!(
-            "VideoHash Indexer response for video_id [{}]: {:?}",
-            video_id,
-            indexer_response
+            "VideoHash Indexer response for video_id [{video_id}]: {indexer_response:?}"
         );
 
         let is_duplicate = indexer_response.match_found;
@@ -217,7 +214,7 @@ impl<'a> VideoHashDuplication<'a> {
             }
         } else {
             self.store_unique_video(video_id, &video_hash.hash).await?;
-            log::info!("Unique video recorded: video_id [{}]", video_id);
+            log::info!("Unique video recorded: video_id [{video_id}]");
         }
 
         // Always proceed with normal video processing, regardless of duplicate status
@@ -243,8 +240,7 @@ impl<'a> VideoHashDuplication<'a> {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
         let request = QueryRequest {
@@ -253,8 +249,7 @@ impl<'a> VideoHashDuplication<'a> {
         };
 
         log::info!(
-            "Storing hash in videohash_original for video_id [{}]",
-            video_id
+            "Storing hash in videohash_original for video_id [{video_id}]"
         );
 
         bigquery_client
@@ -289,8 +284,7 @@ impl<'a> VideoHashDuplication<'a> {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
         let request = QueryRequest {
@@ -299,8 +293,7 @@ impl<'a> VideoHashDuplication<'a> {
         };
 
         log::info!(
-            "Storing unique video in video_unique for video_id [{}]",
-            video_id
+            "Storing unique video in video_unique for video_id [{video_id}]"
         );
 
         bigquery_client

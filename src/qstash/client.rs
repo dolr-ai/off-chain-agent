@@ -30,7 +30,7 @@ pub struct QStashClient {
 
 impl QStashClient {
     pub fn new(auth_token: &str) -> Self {
-        let mut bearer: HeaderValue = format!("Bearer {}", auth_token)
+        let mut bearer: HeaderValue = format!("Bearer {auth_token}")
             .parse()
             .expect("Invalid QStash auth token");
         bearer.set_sensitive(true);
@@ -55,7 +55,7 @@ impl QStashClient {
         data: storj_interface::duplicate::Args,
     ) -> anyhow::Result<()> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/storj_ingest").unwrap();
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
 
         self.client
             .post(url)
@@ -93,7 +93,7 @@ impl QStashClient {
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/upload_video_gcs").unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "canister_id": canister_id,
@@ -123,7 +123,7 @@ impl QStashClient {
             .join("qstash/enqueue_video_frames")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -150,7 +150,7 @@ impl QStashClient {
             .join("qstash/enqueue_video_nsfw_detection")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -177,7 +177,7 @@ impl QStashClient {
             .join("qstash/enqueue_video_nsfw_detection_v2")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -200,7 +200,7 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("upstash-delay", format!("{}s", delay_seconds))
+            .header("upstash-delay", format!("{delay_seconds}s"))
             .send()
             .await?;
 
@@ -215,7 +215,7 @@ impl QStashClient {
             .join("qstash/upgrade_sns_creator_dao_canister")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!(sns_canister);
 
         self.client
@@ -238,7 +238,7 @@ impl QStashClient {
             .join("qstash/verify_sns_canister_upgrade_proposal")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!(verify_request);
 
         self.client
@@ -260,12 +260,11 @@ impl QStashClient {
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join(&format!(
-                "qstash/upgrade_all_sns_canisters_for_a_user_canister/{}",
-                user_canister_id
+                "qstash/upgrade_all_sns_canisters_for_a_user_canister/{user_canister_id}"
             ))
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
 
         self.client
             .post(url)
@@ -285,7 +284,7 @@ impl QStashClient {
             .join("qstash/upgrade_user_token_sns_canister_for_entire_network")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
 
         self.client
             .post(url)
@@ -305,7 +304,7 @@ impl QStashClient {
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/report_post").unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!(report_request);
 
         self.client
@@ -399,75 +398,6 @@ impl QStashClient {
         }
 
         log::info!("Backup canister batch completed");
-
-        Ok(())
-    }
-
-    #[instrument(skip(self))]
-    pub async fn publish_json<T: serde::Serialize + std::fmt::Debug>(
-        &self,
-        topic: &str,
-        payload: &T,
-        delay: Option<String>,
-    ) -> Result<(), anyhow::Error> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL.join(&format!("qstash/{}", topic)).unwrap();
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
-
-        let mut request = self.client
-            .post(url)
-            .json(payload)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST");
-
-        if let Some(delay_value) = delay {
-            request = request.header("upstash-delay", delay_value);
-        }
-
-        request.send().await?;
-        Ok(())
-    }
-
-    #[instrument(skip(self))]
-    pub async fn publish_json_batch<T: serde::Serialize + std::fmt::Debug>(
-        &self,
-        topic: &str,
-        payloads: Vec<T>,
-        delay: Option<String>,
-    ) -> Result<(), anyhow::Error> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL.join(&format!("qstash/{}", topic)).unwrap();
-        let _url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
-
-        let requests: Vec<serde_json::Value> = payloads
-            .iter()
-            .map(|payload| {
-                let body_str = serde_json::to_string(payload).unwrap_or_else(|e| {
-                    tracing::error!("Failed to serialize payload: {}", e);
-                    "{}".to_string()
-                });
-
-                let mut headers = json!({
-                    "Upstash-Forward-Content-Type": "application/json",
-                    "Upstash-Forward-Method": "POST",
-                });
-
-                if let Some(delay_value) = &delay {
-                    headers["Upstash-Delay"] = json!(delay_value);
-                }
-
-                json!({
-                    "destination": off_chain_ep.to_string(),
-                    "headers": headers,
-                    "body": body_str,
-                })
-            })
-            .collect();
-
-        let batch_url = self.base_url.join("batch")?;
-        self.client
-            .post(batch_url)
-            .json(&requests)
-            .send()
-            .await?;
 
         Ok(())
     }

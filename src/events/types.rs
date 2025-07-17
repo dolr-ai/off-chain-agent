@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use serde_json::Value;
 #[cfg(not(feature = "local-bin"))]
 use serde_json::json;
+use serde_json::Value;
 use utoipa::ToSchema;
 #[cfg(not(feature = "local-bin"))]
 use yral_metadata_types::{
@@ -52,8 +52,7 @@ impl<'de> Deserialize<'de> for AnalyticsEvent {
                 Ok(AnalyticsEvent::LikeVideo(like_video))
             }
             Some(event_type) => Err(serde::de::Error::custom(format!(
-                "Unknown event type: {}",
-                event_type
+                "Unknown event type: {event_type}"
             ))),
             None => Err(serde::de::Error::custom("Missing 'event' field")),
         }

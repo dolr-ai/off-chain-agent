@@ -40,7 +40,7 @@ pub async fn handle_delete_user(
             .map_err(|e| {
                 (
                     StatusCode::UNAUTHORIZED,
-                    format!("Failed to get user info: {}", e),
+                    format!("Failed to get user info: {e}"),
                 )
             })?;
 
@@ -55,10 +55,10 @@ pub async fn handle_delete_user(
     delete_canister_data(&agent, &state, user_canister, user_principal, true)
         .await
         .map_err(|e| {
-            log::error!("Failed to delete canister data: {}", e);
+            log::error!("Failed to delete canister data: {e}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to delete canister data: {}", e),
+                format!("Failed to delete canister data: {e}"),
             )
         })?;
 
@@ -70,7 +70,7 @@ pub async fn handle_delete_user(
             .add_deleted_canister(user_canister, user_principal)
             .await
         {
-            log::error!("Failed to add deleted canister to SpaceTimeDB: {}", e);
+            log::error!("Failed to add deleted canister to SpaceTimeDB: {e}");
             // Don't fail the operation if SpaceTimeDB call fails
         }
     }

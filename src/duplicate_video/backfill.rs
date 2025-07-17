@@ -12,7 +12,9 @@ use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
 pub struct BackfillQueryParams {
+    #[allow(dead_code)]
     batch_size: Option<usize>,
+    #[allow(dead_code)]
     parallelism: Option<usize>,
 }
 
@@ -55,22 +57,20 @@ pub async fn trigger_videohash_backfill(
     let parallelism = params.parallelism.unwrap_or(10);
 
     info!(
-        "Starting videohash backfill job with batch_size={}, parallelism={}",
-        batch_size, parallelism
+        "Starting videohash backfill job with batch_size={batch_size}, parallelism={parallelism}"
     );
 
     // Execute the backfill
     let videos_queued = execute_backfill(&state, batch_size, parallelism)
         .await
         .map_err(|e| {
-            error!("Backfill execution error: {}", e);
+            error!("Backfill execution error: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
     Ok(Json(BackfillResponse {
         message: format!(
-            "Queued {} videos for processing with parallelism {}",
-            videos_queued, parallelism
+            "Queued {videos_queued} videos for processing with parallelism {parallelism}"
         ),
         videos_queued,
     }))
@@ -110,10 +110,9 @@ async fn execute_backfill(
           )
           AND t.size > 10000  /* Require at least 10KB for videos */
         ORDER BY updated ASC
-        LIMIT {}",
-        batch_size
+        LIMIT {batch_size}"
     );
-    info!("Executing BigQuery query: {}", query);
+    info!("Executing BigQuery query: {query}");
 
     let request = QueryRequest {
         query,
@@ -132,7 +131,7 @@ async fn execute_backfill(
             resp
         }
         Err(e) => {
-            error!("BigQuery query failed: {}", e);
+            error!("BigQuery query failed: {e}");
             return Err(anyhow::anyhow!("BigQuery query failed: {}", e));
         }
     };
@@ -182,8 +181,7 @@ async fn execute_backfill(
             Ok(id) => id,
             Err(e) => {
                 warn!(
-                    "Invalid post_id format for video {}: {} - {}",
-                    video_id, post_id_str, e
+                    "Invalid post_id format for video {video_id}: {post_id_str} - {e}"
                 );
                 0
             }
@@ -199,14 +197,14 @@ async fn execute_backfill(
         )
         .await
         {
-            error!("Failed to queue video {}: {}", video_id, e);
+            error!("Failed to queue video {video_id}: {e}");
             continue;
         }
 
         queued_count += 1;
     }
 
-    info!("Successfully queued {} videos for processing", queued_count);
+    info!("Successfully queued {queued_count} videos for processing");
     Ok(queued_count)
 }
 
@@ -223,8 +221,7 @@ async fn queue_video_to_qstash(
 
     // Prepare the video URL
     let video_url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        video_id
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
     );
 
     // Create request payload - this is specifically for backfill
@@ -245,7 +242,7 @@ async fn queue_video_to_qstash(
         .unwrap();
     let url = qstash_client
         .base_url
-        .join(&format!("publish/{}", off_chain_ep))?;
+        .join(&format!("publish/{off_chain_ep}"))?;
 
     // Send to QStash with flow control
     qstash_client
@@ -257,11 +254,11 @@ async fn queue_video_to_qstash(
         .header("Upstash-Flow-Control-Key", "VIDEOHASH_BACKFILL")
         .header(
             "Upstash-Flow-Control-Value",
-            format!("Parallelism={}", parallelism),
+            format!("Parallelism={parallelism}"),
         )
         .send()
         .await?;
 
-    info!("Queued video_id [{}] for processing", video_id);
+    info!("Queued video_id [{video_id}] for processing");
     Ok(())
 }

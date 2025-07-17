@@ -60,6 +60,7 @@ impl IntoResponse for AuthError {
     }
 }
 
+#[allow(clippy::result_large_err)]
 pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
     let mut grpc_token = env::var("GRPC_AUTH_TOKEN").expect("GRPC_AUTH_TOKEN is required");
     let mut yral_cloudflare_workers_grpc_auth_token =
@@ -81,6 +82,7 @@ pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
 }
 
 #[allow(dead_code)]
+#[allow(clippy::result_large_err)]
 pub fn check_auth_grpc_test(req: Request<()>) -> Result<Request<()>, Status> {
     Ok(req)
 }
@@ -92,6 +94,7 @@ pub struct MLFeedClaims {
 }
 
 #[allow(dead_code)]
+#[allow(clippy::result_large_err)]
 pub fn check_auth_grpc_offchain_mlfeed(req: Request<()>) -> Result<Request<()>, Status> {
     let token = req
         .metadata()

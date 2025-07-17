@@ -353,8 +353,7 @@ impl Event {
                 // else add to history and user buffer
 
                 let plain_key = format!(
-                    "{}{}",
-                    user_canister_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX
+                    "{user_canister_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX}"
                 );
 
                 match ml_feed_cache
@@ -383,11 +382,11 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user watch history buffer items: {:?}", e);
+                            error!("Error adding user watch history buffer items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user watch history plain item: {:?}", e);
+                        error!("Error checking user watch history plain item: {e:?}");
                     }
                 }
             });
@@ -465,8 +464,7 @@ impl Event {
                 // else add to history and user buffer
 
                 let plain_key = format!(
-                    "{}{}",
-                    user_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2
+                    "{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}"
                 );
 
                 match ml_feed_cache
@@ -495,11 +493,11 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user watch history buffer items: {:?}", e);
+                            error!("Error adding user watch history buffer items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user watch history plain item: {:?}", e);
+                        error!("Error checking user watch history plain item: {e:?}");
                     }
                 }
             });
@@ -554,8 +552,7 @@ impl Event {
                     .await
                 {
                     error!(
-                        "Failed to update view details for post {} in canister {}: {:?}",
-                        post_id, publisher_canister_id, e
+                        "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
                     );
                 }
             });
@@ -629,8 +626,7 @@ impl Event {
             // add to history plain items
             if item_type == "like_video" {
                 let plain_key = format!(
-                    "{}{}",
-                    user_canister_id, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX
+                    "{user_canister_id}{USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX}"
                 );
 
                 match ml_feed_cache
@@ -659,7 +655,7 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user like history buffer items: {:?}", e);
+                            error!("Error adding user like history buffer items: {e:?}");
                         }
 
                         // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
@@ -675,11 +671,11 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user like history plain items: {:?}", e);
+                            error!("Error adding user like history plain items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user like history plain item: {:?}", e);
+                        error!("Error checking user like history plain item: {e:?}");
                     }
                 }
             }
@@ -705,7 +701,7 @@ impl Event {
                 Ok(Some(p)) => p,
                 Ok(None) => return, // Early return for video_duration_watched < 30%
                 Err(e) => {
-                    error!("Failed to parse params in update_success_history_v2: {}", e);
+                    error!("Failed to parse params in update_success_history_v2: {e}");
                     return;
                 }
             };
@@ -773,7 +769,7 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user like history buffer items: {:?}", e);
+                            error!("Error adding user like history buffer items: {e:?}");
                         }
 
                         // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
@@ -789,11 +785,11 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user like history plain items: {:?}", e);
+                            error!("Error adding user like history plain items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user like history plain item: {:?}", e);
+                        error!("Error checking user like history plain item: {e:?}");
                     }
                 }
             }
@@ -867,7 +863,7 @@ impl Event {
                     login_successful::handle_login_successful(bigquery_client, canister_id, user_id)
                         .await
                 {
-                    log::error!("Error handling login successful: {:?}", e);
+                    log::error!("Error handling login successful: {e:?}");
                 }
             });
         }
@@ -966,7 +962,7 @@ pub async fn stream_to_bigquery_token_metadata_impl_v2(
     {
         Ok(_) => Ok(()),
         Err(e) => {
-            log::error!("Error streaming to BigQuery: {:?}", e);
+            log::error!("Error streaming to BigQuery: {e:?}");
             Err(anyhow::anyhow!("Error streaming to BigQuery"))
         }
     }
@@ -1014,10 +1010,9 @@ pub async fn upload_gcs_impl(
     timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
     let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        uid
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{uid}/downloads/default.mp4"
     );
-    let name = format!("{}.mp4", uid);
+    let name = format!("{uid}.mp4");
 
     let file = reqwest::Client::new()
         .get(&url)

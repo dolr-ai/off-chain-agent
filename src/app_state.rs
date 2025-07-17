@@ -168,7 +168,7 @@ pub async fn init_agent() -> Agent {
         ) {
             Ok(identity) => identity,
             Err(err) => {
-                panic!("Unable to create identity, error: {:?}", err);
+                panic!("Unable to create identity, error: {err:?}");
             }
         };
 
@@ -181,21 +181,19 @@ pub async fn init_agent() -> Agent {
         {
             Ok(agent) => agent,
             Err(err) => {
-                panic!("Unable to create agent, error: {:?}", err);
+                panic!("Unable to create agent, error: {err:?}");
             }
         }
     }
 
     #[cfg(any(feature = "local-bin", feature = "use-local-agent"))]
     {
-        let agent = Agent::builder()
-            .with_url("https://ic0.app")
-            .build()
-            .unwrap();
-
         // agent.fetch_root_key().await.unwrap();
 
-        agent
+        Agent::builder()
+            .with_url("https://ic0.app")
+            .build()
+            .unwrap()
     }
 }
 

@@ -83,7 +83,7 @@ pub async fn handle_delete_post(
         Err(e) => {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Internal server error: {}", e),
+                format!("Internal server error: {e}"),
             ))
         }
     }
@@ -93,11 +93,11 @@ pub async fn handle_delete_post(
         insert_video_delete_row_to_bigquery(state.clone(), canister_id, post_id, video_id.clone())
             .await
             .map_err(|e| {
-                log::error!("Failed to insert video delete row to bigquery: {}", e);
+                log::error!("Failed to insert video delete row to bigquery: {e}");
 
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to insert video to bigquery: {}", e),
+                    format!("Failed to insert video to bigquery: {e}"),
                 )
             })?;
     }
@@ -109,7 +109,7 @@ pub async fn handle_delete_post(
         let video_id_clone = video_id.clone();
         tokio::spawn(async move {
             if let Err(e) = handle_duplicate_post_on_delete(bigquery_client, video_id_clone).await {
-                log::error!("Failed to handle duplicate post on delete: {}", e);
+                log::error!("Failed to handle duplicate post on delete: {e}");
             }
         });
     }
@@ -214,7 +214,7 @@ pub async fn handle_duplicate_post_on_delete(
 
         if let Some(errors) = res.insert_errors {
             if !errors.is_empty() {
-                log::error!("video_unique insert response : {:?}", errors);
+                log::error!("video_unique insert response : {errors:?}");
                 return Err(anyhow::anyhow!(
                     "Failed to insert video unique row to bigquery"
                 ));
@@ -225,8 +225,7 @@ pub async fn handle_duplicate_post_on_delete(
     // delete old parent from video_unique table
     let request = QueryRequest {
         query: format!(
-            "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.video_unique` WHERE video_id = '{}'",
-            video_id
+            "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.video_unique` WHERE video_id = '{video_id}'"
         ),
         ..Default::default()
     };
@@ -239,7 +238,7 @@ pub async fn handle_duplicate_post_on_delete(
 
     if let Some(errors) = res.errors {
         if !errors.is_empty() {
-            log::error!("video_unique delete response : {:?}", errors);
+            log::error!("video_unique delete response : {errors:?}");
             return Err(anyhow::anyhow!(
                 "Failed to delete video unique row to bigquery"
             ));
@@ -248,6 +247,7 @@ pub async fn handle_duplicate_post_on_delete(
     Ok(())
 }
 
+#[allow(dead_code)]
 #[cfg(feature = "local-bin")]
 pub async fn insert_video_delete_row_to_bigquery(
     _state: Arc<AppState>,
@@ -318,7 +318,7 @@ pub async fn bulk_insert_video_delete_rows(
 
         if let Some(errors) = res.insert_errors {
             if !errors.is_empty() {
-                log::error!("video_deleted bulk insert errors: {:?}", errors);
+                log::error!("video_deleted bulk insert errors: {errors:?}");
                 return Err(anyhow::anyhow!(
                     "Failed to bulk insert video deleted rows to bigquery"
                 ));

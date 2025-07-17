@@ -1,6 +1,7 @@
 use super::types::{LikeVideoPayload, VideoDurationWatchedPayload};
 use serde_json;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct SuccessHistoryParams {
     pub publisher_canister_id: String,
@@ -12,6 +13,7 @@ pub struct SuccessHistoryParams {
     pub percent_watched: f64,
 }
 
+#[allow(dead_code)]
 pub fn parse_success_history_params(
     event_type: &str,
     params_str: &str,
@@ -57,8 +59,7 @@ pub fn parse_success_history_params(
             }))
         }
         _ => Err(format!(
-            "Unexpected event type in parse_success_history_params: {}",
-            event_type
+            "Unexpected event type in parse_success_history_params: {event_type}"
         )),
     }
 }

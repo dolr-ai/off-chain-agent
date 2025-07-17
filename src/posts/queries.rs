@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub fn get_duplicate_children_query(videohash: String, parent_video_id: String) -> String {
     format!(
         "

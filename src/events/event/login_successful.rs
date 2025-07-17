@@ -19,6 +19,7 @@ pub struct UserCanisterPrincipal {
 // Note : temporary function to insert user canister principal into bigquery
 // for backfill
 // also Note : this is not taking care of canister fungibility
+#[allow(dead_code)]
 #[instrument(skip(bq_client))]
 pub async fn handle_login_successful(
     bq_client: Client,

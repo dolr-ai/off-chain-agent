@@ -521,34 +521,33 @@ pub async fn recharge_canisters(
     agent: &Agent,
     deployed_canisters: SnsCanisters,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let mut recharge_canister_tasks = vec![];
-
-    recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        agent,
-        deployed_canisters.governance,
-        INITIAL_RECHARGE_AMOUNT,
-    ));
-
-    recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        agent,
-        deployed_canisters.index,
-        INITIAL_RECHARGE_AMOUNT,
-    ));
-    recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        agent,
-        deployed_canisters.ledger,
-        INITIAL_RECHARGE_AMOUNT,
-    ));
-    recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        agent,
-        deployed_canisters.root,
-        INITIAL_RECHARGE_AMOUNT,
-    ));
-    recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        agent,
-        deployed_canisters.swap,
-        INITIAL_RECHARGE_AMOUNT,
-    ));
+    let recharge_canister_tasks = vec![
+        recharge_canister_using_platform_orchestrator(
+            agent,
+            deployed_canisters.governance,
+            INITIAL_RECHARGE_AMOUNT,
+        ),
+        recharge_canister_using_platform_orchestrator(
+            agent,
+            deployed_canisters.index,
+            INITIAL_RECHARGE_AMOUNT,
+        ),
+        recharge_canister_using_platform_orchestrator(
+            agent,
+            deployed_canisters.ledger,
+            INITIAL_RECHARGE_AMOUNT,
+        ),
+        recharge_canister_using_platform_orchestrator(
+            agent,
+            deployed_canisters.root,
+            INITIAL_RECHARGE_AMOUNT,
+        ),
+        recharge_canister_using_platform_orchestrator(
+            agent,
+            deployed_canisters.swap,
+            INITIAL_RECHARGE_AMOUNT,
+        ),
+    ];
 
     recharge_canister_tasks
         .into_iter()

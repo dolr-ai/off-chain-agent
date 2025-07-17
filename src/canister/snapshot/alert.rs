@@ -6,8 +6,7 @@ use ic_agent::Agent;
 #[cfg(not(feature = "local-bin"))]
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 #[cfg(not(feature = "local-bin"))]
 use tracing::instrument;
 
@@ -223,8 +222,7 @@ async fn send_google_chat_alert(
     let max_chars_per_message = 10000; // Google Chat message character limit
     let mut messages_to_send = Vec::new();
     let mut current_message = format!(
-        "🚨 Snapshot Retry Job Finished: *{}* canisters still require attention after retry!\n\n",
-        total_attention_count
+        "🚨 Snapshot Retry Job Finished: *{total_attention_count}* canisters still require attention after retry!\n\n"
     );
     let mut current_char_count = current_message.len();
 
@@ -240,8 +238,8 @@ async fn send_google_chat_alert(
         // Sort canisters within the error group by date string ("missing" will typically be sorted after dates)
         canister_list.sort_by(|a, b| a.1.cmp(&b.1));
 
-        let section_header = format!("*Error: {}*\n", error_str);
-        let continuation_header = format!("*(Cont...) Error: {}*\n", error_str);
+        let section_header = format!("*Error: {error_str}*\n");
+        let continuation_header = format!("*(Cont...) Error: {error_str}*\n");
 
         // Check if header fits in the current message
         if current_char_count + section_header.len() > max_chars_per_message {
@@ -269,7 +267,7 @@ async fn send_google_chat_alert(
         }
 
         for (canister_id, date_str) in canister_list {
-            let item_line = format!("- {}    {}\n", canister_id, date_str);
+            let item_line = format!("- {canister_id}    {date_str}\n");
             let chars_to_add = item_line.len();
 
             if current_char_count + chars_to_add > max_chars_per_message {

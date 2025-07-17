@@ -418,6 +418,7 @@ async fn upgrade_user_token_sns_canister_for_entire_network(
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct VideoHashIndexingRequest {
     video_id: String,
@@ -480,7 +481,7 @@ async fn video_deduplication_handler(
         )
         .await
     {
-        log::error!("Video deduplication failed: {}", e);
+        log::error!("Video deduplication failed: {e}");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
