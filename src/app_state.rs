@@ -21,7 +21,6 @@ use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 use yral_alloydb_client::AlloyDbInstance;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
-use yral_canisters_client::notification_store::NotificationStore;
 use yral_metadata_client::MetadataClient;
 use yral_ml_feed_cache::MLFeedCacheState;
 use yup_oauth2::hyper_rustls::HttpsConnector;
