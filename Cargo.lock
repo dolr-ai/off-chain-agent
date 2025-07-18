@@ -75,7 +75,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=feat%2Fdedup-index#81df857065671c2d439950638a5704ff0ade52e1"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -4839,7 +4839,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.2.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=feat%2Fdedup-index#81df857065671c2d439950638a5704ff0ade52e1"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "anyhow",
  "bb8",
@@ -8656,7 +8656,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9067,7 +9067,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=feat%2Fdedup-index#81df857065671c2d439950638a5704ff0ade52e1"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "anyhow",
  "candid",
@@ -9087,7 +9087,7 @@ dependencies = [
 [[package]]
 name = "yral-identity"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c21b591e0950be0ecb7df8c2988f21193d2f177d"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "candid",
  "ic-agent",
@@ -9139,7 +9139,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=feat%2Fdedup-index#81df857065671c2d439950638a5704ff0ade52e1"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "candid",
  "log",
@@ -9154,7 +9154,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=feat%2Fdedup-index#81df857065671c2d439950638a5704ff0ade52e1"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "candid",
  "serde",
@@ -9172,7 +9172,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=feat%2Fdedup-index#81df857065671c2d439950638a5704ff0ade52e1"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "ic-agent",
  "k256",
