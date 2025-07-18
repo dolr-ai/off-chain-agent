@@ -17,6 +17,7 @@ use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
+use yral_canisters_client::notification_store::NotificationStore;
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
