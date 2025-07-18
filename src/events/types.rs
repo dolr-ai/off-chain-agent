@@ -601,8 +601,6 @@ pub enum EventPayload {
 
 impl EventPayload {
     pub async fn send_notification(&self, app_state: &AppState) {
-        let notification_store = NotificationStore(Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(), &app_state.agent);
-
         match self {
             EventPayload::VideoUploadSuccessful(payload) => {
                 let title = "Video Uploaded";
@@ -664,10 +662,6 @@ impl EventPayload {
                     }),
                     ..Default::default()
                 };
-
-                notification_store.add_notification(payload.publisher_user_id, NotificationType::VideoUpload(VideoUploadPayload{
-                    video_uid: payload.post_id.clone()
-                })).await;
 
                 app_state
                     .notification_client
@@ -735,11 +729,6 @@ impl EventPayload {
                     }),
                     ..Default::default()
                 };
-
-                notification_store.add_notification(payload.publisher_user_id, NotificationType::Liked(LikedPayload{
-                    post_id: payload.post_id.clone(),
-                    by_user_principal: payload.user_id.clone()
-                })).await;
 
                 app_state
                     .notification_client

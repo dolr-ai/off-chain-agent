@@ -198,6 +198,21 @@ async fn process_event_impl(
 
     event.update_view_count_canister(&shared_state.clone());
 
+    #[cfg(not(feature = "local-bin"))]
+    {
+        use crate::events::push_notifications::dispatch_notif;
+
+        let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
+            log::error!("Failed to parse params: {}", e);
+            anyhow::anyhow!("Failed to parse params: {}", e)
+        })?;
+
+        let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
+        if let Err(e) = res {
+            log::error!("Failed to dispatch notification: {:?}", e);
+        }
+    }
+
     Ok(())
 }
 
