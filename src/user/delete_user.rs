@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use ic_cdk::api::management_canister::main::{canister_info, CanisterInfoRequest};
+use ic_utils::Canister;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
+use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 
 use crate::{
     app_state::AppState, canister::delete::delete_canister_data, types::DelegatedIdentityWire,
@@ -51,16 +54,42 @@ pub async fn handle_delete_user(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    let (canister_info_resp,) = canister_info(CanisterInfoRequest {
+        canister_id: user_canister,
+        num_requested_changes: None,
+    })
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get user canister info: {e:?}"),
+        )
+    })?;
+
+    let subnet_id = canister_info_resp.controllers.get(0).ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Subnet ID not found".to_string(),
+        )
+    })?;
+
     // Use the common delete_canister_data function for steps 1-7
-    delete_canister_data(&agent, &state, user_canister, user_principal, true)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to delete canister data: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to delete canister data: {}", e),
-            )
-        })?;
+    delete_canister_data(
+        &agent,
+        &state,
+        user_canister,
+        user_principal,
+        *subnet_id,
+        true,
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Failed to delete canister data: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to delete canister data: {}", e),
+        )
+    })?;
 
     // Step 8: Add to deleted canisters in SpaceTimeDB if user_principal is provided
     #[cfg(not(feature = "local-bin"))]

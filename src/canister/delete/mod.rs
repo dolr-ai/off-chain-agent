@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
 use yral_canisters_client::{
-    individual_user_template::IndividualUserTemplate,
+    individual_user_template::{IndividualUserTemplate, Ok},
     user_index::{Result3, UserIndex},
 };
 
@@ -45,6 +45,7 @@ pub async fn delete_canister_data(
     state: &Arc<AppState>,
     canister_id: Principal,
     user_principal: Principal,
+    subnet_id: Principal,
     to_delete_posts_from_canister: bool,
 ) -> Result<(), anyhow::Error> {
     // 0. Delete user from YRAL auth Redis (this step is unique to user deletion)
@@ -120,6 +121,11 @@ pub async fn delete_canister_data(
         );
     }
 
+    // Step 3: Delete posts from subnet
+    let subnet = UserIndex(subnet_id, agent);
+    subnet
+        .uninstall_individual_user_canister(canister_id)
+        .await?;
     Ok(())
 }
 
@@ -316,26 +322,16 @@ async fn process_single_canister_deletion(
     };
 
     // Delete canister data
-    if let Err(e) = delete_canister_data(agent, state, canister_id, user_principal, false).await {
+    if let Err(e) =
+        delete_canister_data(agent, state, canister_id, user_principal, subnet_id, false).await
+    {
         return Err(CanisterDeletionError {
             user_principal: Some(user_principal),
             error: anyhow::anyhow!("Failed to delete canister data: {}", e),
         });
     }
 
-    // Step 3: Delete posts from subnet
-    let subnet = UserIndex(subnet_id, agent);
-    match subnet.uninstall_individual_user_canister(canister_id).await {
-        Ok(Result3::Ok) => Ok(canister_id.to_string()),
-        Ok(Result3::Err(e)) => Err(CanisterDeletionError {
-            user_principal: Some(user_principal),
-            error: anyhow::anyhow!("Failed to uninstall canister: {}", e),
-        }),
-        Err(e) => Err(CanisterDeletionError {
-            user_principal: Some(user_principal),
-            error: anyhow::anyhow!("Agent error: {}", e),
-        }),
-    }
+    Ok(canister_id.to_string())
 }
 
 #[cfg(not(feature = "local-bin"))]
