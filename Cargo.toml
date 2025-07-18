@@ -96,6 +96,7 @@ bb8-redis = "0.21.0"
 fasthash = { version = "0.4.0", optional = true }
 spacetimedb-sdk = "1.2.0"
 async-channel = "2.3.1"
+ic-cdk = "0.17.2"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions

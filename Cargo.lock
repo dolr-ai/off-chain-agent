@@ -5072,6 +5072,7 @@ dependencies = [
  "http-body-util",
  "hyper-util",
  "ic-agent",
+ "ic-cdk",
  "ic-sns-governance",
  "ic-utils 0.41.0",
  "image",
