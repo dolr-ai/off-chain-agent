@@ -13,7 +13,9 @@ use crate::{
     app_state::AppState,
     consts::{GOOGLE_CHAT_REPORT_SPACE_URL, ML_FEED_SERVER_GRPC_URL},
     offchain_service::send_message_gchat,
-    utils::grpc_clients::ml_feed::{ml_feed_client::MlFeedClient, VideoReportRequest},
+    utils::grpc_clients::ml_feed::{
+        ml_feed_client::MlFeedClient, VideoReportRequest, VideoReportRequestV3,
+    },
 };
 
 use super::{types::PostRequest, verify::VerifiedPostRequest};
@@ -164,16 +166,13 @@ pub async fn qstash_report_post(
 
     let mut client = MlFeedClient::new(channel);
 
-    let request = VideoReportRequest {
+    let request = VideoReportRequestV3 {
         reportee_user_id: payload.user_principal.to_string(),
-        reportee_canister_id: payload.user_canister_id.to_string(),
-        video_canister_id: payload.canister_id.to_string(),
-        video_post_id: payload.post_id as u32,
         video_id: payload.video_id,
         reason: payload.reason,
     };
 
-    client.report_video(request).await.map_err(|e| {
+    client.report_video_v3(request).await.map_err(|e| {
         log::error!("Failed to report video: {}", e);
 
         (

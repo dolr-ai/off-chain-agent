@@ -1,5 +1,3 @@
-#[cfg(not(feature = "local-bin"))]
-use crate::async_backend;
 use crate::canister::utils::deleted_canister::WrappedContextCanisters;
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
@@ -23,6 +21,7 @@ use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 use yral_alloydb_client::AlloyDbInstance;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
+use yral_canisters_client::notification_store::NotificationStore;
 use yral_metadata_client::MetadataClient;
 use yral_ml_feed_cache::MLFeedCacheState;
 use yup_oauth2::hyper_rustls::HttpsConnector;
@@ -49,7 +48,6 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
     #[cfg(not(feature = "local-bin"))]
-    pub backend_ctx: async_backend::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
@@ -82,7 +80,6 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             alloydb_client: init_alloydb_client().await,
             #[cfg(not(feature = "local-bin"))]
-            backend_ctx: init_backend_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
             #[cfg(not(feature = "local-bin"))]
@@ -226,10 +223,6 @@ pub async fn init_nsfw_detect_channel() -> Channel {
 pub async fn init_qstash_client() -> QStashClient {
     let auth_token = env::var("QSTASH_AUTH_TOKEN").expect("QSTASH_AUTH_TOKEN is required");
     QStashClient::new(auth_token.as_str())
-}
-
-pub async fn init_backend_ctx() -> async_backend::WrappedContext {
-    async_backend::WrappedContext::new().expect("Stdb backend to be connected")
 }
 
 async fn init_alloydb_client() -> AlloyDbInstance {

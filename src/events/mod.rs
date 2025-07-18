@@ -18,8 +18,6 @@ use yral_metrics::metrics::sealed_metric::SealedMetric;
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::check_auth_events;
-#[cfg(not(feature = "local-bin"))]
-use crate::events::push_notifications::dispatch_notif;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::types::DelegatedIdentityWire;
 use crate::AppState;
@@ -202,6 +200,8 @@ async fn process_event_impl(
 
     #[cfg(not(feature = "local-bin"))]
     {
+        use crate::events::push_notifications::dispatch_notif;
+
         let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
             log::error!("Failed to parse params: {}", e);
             anyhow::anyhow!("Failed to parse params: {}", e)
