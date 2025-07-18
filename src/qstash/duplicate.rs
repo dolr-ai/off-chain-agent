@@ -1,8 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{app_state, consts::OFF_CHAIN_AGENT_URL, duplicate_video::videohash::VideoHash};
+use crate::{
+    app_state,
+    consts::{DEDUP_INDEX_CANISTER_ID, OFF_CHAIN_AGENT_URL},
+    duplicate_video::videohash::VideoHash,
+};
 use anyhow::Context;
-use candid::Principal;
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use http::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
@@ -269,7 +272,7 @@ impl<'a> VideoHashDuplication<'a> {
         video_id: &str,
         hash: &str,
     ) -> anyhow::Result<()> {
-        let dedup_index = DedupIndex(Principal::anonymous(), agent);
+        let dedup_index = DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent);
         let now = SystemTime::now();
 
         let now = now.duration_since(UNIX_EPOCH).unwrap();
