@@ -18,8 +18,6 @@ use yral_metrics::metrics::sealed_metric::SealedMetric;
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::check_auth_events;
-#[cfg(not(feature = "local-bin"))]
-use crate::events::push_notifications::dispatch_notif;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::types::DelegatedIdentityWire;
 use crate::AppState;
@@ -199,19 +197,6 @@ async fn process_event_impl(
     }
 
     event.update_view_count_canister(&shared_state.clone());
-
-    #[cfg(not(feature = "local-bin"))]
-    {
-        let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
-            log::error!("Failed to parse params: {}", e);
-            anyhow::anyhow!("Failed to parse params: {}", e)
-        })?;
-
-        let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
-        if let Err(e) = res {
-            log::error!("Failed to dispatch notification: {:?}", e);
-        }
-    }
 
     Ok(())
 }
