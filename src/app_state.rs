@@ -1,4 +1,3 @@
-use crate::async_dedup_index;
 use crate::canister::utils::deleted_canister::WrappedContextCanisters;
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
@@ -17,7 +16,6 @@ use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
-use yral_canisters_client::notification_store::NotificationStore;
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
@@ -49,7 +47,6 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
     #[cfg(not(feature = "local-bin"))]
-    pub dedup_index_ctx: async_dedup_index::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
@@ -82,7 +79,6 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             alloydb_client: init_alloydb_client().await,
             #[cfg(not(feature = "local-bin"))]
-            dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
             #[cfg(not(feature = "local-bin"))]
@@ -226,10 +222,6 @@ pub async fn init_nsfw_detect_channel() -> Channel {
 pub async fn init_qstash_client() -> QStashClient {
     let auth_token = env::var("QSTASH_AUTH_TOKEN").expect("QSTASH_AUTH_TOKEN is required");
     QStashClient::new(auth_token.as_str())
-}
-
-pub async fn init_dedup_index_ctx() -> async_dedup_index::WrappedContext {
-    async_dedup_index::WrappedContext::new().expect("Stdb dedup index to be connected")
 }
 
 async fn init_alloydb_client() -> AlloyDbInstance {
