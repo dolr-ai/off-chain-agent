@@ -13,7 +13,6 @@ use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSyste
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VideoPublisherData {
-    pub canister_id: String,
     pub publisher_principal: String,
     pub post_id: u64,
 }
@@ -24,7 +23,6 @@ pub struct DuplicateVideoEvent {
     pub parent_video_id: String,
     pub similarity_percentage: f64,
     pub exact_duplicate: bool,
-    pub publisher_canister_id: String,
     pub publisher_principal: String,
     pub post_id: u64,
     pub timestamp: String,
@@ -85,42 +83,6 @@ impl<'a> VideoHashDuplication<'a> {
         Ok(())
     }
 
-    pub async fn publish_deduplication_completed(
-        &self,
-        video_id: &str,
-        canister_id: &str,
-        post_id: u64,
-        publisher_user_id: &str,
-    ) -> Result<(), anyhow::Error> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join("qstash/deduplication_completed")
-            .unwrap();
-
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
-        let req = serde_json::json!({
-            "video_id": video_id,
-            "canister_id": canister_id,
-            "post_id": post_id,
-            "publisher_user_id": publisher_user_id,
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        });
-
-        log::info!(
-            "Publishing deduplication completed event for video_id [{}]",
-            video_id
-        );
-
-        self.client
-            .post(url.clone())
-            .json(&req)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .send()
-            .await?;
-
-        Ok(())
-    }
-
     pub async fn process_video_deduplication(
         &self,
         agent: &ic_agent::Agent,
@@ -129,7 +91,6 @@ impl<'a> VideoHashDuplication<'a> {
         video_url: &str,
         publisher_data: VideoPublisherData,
         publish_video_callback: impl FnOnce(
-            &str,
             &str,
             u64,
             String,
@@ -210,7 +171,6 @@ impl<'a> VideoHashDuplication<'a> {
                     parent_video_id: match_details.video_id.clone(),
                     similarity_percentage: match_details.similarity_percentage,
                     exact_duplicate,
-                    publisher_canister_id: publisher_data.canister_id.clone(),
                     publisher_principal: publisher_data.publisher_principal.clone(),
                     post_id: publisher_data.post_id,
                     timestamp: chrono::Utc::now().to_rfc3339(),
@@ -225,7 +185,6 @@ impl<'a> VideoHashDuplication<'a> {
         let timestamp = chrono::Utc::now().to_rfc3339();
         publish_video_callback(
             video_id,
-            &publisher_data.canister_id,
             publisher_data.post_id,
             timestamp,
             &publisher_data.publisher_principal,
@@ -341,7 +300,7 @@ impl<'a> VideoHashDuplication<'a> {
                 NULL, NULL, {},
                 {}
             )",
-            publisher_data.canister_id,
+            "".to_string(),
             publisher_data.publisher_principal,
             publisher_data.post_id,
             video_id,

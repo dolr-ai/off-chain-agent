@@ -86,7 +86,6 @@ impl QStashClient {
     pub async fn publish_video(
         &self,
         video_id: &str,
-        canister_id: &str,
         post_id: u64,
         timestamp_str: String,
         publisher_user_id: &str,
@@ -96,7 +95,6 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
-            "canister_id": canister_id,
             "post_id": post_id,
             "timestamp": timestamp_str,
             "publisher_user_id": publisher_user_id

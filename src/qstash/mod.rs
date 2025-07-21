@@ -10,7 +10,7 @@ use axum::{
     Json, Router,
 };
 use candid::{Decode, Encode, Nat, Principal};
-use hotornot_job::{start_hotornot_job, start_hotornot_job_v2};
+use hotornot_job::start_hotornot_job_v2;
 use http::StatusCode;
 use ic_agent::{identity::DelegatedIdentity, Identity};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
@@ -436,7 +436,6 @@ async fn video_deduplication_handler(
     );
 
     let publisher_data = VideoPublisherData {
-        canister_id: req.publisher_data.canister_id.clone(),
         publisher_principal: req.publisher_data.publisher_principal.clone(),
         post_id: req.publisher_data.post_id,
     };
@@ -455,10 +454,9 @@ async fn video_deduplication_handler(
             &req.video_id,
             &req.video_url,
             publisher_data,
-            move |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
+            move |vid_id, post_id, timestamp, publisher_user_id| {
                 // Clone the values to ensure they have 'static lifetime
                 let vid_id = vid_id.to_string();
-                let canister_id = canister_id.to_string();
                 let publisher_user_id = publisher_user_id.to_string();
 
                 // Use the cloned qstash_client instead of accessing through state
@@ -466,13 +464,7 @@ async fn video_deduplication_handler(
 
                 Box::pin(async move {
                     qstash_client
-                        .publish_video(
-                            &vid_id,
-                            &canister_id,
-                            post_id,
-                            timestamp,
-                            &publisher_user_id,
-                        )
+                        .publish_video(&vid_id, post_id, timestamp, &publisher_user_id)
                         .await
                 })
             },
@@ -526,7 +518,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
-        .route("/start_hotornot_job", post(start_hotornot_job))
         .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
         .route(
             "/delete_and_reclaim_canisters",
