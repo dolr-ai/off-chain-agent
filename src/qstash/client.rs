@@ -17,7 +17,7 @@ use crate::{
         upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
     },
     consts::OFF_CHAIN_AGENT_URL,
-    events::event::UploadVideoInfo,
+    events::event::{storj::DedupRequestArgs, UploadVideoInfo},
     posts::report_post::ReportPostRequestV2,
     qstash::duplicate::{DuplicateVideoEvent, VideoHashDuplication},
 };

@@ -10,7 +10,7 @@ use canister::upgrade_user_token_sns_canister::{
 };
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
-use events::event::storj::{enqueue_dedup_index_backfill_item, enqueue_storj_backfill_item};
+use events::event::storj::{add_to_dedup_index, enqueue_storj_backfill_item};
 use http::header::CONTENT_TYPE;
 use offchain_service::report_approved_handler;
 use qstash::qstash_router;
@@ -106,10 +106,7 @@ async fn main_impl() -> Result<()> {
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
-        .route(
-            "/enqueue_dedup_index_backfill_item",
-            post(enqueue_dedup_index_backfill_item),
-        )
+        .route("/add_to_dedup_index", post(add_to_dedup_index))
         .nest("/admin", admin_routes)
         .nest("/qstash", qstash_routes)
         .fallback_service(router)

@@ -50,7 +50,7 @@ pub struct DedupRequestArgs {
     pub created_at: SystemTime,
 }
 
-pub async fn enqueue_dedup_index_backfill_item(
+pub async fn add_to_dedup_index(
     State(state): State<Arc<AppState>>,
     Json(DedupRequestArgs {
         video_id,
