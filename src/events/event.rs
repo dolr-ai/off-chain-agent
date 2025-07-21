@@ -23,24 +23,6 @@ use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2, Plain
 
 pub mod storj;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DuplicateVideoEvent {
-    pub original_video_id: String,
-    pub parent_video_id: String,
-    pub similarity_percentage: f64,
-    pub exact_duplicate: bool,
-    pub publisher_canister_id: String,
-    pub publisher_principal: String,
-    pub post_id: u64,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct LoginSuccessfulParams {
-    pub canister_id: Principal,
-    pub user_id: Principal,
-}
-
 #[derive(Debug)]
 pub struct Event {
     pub event: WarehouseEvent,
@@ -278,6 +260,7 @@ impl Event {
         }
     }
 
+    // TODO: canister_id being used
     pub fn update_view_count_canister(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
             let params: Result<VideoDurationWatchedPayload, _> =

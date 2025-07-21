@@ -679,6 +679,7 @@ pub enum EventPayload {
 ///   be deserialized into the expected structure.
 ///
 
+// TODO: canister_id is used
 impl EventPayload {
     pub async fn send_notification(&self, app_state: &AppState) {
         match self {
