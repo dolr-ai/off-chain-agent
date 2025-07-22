@@ -63,6 +63,13 @@ impl<'a> VideoHashDuplication<'a> {
             .await
             .context("Couldn't check if the video is duplicate")?;
 
+        if is_duplicate {
+            log::info!(
+                "Duplicate video detected: hash: {} | video_id: {video_id}",
+                video_hash.hash
+            );
+        }
+
         // Store the original hash regardless of duplication status
         self.store_videohash_to_dedup_index(agent, video_id, &video_hash.hash)
             .await?;
