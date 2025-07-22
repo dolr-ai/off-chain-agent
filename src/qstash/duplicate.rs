@@ -1,33 +1,15 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{
-    app_state,
-    consts::{DEDUP_INDEX_CANISTER_ID, OFF_CHAIN_AGENT_URL},
-    duplicate_video::videohash::VideoHash,
-};
+use crate::{app_state, consts::DEDUP_INDEX_CANISTER_ID, duplicate_video::videohash::VideoHash};
 use anyhow::Context;
 use google_cloud_bigquery::http::job::query::QueryRequest;
-use http::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSystemTime};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VideoPublisherData {
-    pub canister_id: String,
     pub publisher_principal: String,
     pub post_id: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DuplicateVideoEvent {
-    pub original_video_id: String,
-    pub parent_video_id: String,
-    pub similarity_percentage: f64,
-    pub exact_duplicate: bool,
-    pub publisher_canister_id: String,
-    pub publisher_principal: String,
-    pub post_id: u64,
-    pub timestamp: String,
 }
 
 // Add these structures to support the indexer API response
@@ -56,71 +38,6 @@ impl<'a> VideoHashDuplication<'a> {
         Self { client, base_url }
     }
 
-    pub async fn publish_duplicate_video_event(
-        &self,
-        duplicate_event: DuplicateVideoEvent,
-    ) -> Result<(), anyhow::Error> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join("qstash/duplicate_video_detected")
-            .unwrap();
-
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
-        let req = serde_json::json!(duplicate_event);
-
-        log::info!(
-            "Publishing duplicate video event: video_id [{}], parent_video_id [{}], score={}",
-            duplicate_event.original_video_id,
-            duplicate_event.parent_video_id,
-            duplicate_event.similarity_percentage
-        );
-
-        self.client
-            .post(url.clone())
-            .json(&req)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .send()
-            .await?;
-
-        Ok(())
-    }
-
-    pub async fn publish_deduplication_completed(
-        &self,
-        video_id: &str,
-        canister_id: &str,
-        post_id: u64,
-        publisher_user_id: &str,
-    ) -> Result<(), anyhow::Error> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join("qstash/deduplication_completed")
-            .unwrap();
-
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
-        let req = serde_json::json!({
-            "video_id": video_id,
-            "canister_id": canister_id,
-            "post_id": post_id,
-            "publisher_user_id": publisher_user_id,
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        });
-
-        log::info!(
-            "Publishing deduplication completed event for video_id [{}]",
-            video_id
-        );
-
-        self.client
-            .post(url.clone())
-            .json(&req)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .send()
-            .await?;
-
-        Ok(())
-    }
-
     pub async fn process_video_deduplication(
         &self,
         agent: &ic_agent::Agent,
@@ -129,7 +46,6 @@ impl<'a> VideoHashDuplication<'a> {
         video_url: &str,
         publisher_data: VideoPublisherData,
         publish_video_callback: impl FnOnce(
-            &str,
             &str,
             u64,
             String,
@@ -152,9 +68,6 @@ impl<'a> VideoHashDuplication<'a> {
         }
         self.store_videohash_original(bigquery_client, video_id, &video_hash.hash)
             .await?;
-
-        // TODO: the following call will be replaced with spacetimedb in
-        // https://github.com/dolr-ai/product-roadmap/issues/569
 
         // Call the video hash indexer API to check for duplicates
         let client = reqwest::Client::new();
@@ -203,18 +116,6 @@ impl<'a> VideoHashDuplication<'a> {
                     match_details.video_id,
                     match_details.similarity_percentage
                 );
-
-                let exact_duplicate = match_details.similarity_percentage > 98.0;
-                let _duplicate_event = DuplicateVideoEvent {
-                    original_video_id: video_id.to_string(),
-                    parent_video_id: match_details.video_id.clone(),
-                    similarity_percentage: match_details.similarity_percentage,
-                    exact_duplicate,
-                    publisher_canister_id: publisher_data.canister_id.clone(),
-                    publisher_principal: publisher_data.publisher_principal.clone(),
-                    post_id: publisher_data.post_id,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                };
             }
         } else {
             self.store_unique_video(video_id, &video_hash.hash).await?;
@@ -225,7 +126,6 @@ impl<'a> VideoHashDuplication<'a> {
         let timestamp = chrono::Utc::now().to_rfc3339();
         publish_video_callback(
             video_id,
-            &publisher_data.canister_id,
             publisher_data.post_id,
             timestamp,
             &publisher_data.publisher_principal,
@@ -336,12 +236,11 @@ impl<'a> VideoHashDuplication<'a> {
                 parent_principal, parent_post_id, exact_duplicate,
                 duplication_score
             ) VALUES (
-                '{}', '{}', {},
+                NULL, '{}', {},
                 '{}', '{}', NULL,
                 NULL, NULL, {},
                 {}
             )",
-            publisher_data.canister_id,
             publisher_data.publisher_principal,
             publisher_data.post_id,
             video_id,

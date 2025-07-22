@@ -2,7 +2,9 @@ use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use utoipa::ToSchema;
-use yral_canisters_client::notification_store::{LikedPayload, NotificationStore, NotificationType, VideoUploadPayload};
+use yral_canisters_client::notification_store::{
+    LikedPayload, NotificationStore, NotificationType, VideoUploadPayload,
+};
 use yral_metadata_types::{
     AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
     SendNotificationReq, WebpushConfig, WebpushFcmOptions,
@@ -150,6 +152,39 @@ pub struct VideoDurationWatchedPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoDurationWatchedPayloadV2 {
+    pub publisher_user_id: Option<Principal>,
+    pub user_id: Principal,
+    #[serde(rename = "is_loggedIn", skip_serializing_if = "Option::is_none")]
+    pub is_logged_in: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_id: Option<String>,
+    pub video_category: String,
+    pub creator_category: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hashtag_count: Option<usize>,
+    #[serde(rename = "is_NSFW", skip_serializing_if = "Option::is_none")]
+    pub is_nsfw: Option<bool>,
+    #[serde(rename = "is_hotorNot", skip_serializing_if = "Option::is_none")]
+    pub is_hotor_not: Option<bool>,
+    pub feed_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub like_count: Option<u64>,
+    pub share_count: u64,
+    pub percentage_watched: f64,
+    pub absolute_watched: f64,
+    pub video_duration: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub post_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nsfw_probability: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoViewedPayload {
     #[serde(rename = "publisher_user_id")]
     pub publisher_user_id: Option<Principal>,
@@ -233,6 +268,31 @@ pub struct LikeVideoPayload {
     #[serde(rename = "publisher_canister_id")]
     pub publisher_canister_id: Principal,
     #[serde(rename = "nsfw_probability", skip_serializing_if = "Option::is_none")]
+    pub nsfw_probability: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LikeVideoPayloadV2 {
+    pub publisher_user_id: Principal,
+    pub user_id: Principal,
+    #[serde(rename = "is_loggedIn")]
+    pub is_logged_in: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    pub video_id: String,
+    pub video_category: String,
+    pub creator_category: String,
+    pub hashtag_count: usize,
+    #[serde(rename = "is_NSFW")]
+    pub is_nsfw: bool,
+    #[serde(rename = "is_hotorNot")]
+    pub is_hotor_not: bool,
+    pub feed_type: String,
+    pub view_count: u64,
+    pub like_count: u64,
+    pub share_count: u64,
+    pub post_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub nsfw_probability: Option<f64>,
 }
 
@@ -599,6 +659,7 @@ pub enum EventPayload {
 ///   be deserialized into the expected structure.
 ///
 
+// TODO: canister_id is used
 impl EventPayload {
     pub async fn send_notification(&self, app_state: &AppState) {
         match self {
@@ -613,6 +674,7 @@ impl EventPayload {
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
                     }),
+                    data: Some(serde_json::to_value(payload).unwrap()),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
@@ -621,11 +683,6 @@ impl EventPayload {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                             ),
-                            click_action: Some(format!(
-                                "https://yral.com/hot-or-not/{}/{}",
-                                payload.canister_id.to_text(),
-                                payload.post_id
-                            )),
                             ..Default::default()
                         }),
                         ..Default::default()
@@ -680,6 +737,7 @@ impl EventPayload {
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
                     }),
+                    data: Some(serde_json::to_value(payload).unwrap()),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
@@ -688,11 +746,6 @@ impl EventPayload {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                             ),
-                            click_action: Some(format!(
-                                "https://yral.com/hot-or-not/{}/{}",
-                                payload.canister_id.to_text(),
-                                payload.post_id
-                            )),
                             ..Default::default()
                         }),
                         ..Default::default()

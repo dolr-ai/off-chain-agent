@@ -12,11 +12,8 @@ use serde_json::json;
 use tracing::instrument;
 
 use crate::{
-    canister::snapshot::snapshot_v2::BackupUserCanisterPayload,
-    consts::OFF_CHAIN_AGENT_URL,
-    events::event::UploadVideoInfo,
-    posts::report_post::ReportPostRequestV2,
-    qstash::duplicate::{DuplicateVideoEvent, VideoHashDuplication},
+    canister::snapshot::snapshot_v2::BackupUserCanisterPayload, consts::OFF_CHAIN_AGENT_URL,
+    events::event::UploadVideoInfo, posts::report_post::ReportPostRequestV2,
 };
 
 #[derive(Clone, Debug)]
@@ -68,22 +65,9 @@ impl QStashClient {
     }
 
     #[instrument(skip(self))]
-    pub async fn publish_duplicate_video_event(
-        &self,
-        duplicate_event: DuplicateVideoEvent,
-    ) -> Result<(), anyhow::Error> {
-        let duplication_handler = VideoHashDuplication::new(&self.client, &self.base_url);
-
-        duplication_handler
-            .publish_duplicate_video_event(duplicate_event)
-            .await
-    }
-
-    #[instrument(skip(self))]
     pub async fn publish_video(
         &self,
         video_id: &str,
-        canister_id: &str,
         post_id: u64,
         timestamp_str: String,
         publisher_user_id: &str,
@@ -93,7 +77,6 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
-            "canister_id": canister_id,
             "post_id": post_id,
             "timestamp": timestamp_str,
             "publisher_user_id": publisher_user_id
