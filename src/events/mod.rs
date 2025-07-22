@@ -68,7 +68,6 @@ impl VideoUploadSuccessful {
     pub async fn send_event(
         &self,
         user_principal: Principal,
-        user_canister_id: Principal,
         username: String,
         video_uid: String,
         hashtags_len: usize,
@@ -87,7 +86,6 @@ impl VideoUploadSuccessful {
             "user_id": user_principal,
             "publisher_user_id": user_principal,
             "display_name": username,
-            "canister_id": user_canister_id,
             "creator_category": "NA",
             "hashtag_count": hashtags_len,
             "is_NSFW": is_nsfw,
@@ -185,16 +183,6 @@ async fn process_event_impl(
 
     event.update_watch_history_v2(&shared_state.clone());
     event.update_success_history_v2(&shared_state.clone());
-
-    #[cfg(not(feature = "local-bin"))]
-    event.stream_to_firestore(&shared_state.clone());
-
-    #[cfg(not(feature = "local-bin"))]
-    event.stream_to_bigquery_token_metadata(&shared_state.clone());
-
-    if let Err(e) = event.handle_login_successful(&shared_state.clone()) {
-        log::error!("Error handling login successful: {:?}", e);
-    }
 
     event.update_view_count_canister(&shared_state.clone());
 

@@ -1,97 +1,31 @@
 use crate::consts::OFF_CHAIN_AGENT_URL;
-use crate::events::types::VideoDurationWatchedPayload;
+use crate::events::types::{VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2};
 use crate::events::utils::parse_success_history_params;
 use crate::{
-    app_state::AppState,
-    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
-    events::warehouse_events::WarehouseEvent,
-    utils::cf_images::upload_base64_image,
+    app_state::AppState, consts::BIGQUERY_INGESTION_URL, events::warehouse_events::WarehouseEvent,
     AppError,
 };
 use axum::{extract::State, Json};
 use candid::Principal;
-use chrono::{DateTime, Utc};
-use firestore::errors::FirestoreError;
-use google_cloud_bigquery::http::job::query::QueryRequest;
 use http::header::CONTENT_TYPE;
 use log::error;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use tracing::instrument;
 use yral_ml_feed_cache::consts::{
     USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
-    USER_SUCCESS_HISTORY_CLEAN_SUFFIX_V2, USER_SUCCESS_HISTORY_NSFW_SUFFIX_V2,
-    USER_WATCH_HISTORY_CLEAN_SUFFIX_V2, USER_WATCH_HISTORY_NSFW_SUFFIX_V2,
+    USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_CLEAN_SUFFIX_V2,
+    USER_SUCCESS_HISTORY_NSFW_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX_V2,
+    USER_WATCH_HISTORY_CLEAN_SUFFIX, USER_WATCH_HISTORY_CLEAN_SUFFIX_V2,
+    USER_WATCH_HISTORY_NSFW_SUFFIX, USER_WATCH_HISTORY_NSFW_SUFFIX_V2,
     USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
 };
-use yral_ml_feed_cache::types::{BufferItem, PlainPostItem};
+use yral_ml_feed_cache::types::{BufferItem, MLFeedCacheHistoryItem, PlainPostItem};
 use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2, PlainPostItemV2};
-use yral_ml_feed_cache::{
-    consts::{
-        USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
-        USER_WATCH_HISTORY_CLEAN_SUFFIX, USER_WATCH_HISTORY_NSFW_SUFFIX,
-    },
-    types::MLFeedCacheHistoryItem,
-};
 
-use super::queries::get_icpump_insert_query;
-
-pub mod login_successful;
 pub mod storj;
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct TokenListItem {
-    user_id: String,
-    name: String,
-    token_name: String,
-    token_symbol: String,
-    logo: String,
-    description: String,
-    #[serde(with = "firestore::serialize_as_timestamp")]
-    created_at: DateTime<Utc>,
-    link: String,
-    #[serde(default)]
-    is_nsfw: bool,
-    #[serde(default)]
-    nsfw_ec: String,
-    #[serde(default)]
-    nsfw_gore: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ICPumpTokenMetadata {
-    pub canister_id: String,
-    pub description: String,
-    pub host: String,
-    pub link: String,
-    pub logo: String,
-    pub token_name: String,
-    pub token_symbol: String,
-    pub user_id: String,
-    pub created_at: String,
-    #[serde(default)]
-    is_nsfw: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DuplicateVideoEvent {
-    pub original_video_id: String,
-    pub parent_video_id: String,
-    pub similarity_percentage: f64,
-    pub exact_duplicate: bool,
-    pub publisher_canister_id: String,
-    pub publisher_principal: String,
-    pub post_id: u64,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct LoginSuccessfulParams {
-    pub canister_id: Principal,
-    pub user_id: Principal,
-}
 
 #[derive(Debug)]
 pub struct Event {
@@ -131,38 +65,6 @@ impl Event {
         });
     }
 
-    pub fn stream_to_bigquery_token_metadata(&self, app_state: &AppState) {
-        if self.event.event == "token_creation_completed" {
-            let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
-            let app_state = app_state.clone();
-
-            tokio::spawn(async move {
-                let timestamp = chrono::Utc::now().to_rfc3339();
-
-                let data = ICPumpTokenMetadata {
-                    canister_id: params["canister_id"].as_str().unwrap().to_string(),
-                    description: params["description"].as_str().unwrap().to_string(),
-                    host: params["host"].as_str().unwrap().to_string(),
-                    link: params["link"].as_str().unwrap().to_string(),
-                    logo: params["logo"].as_str().unwrap().to_string(),
-                    token_name: params["token_name"].as_str().unwrap().to_string(),
-                    token_symbol: params["token_symbol"].as_str().unwrap().to_string(),
-                    user_id: params["user_id"].as_str().unwrap().to_string(),
-                    created_at: timestamp,
-                    is_nsfw: params["is_nsfw"].as_bool().unwrap(),
-                };
-
-                let res = stream_to_bigquery_token_metadata_impl_v2(&app_state, data).await;
-                if res.is_err() {
-                    error!(
-                        "stream_to_bigquery_token_metadata: Error sending data to BigQuery: {}",
-                        res.err().unwrap()
-                    );
-                }
-            });
-        }
-    }
-
     pub fn check_video_deduplication(&self, app_state: &AppState) {
         if self.event.event == "video_upload_successful" {
             let params: Value = match serde_json::from_str(&self.event.params) {
@@ -184,14 +86,6 @@ impl Event {
                     Some(id) => id,
                     None => {
                         error!("Missing video_id in video_upload_successful event");
-                        return;
-                    }
-                };
-
-                let canister_id = match params.get("canister_id").and_then(|v| v.as_str()) {
-                    Some(id) => id,
-                    None => {
-                        error!("Missing canister_id in video_upload_successful event");
                         return;
                     }
                 };
@@ -230,11 +124,11 @@ impl Event {
                     .join(&format!("publish/{}", off_chain_ep))
                     .unwrap();
 
+                // TODO: change to struct
                 let request_data = serde_json::json!({
                     "video_id": video_id,
                     "video_url": video_url,
                     "publisher_data": {
-                        "canister_id": canister_id,
                         "publisher_principal": publisher_user_id,
                         "post_id": post_id
                     }
@@ -345,8 +239,7 @@ impl Event {
                     )
                     .await
                 {
-                    Ok(true) => {
-                    }
+                    Ok(true) => {}
                     Ok(false) => {
                         // add_user_buffer_items
                         if let Err(e) = ml_feed_cache
@@ -374,7 +267,7 @@ impl Event {
 
     pub fn update_watch_history_v2(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
-            let params: Result<VideoDurationWatchedPayload, _> =
+            let params: Result<VideoDurationWatchedPayloadV2, _> =
                 serde_json::from_str(&self.event.params);
 
             let params = match params {
@@ -394,10 +287,6 @@ impl Event {
                 let nsfw_probability = params.nsfw_probability.unwrap_or_default();
 
                 let user_id = &params.user_id;
-                let publisher_canister_id = &params
-                    .publisher_canister_id
-                    .map(|f| f.to_string())
-                    .unwrap_or_default();
                 let publisher_user_id = &params
                     .publisher_user_id
                     .map(|f| f.to_string())
@@ -409,7 +298,7 @@ impl Event {
 
                 let watch_history_item = MLFeedCacheHistoryItemV2 {
                     publisher_user_id: publisher_user_id.to_string(),
-                    canister_id: publisher_canister_id.to_string(),
+                    canister_id: "deprecated".to_string(),
                     item_type: item_type.clone(),
                     post_id,
                     video_id: video_id.clone(),
@@ -455,8 +344,7 @@ impl Event {
                     )
                     .await
                 {
-                    Ok(true) => {
-                    }
+                    Ok(true) => {}
                     Ok(false) => {
                         // add_user_buffer_items
                         if let Err(e) = ml_feed_cache
@@ -482,6 +370,7 @@ impl Event {
         }
     }
 
+    // TODO: canister_id being used
     pub fn update_view_count_canister(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
             let params: Result<VideoDurationWatchedPayload, _> =
@@ -612,8 +501,7 @@ impl Event {
                     )
                     .await
                 {
-                    Ok(true) => {
-                    }
+                    Ok(true) => {}
                     Ok(false) => {
                         // add_user_buffer_items
                         if let Err(e) = ml_feed_cache
@@ -672,7 +560,7 @@ impl Event {
 
             let success_history_item = MLFeedCacheHistoryItemV2 {
                 publisher_user_id: params.publisher_user_id.clone(),
-                canister_id: params.publisher_canister_id.clone(),
+                canister_id: "deprecated".to_string(), // Canister ID is not used in this context
                 item_type: item_type.clone(),
                 post_id: params.post_id,
                 video_id: params.video_id.clone(),
@@ -716,8 +604,7 @@ impl Event {
                     )
                     .await
                 {
-                    Ok(true) => {
-                    }
+                    Ok(true) => {}
                     Ok(false) => {
                         // add_user_buffer_items
                         if let Err(e) = ml_feed_cache
@@ -750,69 +637,6 @@ impl Event {
             }
         });
     }
-
-    #[cfg(not(feature = "local-bin"))]
-    pub fn stream_to_firestore(&self, app_state: &AppState) {
-        if self.event.event == "token_creation_completed" {
-            let app_state = app_state.clone();
-            let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
-
-            tokio::spawn(async move {
-                let data = TokenListItem {
-                    user_id: params["user_id"].as_str().unwrap().to_string(),
-                    name: params["name"].as_str().unwrap().to_string(),
-                    token_name: params["token_name"].as_str().unwrap().to_string(),
-                    token_symbol: params["token_symbol"].as_str().unwrap().to_string(),
-                    logo: params["logo"].as_str().unwrap().to_string(),
-                    description: params["description"].as_str().unwrap().to_string(),
-                    created_at: Utc::now(),
-                    link: params["link"].as_str().unwrap().to_string(),
-                    is_nsfw: params["is_nsfw"].as_bool().unwrap(),
-                    nsfw_ec: params["nsfw_ec"].as_str().unwrap().to_string(),
-                    nsfw_gore: params["nsfw_gore"].as_str().unwrap().to_string(),
-                };
-
-                // link is in the format /token/info/NEW_ID/USER_PRICIPAL
-                let parts: Vec<&str> = data.link.split('/').collect();
-                let document_id = parts[3]; // Get the NEW_ID part
-
-                let db = app_state.firestoredb.clone();
-
-                let res: Result<TokenListItem, FirestoreError> = db
-                    .fluent()
-                    .insert()
-                    .into("tokens-list")
-                    .document_id(document_id)
-                    .object(&data)
-                    .execute()
-                    .await;
-                if res.is_err() {
-                    log::error!("Error uploading to Firestore : {:?}", res.err());
-                }
-            });
-        }
-    }
-
-    pub fn handle_login_successful(&self, app_state: &AppState) -> Result<(), anyhow::Error> {
-        if self.event.event == "login_successful" {
-            let params: LoginSuccessfulParams = serde_json::from_str(&self.event.params)?;
-            let bigquery_client = app_state.bigquery_client.clone();
-
-            tokio::spawn(async move {
-                let canister_id = params.canister_id;
-                let user_id = params.user_id;
-
-                if let Err(e) =
-                    login_successful::handle_login_successful(bigquery_client, canister_id, user_id)
-                        .await
-                {
-                    log::error!("Error handling login successful: {:?}", e);
-                }
-            });
-        }
-
-        Ok(())
-    }
 }
 
 async fn stream_to_bigquery(
@@ -837,77 +661,9 @@ async fn stream_to_bigquery(
     }
 }
 
-#[cfg(feature = "local-bin")]
-pub async fn stream_to_bigquery_token_metadata_impl_v2(
-    app_state: &AppState,
-    data: ICPumpTokenMetadata,
-) -> Result<(), anyhow::Error> {
-    Ok(())
-}
-
-#[cfg(not(feature = "local-bin"))]
-pub async fn stream_to_bigquery_token_metadata_impl_v2(
-    app_state: &AppState,
-    data: ICPumpTokenMetadata,
-) -> Result<(), anyhow::Error> {
-    // Upload image to Cloudflare Images and get link
-
-    let link = data.link.clone();
-    let key_id = link.split("/").collect::<Vec<&str>>();
-    let root_id = key_id[3];
-
-    let base64_image_str = data.logo.clone();
-    let base64_image_without_prefix = base64_image_str.replace("data:image/png;base64,", "");
-
-    let cf_images_api_token = env::var("CF_IMAGES_API_TOKEN")?;
-
-    let upload_res = upload_base64_image(
-        CLOUDFLARE_ACCOUNT_ID,
-        cf_images_api_token.as_str(),
-        base64_image_without_prefix.as_str(),
-        root_id,
-    )
-    .await?;
-
-    let logo_link = upload_res.result.variants[0].clone();
-
-    // Stream to BigQuery
-
-    let bq_client = app_state.bigquery_client.clone();
-
-    let query_str = get_icpump_insert_query(
-        data.canister_id.clone(),
-        data.description.clone(),
-        data.host.clone(),
-        data.link.clone(),
-        logo_link,
-        data.token_name.clone(),
-        data.token_symbol.clone(),
-        data.user_id.clone(),
-        data.is_nsfw,
-    );
-
-    let request = QueryRequest {
-        query: query_str.to_string(),
-        ..Default::default()
-    };
-
-    match bq_client
-        .query::<google_cloud_bigquery::query::row::Row>("hot-or-not-feed-intelligence", request)
-        .await
-    {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            log::error!("Error streaming to BigQuery: {:?}", e);
-            Err(anyhow::anyhow!("Error streaming to BigQuery"))
-        }
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UploadVideoInfo {
     pub video_id: String,
-    pub canister_id: String,
     pub post_id: u64,
     pub timestamp: String,
     pub publisher_user_id: String,
@@ -921,7 +677,6 @@ pub async fn upload_video_gcs(
 ) -> Result<Json<serde_json::Value>, AppError> {
     upload_gcs_impl(
         &payload.video_id,
-        &payload.canister_id,
         &payload.publisher_user_id,
         payload.post_id,
         &payload.timestamp,
@@ -940,7 +695,6 @@ pub async fn upload_video_gcs(
 
 pub async fn upload_gcs_impl(
     uid: &str,
-    canister_id: &str,
     publisher_user_id: &str,
     post_id: u64,
     timestamp_str: &str,
@@ -965,7 +719,6 @@ pub async fn upload_gcs_impl(
         .await?;
 
     let mut hashmap = HashMap::new();
-    hashmap.insert("canister_id".to_string(), canister_id.to_string());
     hashmap.insert(
         "publisher_user_id".to_string(),
         publisher_user_id.to_string(),
