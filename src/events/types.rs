@@ -153,43 +153,34 @@ pub struct VideoDurationWatchedPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoDurationWatchedPayloadV2 {
-    #[serde(rename = "publisher_user_id")]
     pub publisher_user_id: Option<Principal>,
-    #[serde(rename = "user_id")]
     pub user_id: Principal,
     #[serde(rename = "is_loggedIn", skip_serializing_if = "Option::is_none")]
     pub is_logged_in: Option<bool>,
-    #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
-    #[serde(rename = "video_id", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub video_id: Option<String>,
-    #[serde(rename = "video_category")]
     pub video_category: String,
-    #[serde(rename = "creator_category")]
     pub creator_category: String,
-    #[serde(rename = "hashtag_count", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub hashtag_count: Option<usize>,
     #[serde(rename = "is_NSFW", skip_serializing_if = "Option::is_none")]
     pub is_nsfw: Option<bool>,
     #[serde(rename = "is_hotorNot", skip_serializing_if = "Option::is_none")]
     pub is_hotor_not: Option<bool>,
-    #[serde(rename = "feed_type")]
     pub feed_type: String,
-    #[serde(rename = "view_count", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub view_count: Option<u64>,
-    #[serde(rename = "like_count", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub like_count: Option<u64>,
-    #[serde(rename = "share_count")]
     pub share_count: u64,
-    #[serde(rename = "percentage_watched")]
     pub percentage_watched: f64,
-    #[serde(rename = "absolute_watched")]
     pub absolute_watched: f64,
-    #[serde(rename = "video_duration")]
     pub video_duration: f64,
-    #[serde(rename = "post_id", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub post_id: Option<u64>,
-    #[serde(rename = "nsfw_probability", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub nsfw_probability: Option<f64>,
 }
 
@@ -286,7 +277,7 @@ pub struct LikeVideoPayloadV2 {
     pub user_id: Principal,
     #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
-    #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     pub video_id: String,
     pub video_category: String,
@@ -301,7 +292,7 @@ pub struct LikeVideoPayloadV2 {
     pub like_count: u64,
     pub share_count: u64,
     pub post_id: u64,
-    #[serde(rename = "nsfw_probability", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub nsfw_probability: Option<f64>,
 }
 
