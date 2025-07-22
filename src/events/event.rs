@@ -188,7 +188,7 @@ impl Event {
 
                 let watch_history_item = MLFeedCacheHistoryItemV2 {
                     publisher_user_id: publisher_user_id.to_string(),
-                    canister_id: "".to_string(),
+                    canister_id: "deprecated".to_string(),
                     item_type: item_type.clone(),
                     post_id,
                     video_id: video_id.clone(),
@@ -342,7 +342,7 @@ impl Event {
 
             let success_history_item = MLFeedCacheHistoryItemV2 {
                 publisher_user_id: params.publisher_user_id.clone(),
-                canister_id: String::new(), // Canister ID is not used in this context
+                canister_id: "deprecated".to_string(), // Canister ID is not used in this context
                 item_type: item_type.clone(),
                 post_id: params.post_id,
                 video_id: params.video_id.clone(),
