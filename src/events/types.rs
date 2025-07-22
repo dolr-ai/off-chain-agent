@@ -694,6 +694,7 @@ impl EventPayload {
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
                     }),
+                    data: Some(serde_json::to_value(payload).unwrap()),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
@@ -702,11 +703,6 @@ impl EventPayload {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                             ),
-                            click_action: Some(format!(
-                                "https://yral.com/hot-or-not/{}/{}",
-                                payload.canister_id.to_text(),
-                                payload.post_id
-                            )),
                             ..Default::default()
                         }),
                         ..Default::default()
@@ -761,6 +757,7 @@ impl EventPayload {
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
                     }),
+                    data: Some(serde_json::to_value(payload).unwrap()),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
@@ -769,11 +766,6 @@ impl EventPayload {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                             ),
-                            click_action: Some(format!(
-                                "https://yral.com/hot-or-not/{}/{}",
-                                payload.canister_id.to_text(),
-                                payload.post_id
-                            )),
                             ..Default::default()
                         }),
                         ..Default::default()
