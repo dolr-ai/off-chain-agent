@@ -15,10 +15,14 @@ use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 use tracing::instrument;
 use yral_ml_feed_cache::consts::{
-    USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2, USER_SUCCESS_HISTORY_CLEAN_SUFFIX_V2,
-    USER_SUCCESS_HISTORY_NSFW_SUFFIX_V2, USER_WATCH_HISTORY_CLEAN_SUFFIX_V2,
-    USER_WATCH_HISTORY_NSFW_SUFFIX_V2, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
+    USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
+    USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_CLEAN_SUFFIX_V2,
+    USER_SUCCESS_HISTORY_NSFW_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX_V2,
+    USER_WATCH_HISTORY_CLEAN_SUFFIX, USER_WATCH_HISTORY_CLEAN_SUFFIX_V2,
+    USER_WATCH_HISTORY_NSFW_SUFFIX, USER_WATCH_HISTORY_NSFW_SUFFIX_V2,
+    USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
 };
+use yral_ml_feed_cache::types::{BufferItem, MLFeedCacheHistoryItem, PlainPostItem};
 use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2, PlainPostItemV2};
 
 pub mod storj;
@@ -150,6 +154,112 @@ impl Event {
                         "Failed to queue video deduplication check for video_id {}: {:?}",
                         video_id, e
                     ),
+                }
+            });
+        }
+    }
+
+    #[deprecated(
+        note = "Use update_watch_history_v2 instead. will be removed post redis migration"
+    )]
+    pub fn update_watch_history(&self, app_state: &AppState) {
+        if self.event.event == "video_duration_watched" {
+            let params: Result<VideoDurationWatchedPayload, _> =
+                serde_json::from_str(&self.event.params);
+
+            let params = match params {
+                Ok(params) => params,
+                Err(e) => {
+                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    return;
+                }
+            };
+
+            let app_state = app_state.clone();
+
+            tokio::spawn(async move {
+                let ml_feed_cache = app_state.ml_feed_cache.clone();
+
+                let percent_watched = params.percentage_watched;
+                let nsfw_probability = params.nsfw_probability.unwrap_or_default();
+
+                let user_canister_id = &params.canister_id;
+                let publisher_canister_id = &params
+                    .publisher_canister_id
+                    .map(|f| f.to_string())
+                    .unwrap_or_default();
+                let post_id = params.post_id.unwrap_or_default();
+                let video_id = params.video_id.unwrap_or_default();
+                let item_type = "video_duration_watched".to_string();
+                let timestamp = std::time::SystemTime::now();
+
+                let watch_history_item = MLFeedCacheHistoryItem {
+                    canister_id: publisher_canister_id.to_string(),
+                    item_type: item_type.clone(),
+                    nsfw_probability: nsfw_probability as f32,
+                    post_id,
+                    video_id: video_id.clone(),
+                    timestamp,
+                    percent_watched: percent_watched as f32,
+                };
+
+                let user_cache_key = format!(
+                    "{}{}",
+                    user_canister_id,
+                    if nsfw_probability <= 0.4 {
+                        USER_WATCH_HISTORY_CLEAN_SUFFIX
+                    } else {
+                        USER_WATCH_HISTORY_NSFW_SUFFIX
+                    }
+                );
+                let res = ml_feed_cache
+                    .add_user_watch_history_items(&user_cache_key, vec![watch_history_item.clone()])
+                    .await;
+                if res.is_err() {
+                    error!("Error adding user watch history items: {:?}", res.err());
+                }
+
+                // Below is for dealing with hotornot evaluator for alloydb
+                // Conditions:
+                // if already present in history, return
+                // else add to history and user buffer
+
+                let plain_key = format!(
+                    "{}{}",
+                    user_canister_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX
+                );
+
+                match ml_feed_cache
+                    .is_user_history_plain_item_exists(
+                        plain_key.as_str(),
+                        PlainPostItem {
+                            canister_id: publisher_canister_id.to_string(),
+                            post_id,
+                        },
+                    )
+                    .await
+                {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        // add_user_buffer_items
+                        if let Err(e) = ml_feed_cache
+                            .add_user_buffer_items(vec![BufferItem {
+                                publisher_canister_id: publisher_canister_id.to_string(),
+                                post_id,
+                                video_id,
+                                item_type,
+                                percent_watched: watch_history_item.percent_watched,
+                                user_canister_id: user_canister_id.to_string(),
+                                timestamp,
+                            }])
+                            .await
+                        {
+                            error!("Error adding user watch history buffer items: {:?}", e);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error checking user watch history plain item: {:?}", e);
+                    }
                 }
             });
         }
@@ -315,6 +425,114 @@ impl Event {
                 }
             });
         }
+    }
+
+    #[deprecated(
+        note = "Use update_success_history_v2 instead. will be removed post redis migration"
+    )]
+    pub fn update_success_history(&self, app_state: &AppState) {
+        let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
+        let app_state = app_state.clone();
+
+        let mut percent_watched = 0.0;
+
+        if self.event.event != "video_duration_watched" && self.event.event != "like_video" {
+            return;
+        }
+        if self.event.event == "video_duration_watched" {
+            percent_watched = params["percentage_watched"].as_f64().unwrap();
+            if percent_watched < 30.0 {
+                return;
+            }
+        }
+
+        let item_type = self.event.event.clone();
+
+        tokio::spawn(async move {
+            let ml_feed_cache = app_state.ml_feed_cache.clone();
+            let user_canister_id = params["canister_id"].as_str().unwrap();
+            let publisher_canister_id = params["publisher_canister_id"].as_str().unwrap();
+            let nsfw_probability = params["nsfw_probability"].as_f64().unwrap_or_default();
+            let post_id = params["post_id"].as_u64().unwrap();
+            let video_id = params["video_id"].as_str().unwrap();
+            let timestamp = std::time::SystemTime::now();
+
+            let success_history_item = MLFeedCacheHistoryItem {
+                canister_id: publisher_canister_id.to_string(),
+                item_type: item_type.clone(),
+                nsfw_probability: nsfw_probability as f32,
+                post_id,
+                video_id: video_id.to_string(),
+                timestamp,
+                percent_watched: percent_watched as f32,
+            };
+
+            let user_cache_key = format!(
+                "{}{}",
+                user_canister_id,
+                if nsfw_probability <= 0.4 {
+                    USER_SUCCESS_HISTORY_CLEAN_SUFFIX
+                } else {
+                    USER_SUCCESS_HISTORY_NSFW_SUFFIX
+                }
+            );
+            let res = app_state
+                .ml_feed_cache
+                .add_user_success_history_items(&user_cache_key, vec![success_history_item.clone()])
+                .await;
+            if res.is_err() {
+                error!("Error adding user success history items: {:?}", res.err());
+            }
+
+            // add to history plain items
+            if item_type == "like_video" {
+                let plain_key = format!(
+                    "{}{}",
+                    user_canister_id, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX
+                );
+
+                match ml_feed_cache
+                    .is_user_history_plain_item_exists(
+                        plain_key.as_str(),
+                        PlainPostItem {
+                            canister_id: publisher_canister_id.to_string(),
+                            post_id,
+                        },
+                    )
+                    .await
+                {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        // add_user_buffer_items
+                        if let Err(e) = ml_feed_cache
+                            .add_user_buffer_items(vec![BufferItem {
+                                publisher_canister_id: publisher_canister_id.to_string(),
+                                post_id,
+                                video_id: video_id.to_string(),
+                                item_type,
+                                percent_watched: percent_watched as f32,
+                                user_canister_id: user_canister_id.to_string(),
+                                timestamp,
+                            }])
+                            .await
+                        {
+                            error!("Error adding user like history buffer items: {:?}", e);
+                        }
+
+                        // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
+                        if let Err(e) = ml_feed_cache
+                            .add_user_history_plain_items(&plain_key, vec![success_history_item])
+                            .await
+                        {
+                            error!("Error adding user like history plain items: {:?}", e);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error checking user like history plain item: {:?}", e);
+                    }
+                }
+            }
+        });
     }
 
     pub fn update_success_history_v2(&self, app_state: &AppState) {

@@ -178,6 +178,9 @@ async fn process_event_impl(
 
     event.check_video_deduplication(&shared_state.clone());
 
+    event.update_watch_history(&shared_state.clone());
+    event.update_success_history(&shared_state.clone());
+
     event.update_watch_history_v2(&shared_state.clone());
     event.update_success_history_v2(&shared_state.clone());
 
