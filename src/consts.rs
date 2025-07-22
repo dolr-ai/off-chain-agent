@@ -62,3 +62,8 @@ pub static STORJ_BACKUP_CANISTER_ACCESS_GRANT: Lazy<String> = Lazy::new(|| {
 });
 
 pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
+
+// Video Generation Constants
+pub const VEO3_PROJECT_ID: &str = "hot-or-not-feed-intelligence";
+pub const VEO3_STORAGE_URI: &str = "gs://yral_ai_generated_videos/veo-output/";
+pub const VEO3_LOCATION: &str = "us-central1";

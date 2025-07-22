@@ -75,7 +75,6 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -4839,7 +4838,6 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.2.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "anyhow",
  "bb8",
@@ -5112,6 +5110,7 @@ dependencies = [
  "utoipa-axum",
  "utoipa-swagger-ui",
  "uuid",
+ "videogen-common",
  "yral-canisters-client",
  "yral-metadata-client",
  "yral-metadata-types 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
@@ -8467,6 +8466,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "videogen-common"
+version = "0.1.0"
+dependencies = [
+ "reqwest 0.12.22",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "walkdir"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9067,7 +9076,6 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "anyhow",
  "candid",
@@ -9139,7 +9147,6 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "candid",
  "log",
@@ -9154,7 +9161,6 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "candid",
  "serde",
@@ -9172,7 +9178,6 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
 dependencies = [
  "ic-agent",
  "k256",

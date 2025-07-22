@@ -50,9 +50,7 @@ pub async fn start_hotornot_job(
         let user_canister_id = user_buffer_item.user_canister_id;
         let publisher_canister_id = user_buffer_item.publisher_canister_id;
         let post_id = user_buffer_item.post_id;
-        let res = inmem_index
-            .entry(user_canister_id)
-            .or_default();
+        let res = inmem_index.entry(user_canister_id).or_default();
         let post_item = PlainPostItem {
             canister_id: publisher_canister_id.clone(),
             post_id,

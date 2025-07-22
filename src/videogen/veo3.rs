@@ -1,0 +1,279 @@
+use base64::Engine;
+use serde::{Deserialize, Serialize};
+use tracing::info;
+use videogen_common::{Veo3AspectRatio, VideoGenError, VideoGenInput, VideoGenResponse};
+
+use crate::app_state::AppState;
+use crate::consts::{VEO3_LOCATION, VEO3_PROJECT_ID, VEO3_STORAGE_URI};
+
+#[derive(Serialize)]
+struct Veo3Request {
+    instances: Vec<Veo3Instance>,
+    parameters: Veo3Parameters,
+}
+
+#[derive(Serialize)]
+struct Veo3Instance {
+    prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    image: Option<Veo3Image>,
+}
+
+#[derive(Serialize)]
+struct Veo3Image {
+    #[serde(rename = "bytesBase64Encoded")]
+    bytes_base64_encoded: String,
+    #[serde(rename = "mimeType")]
+    mime_type: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Veo3Parameters {
+    sample_count: u32,
+    generate_audio: bool,
+    aspect_ratio: String,
+    duration_seconds: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    storage_uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    negative_prompt: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Veo3Response {
+    name: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct Veo3OperationResponse {
+    done: Option<bool>,
+    response: Option<Veo3OperationResult>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Veo3OperationResult {
+    videos: Option<Vec<Veo3Video>>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct Veo3Video {
+    gcs_uri: String,
+}
+
+pub async fn generate(
+    input: VideoGenInput,
+    app_state: &AppState,
+) -> Result<VideoGenResponse, VideoGenError> {
+    let (prompt, negative_prompt, image, aspect_ratio, duration_seconds, generate_audio) =
+        match input {
+            VideoGenInput::Veo3 {
+                prompt,
+                negative_prompt,
+                image,
+                aspect_ratio,
+                duration_seconds,
+                generate_audio,
+            } => (
+                prompt,
+                negative_prompt,
+                image,
+                aspect_ratio,
+                duration_seconds,
+                generate_audio,
+            ),
+            _ => {
+                return Err(VideoGenError::InvalidInput(
+                    "Invalid input type for Veo3 provider".to_string(),
+                ))
+            }
+        };
+
+    // Get access token using app_state
+    let access_token = app_state
+        .get_access_token(&["https://www.googleapis.com/auth/cloud-platform"])
+        .await;
+
+    let model_id = "veo-3.0-generate-preview";
+    let url = format!(
+        "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:predictLongRunning",
+        VEO3_LOCATION, VEO3_PROJECT_ID, VEO3_LOCATION, model_id
+    );
+
+    // Convert aspect ratio to string
+    let aspect_ratio_str = match aspect_ratio {
+        Veo3AspectRatio::Ratio16x9 => "16:9",
+        Veo3AspectRatio::Ratio9x16 => "9:16",
+    };
+
+    // Build instance
+    let mut instance = Veo3Instance {
+        prompt: prompt.clone(),
+        image: None,
+    };
+
+    // Add image if provided
+    if let Some(img) = image {
+        let base64_engine = base64::engine::general_purpose::STANDARD;
+        let encoded = base64_engine.encode(&img.data);
+        instance.image = Some(Veo3Image {
+            bytes_base64_encoded: encoded,
+            mime_type: img.mime_type,
+        });
+    }
+
+    // Build request
+    let request = Veo3Request {
+        instances: vec![instance],
+        parameters: Veo3Parameters {
+            sample_count: 1,
+            generate_audio,
+            aspect_ratio: aspect_ratio_str.to_string(),
+            duration_seconds,
+            storage_uri: Some(VEO3_STORAGE_URI.to_string()),
+            negative_prompt,
+        },
+    };
+
+    // Make API call
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("Content-Type", "application/json; charset=utf-8")
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| VideoGenError::NetworkError(e.to_string()))?;
+
+    if !response.status().is_success() {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(VideoGenError::ProviderError(format!(
+            "Veo3 API error: {}",
+            error_text
+        )));
+    }
+
+    let veo_response: Veo3Response = response
+        .json()
+        .await
+        .map_err(|e| VideoGenError::ProviderError(format!("Failed to parse response: {}", e)))?;
+
+    info!(
+        "Video generation started with operation: {}",
+        veo_response.name
+    );
+
+    // Poll for completion
+    let video_url = poll_for_completion(&veo_response.name, &access_token).await?;
+
+    Ok(VideoGenResponse {
+        operation_id: veo_response.name.clone(),
+        video_url,
+        provider: "veo3".to_string(),
+    })
+}
+
+async fn poll_for_completion(
+    operation_name: &str,
+    access_token: &str,
+) -> Result<String, VideoGenError> {
+    let model_id = "veo-3.0-generate-preview";
+    let poll_url = format!(
+        "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:fetchPredictOperation",
+        VEO3_LOCATION, VEO3_PROJECT_ID, VEO3_LOCATION, model_id
+    );
+
+    let client = reqwest::Client::new();
+    let max_attempts = 120; // 10 minutes with 5 second intervals
+    let poll_interval = std::time::Duration::from_secs(5);
+
+    info!("Starting to poll for video generation completion");
+
+    for attempt in 0..max_attempts {
+        let request_body = serde_json::json!({
+            "operationName": operation_name
+        });
+
+        let response = client
+            .post(&poll_url)
+            .header("Authorization", format!("Bearer {}", access_token))
+            .header("Content-Type", "application/json; charset=utf-8")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| VideoGenError::NetworkError(format!("Failed to poll operation: {}", e)))?;
+
+        if !response.status().is_success() {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(VideoGenError::ProviderError(format!(
+                "Failed to check operation status: {}",
+                error_text
+            )));
+        }
+
+        let operation_status: Veo3OperationResponse = response.json().await.map_err(|e| {
+            VideoGenError::ProviderError(format!("Failed to parse operation response: {}", e))
+        })?;
+
+        if operation_status.done == Some(true) {
+            if let Some(result) = operation_status.response {
+                if let Some(videos) = result.videos {
+                    if let Some(first_video) = videos.first() {
+                        // Convert GCS URL to public HTTPS URL
+                        let public_url = convert_gcs_to_public_url(&first_video.gcs_uri)?;
+                        info!(
+                            "Video generation completed. GCS URL: {} -> Public URL: {}",
+                            first_video.gcs_uri, public_url
+                        );
+                        return Ok(public_url);
+                    }
+                }
+            }
+            return Err(VideoGenError::ProviderError(
+                "Operation completed but no video URL found".to_string(),
+            ));
+        }
+
+        // Still processing, log progress every 6 attempts (30 seconds)
+        if attempt > 0 && attempt % 6 == 0 {
+            info!(
+                "Video generation still in progress... ({} seconds elapsed)",
+                attempt * 5
+            );
+        }
+
+        // Wait before next poll
+        if attempt < max_attempts - 1 {
+            tokio::time::sleep(poll_interval).await;
+        }
+    }
+
+    Err(VideoGenError::ProviderError(
+        "Video generation timed out after 10 minutes".to_string(),
+    ))
+}
+
+/// Convert GCS URL (gs://) to public HTTPS URL
+fn convert_gcs_to_public_url(gcs_url: &str) -> Result<String, VideoGenError> {
+    // Check if it's a GCS URL
+    if !gcs_url.starts_with("gs://") {
+        return Err(VideoGenError::ProviderError(format!(
+            "Invalid GCS URL format: {}",
+            gcs_url
+        )));
+    }
+
+    // Remove the gs:// prefix and convert to public URL
+    let path = gcs_url.strip_prefix("gs://").unwrap();
+    let public_url = format!("https://storage.googleapis.com/{}", path);
+
+    Ok(public_url)
+}

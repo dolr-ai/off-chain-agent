@@ -99,22 +99,23 @@ async-channel = "2.3.1"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
-    "full",
-] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-
-# Local (Path) - uncomment to use local development versions
-# yral-canisters-client = { path = "../yral-common/canisters-client", features = [
+# yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
 #     "full",
 # ] }
-# yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
-# yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
-# yral-qstash-types = { path = "../yral-common/qstash-types" }
-# yral-metrics = { path = "../yral-common/metrics" }
+# yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
+# yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
+# yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
+# yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+
+# Local (Path) - uncomment to use local development versions
+yral-canisters-client = { path = "../yral-common/canisters-client", features = [
+    "full",
+] }
+yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
+yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
+yral-qstash-types = { path = "../yral-common/qstash-types" }
+yral-metrics = { path = "../yral-common/metrics" }
+videogen-common = { path = "../yral-common/videogen-common" }
 
 [build-dependencies]
 tonic-build = "0.13.0"

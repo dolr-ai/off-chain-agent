@@ -1,0 +1,10 @@
+use std::sync::Arc;
+use utoipa_axum::{router::OpenApiRouter, routes};
+
+use crate::{app_state::AppState, videogen::handlers};
+
+pub fn videogen_router<S>(state: Arc<AppState>) -> OpenApiRouter<S> {
+    OpenApiRouter::new()
+        .routes(routes!(handlers::generate_video))
+        .with_state(state)
+}
