@@ -91,18 +91,5 @@ pub async fn handle_delete_user(
         )
     })?;
 
-    // Step 8: Add to deleted canisters in SpaceTimeDB if user_principal is provided
-    #[cfg(not(feature = "local-bin"))]
-    {
-        if let Err(e) = state
-            .canisters_ctx
-            .add_deleted_canister(user_canister, user_principal)
-            .await
-        {
-            log::error!("Failed to add deleted canister to SpaceTimeDB: {}", e);
-            // Don't fail the operation if SpaceTimeDB call fails
-        }
-    }
-
     Ok((StatusCode::OK, "User deleted successfully".to_string()))
 }

@@ -153,9 +153,6 @@ impl<'a> VideoHashDuplication<'a> {
         self.store_videohash_original(bigquery_client, video_id, &video_hash.hash)
             .await?;
 
-        // TODO: the following call will be replaced with spacetimedb in
-        // https://github.com/dolr-ai/product-roadmap/issues/569
-
         // Call the video hash indexer API to check for duplicates
         let client = reqwest::Client::new();
         let response = client

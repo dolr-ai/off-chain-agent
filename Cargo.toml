@@ -84,7 +84,6 @@ tracing-futures = "0.2.5"
 regex = "1.11.1"
 google-cloud-alloydb-v1 = "0.2.0"
 google-cloud-auth = "0.19.0"
-yral-spacetime-bindings = { git = "https://github.com/dolr-ai/yral-spacetime", branch = "main", version = "0.1.0" }
 rand = "0.9.1"
 redis = { version = "0.29.1", features = [
     "tokio-rustls-comp",
@@ -93,8 +92,6 @@ redis = { version = "0.29.1", features = [
 ] }
 bb8 = "0.9.0"
 bb8-redis = "0.21.0"
-fasthash = { version = "0.4.0", optional = true }
-spacetimedb-sdk = "1.2.0"
 async-channel = "2.3.1"
 ic-cdk = "0.17.2"
 
@@ -127,5 +124,3 @@ path = "src/main.rs"
 [features]
 local-bin = []
 use-local-agent = []
-# use-uplink = ["dep:uplink"]
-prod-bin = ["dep:fasthash"]

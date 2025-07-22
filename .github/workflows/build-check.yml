@@ -48,7 +48,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --release --target x86_64-unknown-linux-gnu --features prod-bin
+        run: cargo build --release --target x86_64-unknown-linux-gnu
       # - name: Run tests
       #   run: cargo test --verbose
       - run: touch .empty
