@@ -878,7 +878,7 @@ pub fn deserialize_event_payload(
 }
 
 #[test]
-fn test(){
+fn test_payload_to_string_map(){
     let payload = VideoUploadSuccessfulPayload{
         canister_id: Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
         post_id: 123,
