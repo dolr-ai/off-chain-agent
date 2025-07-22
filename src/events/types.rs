@@ -1,6 +1,7 @@
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use utoipa::ToSchema;
 use yral_canisters_client::notification_store::{
     LikedPayload, NotificationStore, NotificationType, VideoUploadPayload,
@@ -660,6 +661,28 @@ pub enum EventPayload {
 ///
 
 // TODO: canister_id is used
+
+/// Helper function to convert a payload to a HashMap with all values as strings
+fn payload_to_string_map<T: Serialize>(payload: &T) -> HashMap<String, String> {
+    let json_value = serde_json::to_value(payload).unwrap();
+    let mut map = HashMap::new();
+    
+    if let Value::Object(obj) = json_value {
+        for (key, value) in obj {
+            let string_value = match value {
+                Value::String(s) => s,
+                Value::Bool(b) => b.to_string(),
+                Value::Number(n) => n.to_string(),
+                Value::Null => "null".to_string(),
+                _ => value.to_string(), // For arrays and objects, use JSON representation
+            };
+            map.insert(key, string_value);
+        }
+    }
+    
+    map
+}
+
 impl EventPayload {
     pub async fn send_notification(&self, app_state: &AppState) {
         match self {
@@ -674,7 +697,7 @@ impl EventPayload {
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
                     }),
-                    data: Some(serde_json::to_value(payload).unwrap()),
+                    data: Some(serde_json::to_value(payload_to_string_map(payload)).unwrap()),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
@@ -737,7 +760,7 @@ impl EventPayload {
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
                     }),
-                    data: Some(serde_json::to_value(payload).unwrap()),
+                    data: Some(serde_json::to_value(payload_to_string_map(payload)).unwrap()),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
