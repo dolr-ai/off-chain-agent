@@ -82,8 +82,6 @@ async fn main_impl() -> Result<()> {
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
 
-    let admin_routes = Router::new().with_state(shared_state.clone());
-
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/report-approved", post(report_approved_handler))
@@ -92,7 +90,6 @@ async fn main_impl() -> Result<()> {
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
-        .nest("/admin", admin_routes)
         .nest("/qstash", qstash_routes)
         .fallback_service(router)
         .layer(CorsLayer::permissive())

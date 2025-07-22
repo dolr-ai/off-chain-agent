@@ -282,35 +282,24 @@ pub struct LikeVideoPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LikeVideoPayloadV2 {
-    #[serde(rename = "publisher_user_id")]
     pub publisher_user_id: Principal,
-    #[serde(rename = "user_id")]
     pub user_id: Principal,
     #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
     #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
-    #[serde(rename = "video_id")]
     pub video_id: String,
-    #[serde(rename = "video_category")]
     pub video_category: String,
-    #[serde(rename = "creator_category")]
     pub creator_category: String,
-    #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
     #[serde(rename = "is_NSFW")]
     pub is_nsfw: bool,
     #[serde(rename = "is_hotorNot")]
     pub is_hotor_not: bool,
-    #[serde(rename = "feed_type")]
     pub feed_type: String,
-    #[serde(rename = "view_count")]
     pub view_count: u64,
-    #[serde(rename = "like_count")]
     pub like_count: u64,
-    #[serde(rename = "share_count")]
     pub share_count: u64,
-    #[serde(rename = "post_id")]
     pub post_id: u64,
     #[serde(rename = "nsfw_probability", skip_serializing_if = "Option::is_none")]
     pub nsfw_probability: Option<f64>,

@@ -1,6 +1,4 @@
 use crate::events::types::{LikeVideoPayloadV2, VideoDurationWatchedPayloadV2};
-
-use super::types::{LikeVideoPayload, VideoDurationWatchedPayload};
 use serde_json;
 
 #[derive(Debug)]

@@ -90,7 +90,7 @@ pub async fn start_hotornot_job_v2(
             queries.push(query);
 
             plain_post_items.push(MLFeedCacheHistoryItemV2 {
-                canister_id: "".to_string(),
+                canister_id: "deprecated".to_string(),
                 post_id: inmem_buffer_item.post_id,
                 video_id: inmem_buffer_item.video_id.clone(),
                 item_type: "video_duration_watched".to_string(),
