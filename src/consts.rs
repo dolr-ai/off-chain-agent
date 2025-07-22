@@ -63,6 +63,21 @@ pub static STORJ_BACKUP_CANISTER_ACCESS_GRANT: Lazy<String> = Lazy::new(|| {
 
 pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
 
+// Rate Limiting Constants
+pub static RATE_LIMITS_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
+    "bnz7o-iuaaa-aaaaa-qaaaa-cai"
+        .parse()
+        .expect("Rate limits canister ID to be valid")
+});
+pub const VIDEOGEN_RATE_LIMIT_PROPERTY: &str = "VIDEOGEN";
+
+// User Info Service Constants
+pub static USER_INFO_SERVICE_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
+    "bd3sg-teaaa-aaaaa-qaaba-cai"
+        .parse()
+        .expect("User info service canister ID to be valid")
+});
+
 // Video Generation Constants
 pub const VEO3_PROJECT_ID: &str = "hot-or-not-feed-intelligence";
 pub const VEO3_STORAGE_URI: &str = "gs://yral_ai_generated_videos/veo-output/";

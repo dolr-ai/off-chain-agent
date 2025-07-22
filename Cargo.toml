@@ -110,6 +110,7 @@ async-channel = "2.3.1"
 # Local (Path) - uncomment to use local development versions
 yral-canisters-client = { path = "../yral-common/canisters-client", features = [
     "full",
+    "rate-limits",
 ] }
 yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
 yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
