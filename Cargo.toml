@@ -125,6 +125,10 @@ tonic-build = "0.13.0"
 name = "icp-off-chain-agent"
 path = "src/main.rs"
 
+[[bin]]
+name = "generate_jwt"
+path = "src/bin/generate_jwt.rs"
+
 [features]
 local-bin = []
 use-local-agent = []

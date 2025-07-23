@@ -1,8 +1,13 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    Json,
+};
 use std::sync::Arc;
 
 use super::rate_limit::verify_rate_limit;
 use crate::app_state::AppState;
+use crate::auth::verify_jwt_from_header;
 
 /// Generate a video using the specified provider
 #[utoipa::path(
@@ -12,20 +17,51 @@ use crate::app_state::AppState;
     responses(
         (status = 200, description = "Video generation started successfully", body = videogen_common::VideoGenResponse),
         (status = 400, description = "Invalid input", body = videogen_common::VideoGenError),
-        (status = 401, description = "Authentication failed", body = videogen_common::VideoGenError),
+        (status = 401, description = "Authentication failed - Bearer token required", body = videogen_common::VideoGenError),
         (status = 429, description = "Rate limit exceeded", body = videogen_common::VideoGenError),
         (status = 502, description = "Provider error", body = videogen_common::VideoGenError),
         (status = 503, description = "Service unavailable", body = videogen_common::VideoGenError),
+    ),
+    security(
+        ("Bearer" = [])
     ),
     tag = "VideoGen"
 )]
 pub async fn generate_video(
     State(app_state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(request): Json<videogen_common::VideoGenRequest>,
 ) -> Result<
     Json<videogen_common::VideoGenResponse>,
     (StatusCode, Json<videogen_common::VideoGenError>),
 > {
+    // Verify JWT token
+    let jwt_public_key = std::env::var("JWT_PUBLIC_KEY_PEM").map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(videogen_common::VideoGenError::AuthError),
+        )
+    })?;
+
+    let jwt_aud = std::env::var("JWT_AUD").map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(videogen_common::VideoGenError::AuthError),
+        )
+    })?;
+
+    verify_jwt_from_header(&jwt_public_key, jwt_aud, &headers).map_err(|(_, status)| {
+        (
+            StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED),
+            Json(videogen_common::VideoGenError::AuthError),
+        )
+    })?;
+
+    log::info!(
+        "agent princ {:?}",
+        app_state.agent.get_principal().unwrap().to_text()
+    );
+
     // Verify rate limit for the user
     let _user_principal = verify_rate_limit(request.principal, &app_state)
         .await

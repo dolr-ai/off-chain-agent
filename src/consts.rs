@@ -65,7 +65,7 @@ pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
 
 // Rate Limiting Constants
 pub static RATE_LIMITS_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
-    "bnz7o-iuaaa-aaaaa-qaaaa-cai"
+    "uk5da-6iaaa-aaaab-qadja-cai" // TODO: replace with actual rate limits canister ID
         .parse()
         .expect("Rate limits canister ID to be valid")
 });
@@ -73,7 +73,7 @@ pub const VIDEOGEN_RATE_LIMIT_PROPERTY: &str = "VIDEOGEN";
 
 // User Info Service Constants
 pub static USER_INFO_SERVICE_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
-    "bd3sg-teaaa-aaaaa-qaaba-cai"
+    "ivkka-7qaaa-aaaas-qbg3q-cai"
         .parse()
         .expect("User info service canister ID to be valid")
 });
