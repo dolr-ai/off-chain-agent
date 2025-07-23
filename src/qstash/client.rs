@@ -291,4 +291,21 @@ impl QStashClient {
 
         Ok(())
     }
+
+    pub async fn prune_notification_store(&self) -> anyhow::Result<()> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/prune_notification_store").unwrap();
+
+        let url = self.base_url.join(&format!("schedules/{}", off_chain_ep))?;
+        let req = serde_json::json!({});
+
+        self.client
+            .post(url)
+            .header("Upstash-Cron", "0 0 */30 * *")
+            .header(CONTENT_TYPE, "application/json")
+            .json(&req)
+            .send()
+            .await?;
+
+        Ok(())
+    }
 }
