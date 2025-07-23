@@ -2,14 +2,8 @@ use candid::Principal;
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
-pub const STDB_URL: &str = "https://maincloud.spacetimedb.com";
-
 pub const DEDUP_INDEX_MODULE_IDENTITY: &str = "yral-dedup-index";
 pub const DELETED_CANISTERS_MODULE_IDENTITY: &str = "yral-canisters";
-
-pub static STDB_ACCESS_TOKEN: Lazy<String> = Lazy::new(|| {
-    std::env::var("STDB_ADMIN_ACCESS_TOKEN").expect("STDB_ADMIN_ACCESS_TOKEN to be set")
-});
 
 pub static DEDUP_INDEX_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
     "4drz6-pyaaa-aaaas-qbfoa-cai"

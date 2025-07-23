@@ -1,4 +1,3 @@
-use crate::canister::utils::deleted_canister::WrappedContextCanisters;
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
@@ -51,7 +50,6 @@ pub struct AppState {
     pub canister_backup_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
     pub notification_client: NotificationClient,
-    pub canisters_ctx: WrappedContextCanisters,
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_redis: YralAuthRedis,
 }
@@ -85,7 +83,6 @@ impl AppState {
             notification_client: NotificationClient::new(
                 env::var("YRAL_METADATA_NOTIFICATION_API_KEY").unwrap_or_default(),
             ),
-            canisters_ctx: init_canisters_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             yral_auth_redis: YralAuthRedis::init(&app_config).await,
         }
@@ -254,8 +251,4 @@ async fn init_canister_backup_redis_pool() -> RedisPool {
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
     RedisPool::builder().build(manager).await.unwrap()
-}
-
-pub async fn init_canisters_ctx() -> WrappedContextCanisters {
-    WrappedContextCanisters::new().expect("Canisters context to be connected")
 }
