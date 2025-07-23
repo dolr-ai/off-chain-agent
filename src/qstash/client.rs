@@ -308,6 +308,7 @@ impl QStashClient {
         self.client
             .post(url)
             .header("Upstash-Cron", "0 0 */30 * *")
+            .header("Upstash-Method", "POST")
             .header(CONTENT_TYPE, "application/json")
             .json(&req)
             .send()
