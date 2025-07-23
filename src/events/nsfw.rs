@@ -244,7 +244,8 @@ async fn duplicate_to_storj(
         is_nsfw,
         metadata: [
             ("post_id".into(), video_info.post_id.to_string()),
-            ("canister_id".into(), video_info.canister_id),
+            // TODO: confirm with Tushar about this
+            // ("canister_id".into(), video_info.canister_id),
             ("timestamp".into(), video_info.timestamp),
         ]
         .into(),

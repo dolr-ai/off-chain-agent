@@ -24,6 +24,7 @@ use crate::{
 
 use super::{types, verify, DeletePostRequest};
 
+// TODO: canister_id still being used
 #[utoipa::path(
     delete,
     path = "",
