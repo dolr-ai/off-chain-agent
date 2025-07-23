@@ -37,10 +37,17 @@ impl QStashClient {
             .expect("Failed to create QStash client");
         let base_url = Url::parse("https://qstash.upstash.io/v2/").unwrap();
 
-        Self {
+        let qstash_client = Self {
             client,
             base_url: Arc::new(base_url),
-        }
+        };
+
+        let qstash_client_clone = qstash_client.clone();
+        tokio::spawn(async move {
+            qstash_client_clone.prune_notification_store().await.unwrap(); // register cron????
+        });
+
+        qstash_client
     }
 
     #[instrument(skip(self))]
