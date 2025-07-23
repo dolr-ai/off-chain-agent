@@ -619,7 +619,8 @@ pub struct SatsWithdrawnPayload {
 // Unified wrapper enum so callers can work with a single return type
 // ----------------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum EventPayload {
     VideoDurationWatched(VideoDurationWatchedPayload),
     VideoViewed(VideoViewedPayload),
@@ -677,7 +678,7 @@ impl EventPayload {
                         ),
                     }),
                     data: Some(json!({
-                        "payload": serde_json::to_string(payload).unwrap()
+                        "payload": serde_json::to_string(self).unwrap()
                     })),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
@@ -742,7 +743,7 @@ impl EventPayload {
                         ),
                     }),
                     data: Some(json!({
-                        "payload": serde_json::to_string(payload).unwrap()
+                        "payload": serde_json::to_string(self).unwrap()
                     })),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
@@ -877,6 +878,8 @@ fn test_data_payload_serialization(){
         country: None,
     };
 
+    let data = EventPayload::VideoUploadSuccessful(payload.clone());
+
     let notif_payload = SendNotificationReq {
         notification: Some(NotificationPayload {
             title: Some("test".to_string()),
@@ -886,7 +889,7 @@ fn test_data_payload_serialization(){
             ),
         }),
         data: Some(json!({
-            "payload": serde_json::to_string(&payload).unwrap()
+            "payload": serde_json::to_string(&data).unwrap()
         })),
         android: Some(AndroidConfig {
             notification: Some(AndroidNotification {
@@ -937,5 +940,7 @@ fn test_data_payload_serialization(){
 
     let deserialized_payload: SendNotificationReq = serde_json::from_str(&stringed_payload).unwrap();
 
-    assert!(deserialized_payload.data.unwrap()["payload"].is_string());
+    assert!(deserialized_payload.clone().data.unwrap()["payload"].is_string());
+
+    println!("{:?}", deserialized_payload.data.unwrap()["payload"]);
 }
