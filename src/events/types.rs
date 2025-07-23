@@ -662,27 +662,6 @@ pub enum EventPayload {
 
 // TODO: canister_id is used
 
-/// Helper function to convert a payload to a HashMap with all values as strings
-fn payload_to_string_map<T: Serialize>(payload: &T) -> HashMap<String, String> {
-    let json_value = serde_json::to_value(payload).unwrap();
-    let mut map = HashMap::new();
-    
-    if let Value::Object(obj) = json_value {
-        for (key, value) in obj {
-            let string_value = match value {
-                Value::String(s) => s,
-                Value::Bool(b) => b.to_string(),
-                Value::Number(n) => n.to_string(),
-                Value::Null => "null".to_string(),
-                _ => value.to_string(), // For arrays and objects, use JSON representation
-            };
-            map.insert(key, string_value);
-        }
-    }
-    
-    map
-}
-
 impl EventPayload {
     pub async fn send_notification(&self, app_state: &AppState) {
         match self {
@@ -697,7 +676,9 @@ impl EventPayload {
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
                     }),
-                    data: Some(serde_json::to_value(payload_to_string_map(payload)).unwrap()),
+                    data: Some(json!({
+                        "payload": serde_json::to_string(payload).unwrap()
+                    })),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
@@ -760,7 +741,9 @@ impl EventPayload {
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
                     }),
-                    data: Some(serde_json::to_value(payload_to_string_map(payload)).unwrap()),
+                    data: Some(json!({
+                        "payload": serde_json::to_string(payload).unwrap()
+                    })),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
@@ -878,7 +861,7 @@ pub fn deserialize_event_payload(
 }
 
 #[test]
-fn test_payload_to_string_map(){
+fn test_data_payload_serialization(){
     let payload = VideoUploadSuccessfulPayload{
         canister_id: Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
         post_id: 123,
@@ -902,7 +885,9 @@ fn test_payload_to_string_map(){
                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
             ),
         }),
-        data: Some(serde_json::to_value(payload_to_string_map(&payload)).unwrap()),
+        data: Some(json!({
+            "payload": serde_json::to_string(&payload).unwrap()
+        })),
         android: Some(AndroidConfig {
             notification: Some(AndroidNotification {
                 icon: Some(
@@ -952,7 +937,5 @@ fn test_payload_to_string_map(){
 
     let deserialized_payload: SendNotificationReq = serde_json::from_str(&stringed_payload).unwrap();
 
-    let data = serde_json::from_value::<HashMap<String, String>>(deserialized_payload.data.unwrap()).unwrap();
-
-    println!("{:?}", data);
+    assert!(deserialized_payload.data.unwrap()["payload"].is_string());
 }
