@@ -142,42 +142,51 @@ pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
 }
 
 pub async fn init_agent() -> Agent {
-    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
+    // #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
+    // {
+    let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+
+    // let identity = match ic_agent::identity::BasicIdentity::from_pem(
+    //     stringreader::StringReader::new(pk.as_str()),
+    // ) {
+    //     Ok(identity) => identity,
+    //     Err(err) => {
+    //         panic!("Unable to create identity, error: {:?}", err);
+    //     }
+    // };
+
+    let identity = match ic_agent::identity::Secp256k1Identity::from_pem(
+        stringreader::StringReader::new(pk.as_str()),
+    ) {
+        Ok(identity) => identity,
+        Err(err) => {
+            panic!("Unable to create identity, error: {:?}", err);
+        }
+    };
+
+    match Agent::builder()
+        .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
+        .with_identity(identity)
+        .build()
     {
-        let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
-
-        let identity = match ic_agent::identity::BasicIdentity::from_pem(
-            stringreader::StringReader::new(pk.as_str()),
-        ) {
-            Ok(identity) => identity,
-            Err(err) => {
-                panic!("Unable to create identity, error: {:?}", err);
-            }
-        };
-
-        match Agent::builder()
-            .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
-            .with_identity(identity)
-            .build()
-        {
-            Ok(agent) => agent,
-            Err(err) => {
-                panic!("Unable to create agent, error: {:?}", err);
-            }
+        Ok(agent) => agent,
+        Err(err) => {
+            panic!("Unable to create agent, error: {:?}", err);
         }
     }
+    // }
 
-    #[cfg(any(feature = "local-bin", feature = "use-local-agent"))]
-    {
-        let agent = Agent::builder()
-            .with_url("https://ic0.app")
-            .build()
-            .unwrap();
+    // #[cfg(any(feature = "local-bin", feature = "use-local-agent"))]
+    // {
+    //     let agent = Agent::builder()
+    //         .with_url("https://ic0.app")
+    //         .build()
+    //         .unwrap();
 
-        // agent.fetch_root_key().await.unwrap();
+    //     // agent.fetch_root_key().await.unwrap();
 
-        agent
-    }
+    //     agent
+    // }
 }
 
 pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {

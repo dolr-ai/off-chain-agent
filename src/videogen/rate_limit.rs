@@ -28,35 +28,35 @@ pub async fn verify_rate_limit(
     // Get user session type to determine if registered
     let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &app_state.agent);
 
-    // let is_registered = match user_info_service
-    //     .get_session_type_principal(user_principal)
-    //     .await
-    // {
-    //     Ok(result) => match result {
-    //         yral_canisters_client::user_info_service::Result2::Ok(session_type) => {
-    //             matches!(session_type, SessionType::RegisteredSession)
-    //         }
-    //         yral_canisters_client::user_info_service::Result2::Err(e) => {
-    //             log::warn!(
-    //                 "Failed to get session type for principal {}: {}",
-    //                 user_principal,
-    //                 e
-    //             );
-    //             // If we can't determine session type, treat as unregistered
-    //             false
-    //         }
-    //     },
-    //     Err(e) => {
-    //         // If the service is unavailable, we could either fail or continue with unregistered
-    //         // For now, let's log and continue as unregistered
-    //         log::error!(
-    //             "Failed to get session type for principal {}: {}",
-    //             user_principal,
-    //             e
-    //         );
-    //         false
-    //     }
-    // };
+    let is_registered = match user_info_service
+        .get_user_session_type(user_principal)
+        .await
+    {
+        Ok(result) => match result {
+            yral_canisters_client::user_info_service::Result2::Ok(session_type) => {
+                matches!(session_type, SessionType::RegisteredSession)
+            }
+            yral_canisters_client::user_info_service::Result2::Err(e) => {
+                log::warn!(
+                    "Failed to get session type for principal {}: {}",
+                    user_principal,
+                    e
+                );
+                // If we can't determine session type, treat as unregistered
+                false
+            }
+        },
+        Err(e) => {
+            // If the service is unavailable, we could either fail or continue with unregistered
+            // For now, let's log and continue as unregistered
+            log::error!(
+                "Failed to get session type for principal {}: {}",
+                user_principal,
+                e
+            );
+            false
+        }
+    };
 
     // Create rate limits client
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
@@ -75,7 +75,7 @@ pub async fn verify_rate_limit(
         .increment_request_count(
             user_principal,
             VIDEOGEN_RATE_LIMIT_PROPERTY.to_string(),
-            false,
+            is_registered,
         )
         .await
         .map_err(|e| {

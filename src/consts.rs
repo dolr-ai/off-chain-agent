@@ -65,7 +65,7 @@ pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
 
 // Rate Limiting Constants
 pub static RATE_LIMITS_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
-    "uk5da-6iaaa-aaaab-qadja-cai" // TODO: replace with actual rate limits canister ID
+    "h2jgv-ayaaa-aaaas-qbh4a-cai"
         .parse()
         .expect("Rate limits canister ID to be valid")
 });

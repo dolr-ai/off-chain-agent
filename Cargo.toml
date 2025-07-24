@@ -116,7 +116,9 @@ yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed
 yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
 yral-qstash-types = { path = "../yral-common/qstash-types" }
 yral-metrics = { path = "../yral-common/metrics" }
-videogen-common = { path = "../yral-common/videogen-common" }
+videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
+yral-identity = { path = "../yral-common/identity" }
+num-bigint = "0.4"
 
 [build-dependencies]
 tonic-build = "0.13.0"

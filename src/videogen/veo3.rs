@@ -1,5 +1,6 @@
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tracing::info;
 use videogen_common::{Veo3AspectRatio, VideoGenError, VideoGenInput, VideoGenResponse};
 
@@ -48,11 +49,16 @@ struct Veo3Response {
 #[derive(Deserialize, Debug)]
 struct Veo3OperationResponse {
     done: Option<bool>,
-    response: Option<Veo3OperationResult>,
+    response: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, Debug)]
-struct Veo3OperationResult {
+#[serde(rename_all = "camelCase")]
+struct Veo3GenerateVideoResponse {
+    #[serde(rename = "@type")]
+    type_field: String,
+    rai_media_filtered_count: Option<i32>,
+    rai_media_filtered_reasons: Option<Vec<String>>,
     videos: Option<Vec<Veo3Video>>,
 }
 
@@ -60,6 +66,7 @@ struct Veo3OperationResult {
 #[serde(rename_all = "camelCase")]
 struct Veo3Video {
     gcs_uri: String,
+    mime_type: Option<String>,
 }
 
 pub async fn generate(
@@ -115,10 +122,8 @@ pub async fn generate(
 
     // Add image if provided
     if let Some(img) = image {
-        let base64_engine = base64::engine::general_purpose::STANDARD;
-        let encoded = base64_engine.encode(&img.data);
         instance.image = Some(Veo3Image {
-            bytes_base64_encoded: encoded,
+            bytes_base64_encoded: img.data,
             mime_type: img.mime_type,
         });
     }
@@ -219,26 +224,73 @@ async fn poll_for_completion(
             )));
         }
 
-        let operation_status: Veo3OperationResponse = response.json().await.map_err(|e| {
-            VideoGenError::ProviderError(format!("Failed to parse operation response: {}", e))
+        let resjson = response.json::<Value>().await.map_err(|e| {
+            VideoGenError::ProviderError(format!("Failed to parse response: {}", e))
         })?;
 
+        log::debug!("Operation status response: {:?}", resjson);
+
+        let operation_status: Veo3OperationResponse = serde_json::from_value(resjson.clone())
+            .map_err(|e| {
+                VideoGenError::ProviderError(format!("Failed to parse operation response: {}", e))
+            })?;
+
         if operation_status.done == Some(true) {
-            if let Some(result) = operation_status.response {
-                if let Some(videos) = result.videos {
-                    if let Some(first_video) = videos.first() {
-                        // Convert GCS URL to public HTTPS URL
-                        let public_url = convert_gcs_to_public_url(&first_video.gcs_uri)?;
-                        info!(
-                            "Video generation completed. GCS URL: {} -> Public URL: {}",
-                            first_video.gcs_uri, public_url
+            if let Some(result_value) = operation_status.response {
+                // Parse the response as Veo3GenerateVideoResponse
+                match serde_json::from_value::<Veo3GenerateVideoResponse>(result_value.clone()) {
+                    Ok(video_response) => {
+                        // Check if content was filtered
+                        if let Some(reasons) = video_response.rai_media_filtered_reasons {
+                            if !reasons.is_empty() {
+                                let reason_text = reasons.join("; ");
+                                return Err(VideoGenError::InvalidInput(format!(
+                                    "Content was filtered by Responsible AI practices: {}",
+                                    reason_text
+                                )));
+                            }
+                        }
+
+                        // Check if we have videos
+                        if let Some(videos) = video_response.videos {
+                            if let Some(first_video) = videos.first() {
+                                // Convert GCS URL to public HTTPS URL
+                                let public_url = convert_gcs_to_public_url(&first_video.gcs_uri)?;
+                                info!(
+                                    "Video generation completed. GCS URL: {} -> Public URL: {}",
+                                    first_video.gcs_uri, public_url
+                                );
+                                return Ok(public_url);
+                            }
+                        }
+
+                        // Check if videos were filtered
+                        if video_response.rai_media_filtered_count.unwrap_or(0) > 0 {
+                            return Err(VideoGenError::InvalidInput(
+                                "All generated videos were filtered by Responsible AI practices"
+                                    .to_string(),
+                            ));
+                        }
+
+                        return Err(VideoGenError::ProviderError(
+                            "Operation completed but no videos were generated".to_string(),
+                        ));
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to parse video response: {:?}, raw: {:?}",
+                            e,
+                            result_value
                         );
-                        return Ok(public_url);
+                        return Err(VideoGenError::ProviderError(format!(
+                            "Failed to parse video generation response: {}",
+                            e
+                        )));
                     }
                 }
             }
             return Err(VideoGenError::ProviderError(
-                "Operation completed but no video URL found".to_string(),
+                "Operation completed but no response data found".to_string(),
             ));
         }
 
