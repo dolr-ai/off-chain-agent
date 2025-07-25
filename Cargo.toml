@@ -96,29 +96,34 @@ bb8-redis = "0.21.0"
 fasthash = { version = "0.4.0", optional = true }
 spacetimedb-sdk = "1.2.0"
 async-channel = "2.3.1"
+num-bigint = "0.4"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-# yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
-#     "full",
-# ] }
-# yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
-# yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
-# yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
-# yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3", features = [
+    "full",
+] }
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3", features = [
+    "ic",
+] }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3" }
 
 # Local (Path) - uncomment to use local development versions
-yral-canisters-client = { path = "../yral-common/canisters-client", features = [
-    "full",
-    "rate-limits",
-] }
-yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
-yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
-yral-qstash-types = { path = "../yral-common/qstash-types" }
-yral-metrics = { path = "../yral-common/metrics" }
-videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
-yral-identity = { path = "../yral-common/identity" }
-num-bigint = "0.4"
+# yral-canisters-client = { path = "../yral-common/canisters-client", features = [
+#     "full",
+#     "rate-limits",
+# ] }
+# yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
+# yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
+# yral-qstash-types = { path = "../yral-common/qstash-types" }
+# yral-metrics = { path = "../yral-common/metrics" }
+# videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
+# yral-identity = { path = "../yral-common/identity" }
+
 
 [build-dependencies]
 tonic-build = "0.13.0"

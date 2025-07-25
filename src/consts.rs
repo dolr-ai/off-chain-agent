@@ -82,3 +82,7 @@ pub static USER_INFO_SERVICE_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
 pub const VEO3_PROJECT_ID: &str = "hot-or-not-feed-intelligence";
 pub const VEO3_STORAGE_URI: &str = "gs://yral_ai_generated_videos/veo-output/";
 pub const VEO3_LOCATION: &str = "us-central1";
+
+// LumaLabs Constants
+pub const LUMALABS_API_URL: &str = "https://api.lumalabs.ai/dream-machine/v1";
+pub const LUMALABS_IMAGE_BUCKET: &str = "videogen_tmp_image_store";

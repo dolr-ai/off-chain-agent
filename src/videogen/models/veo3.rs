@@ -1,4 +1,3 @@
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
@@ -56,6 +55,7 @@ struct Veo3OperationResponse {
 #[serde(rename_all = "camelCase")]
 struct Veo3GenerateVideoResponse {
     #[serde(rename = "@type")]
+    #[allow(dead_code)]
     type_field: String,
     rai_media_filtered_count: Option<i32>,
     rai_media_filtered_reasons: Option<Vec<String>>,
@@ -66,6 +66,7 @@ struct Veo3GenerateVideoResponse {
 #[serde(rename_all = "camelCase")]
 struct Veo3Video {
     gcs_uri: String,
+    #[allow(dead_code)]
     mime_type: Option<String>,
 }
 

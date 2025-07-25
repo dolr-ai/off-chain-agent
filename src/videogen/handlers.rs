@@ -69,8 +69,14 @@ pub async fn generate_video(
     let _user_principal = verify_rate_limit(request.principal, &app_state)
         .await
         .map_err(|(status, error)| (status, Json(error)))?;
-    // Check if FalAi is requested (not implemented)
-    match &request.input {
+    // Route to appropriate provider
+    let result = match &request.input {
+        videogen_common::VideoGenInput::Veo3 { .. } => {
+            super::models::veo3::generate(request.input, &app_state).await
+        }
+        videogen_common::VideoGenInput::Veo3Fast { .. } => {
+            super::models::veo3_fast::generate(request.input, &app_state).await
+        }
         videogen_common::VideoGenInput::FalAi { .. } => {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -79,10 +85,10 @@ pub async fn generate_video(
                 )),
             ));
         }
-        _ => {}
-    }
-
-    let result = super::veo3::generate(request.input, &app_state).await;
+        videogen_common::VideoGenInput::LumaLabs { .. } => {
+            super::models::lumalabs::generate(request.input, &app_state).await
+        }
+    };
 
     match result {
         Ok(response) => Ok(Json(response)),
@@ -130,15 +136,15 @@ pub async fn generate_video_signed(
     // );
 
     // Verify signature
-    // verify_videogen_request(user_principal, &signed_request)
-    //     .map_err(|e| (StatusCode::UNAUTHORIZED, Json(e)))?;
+    verify_videogen_request(user_principal, &signed_request)
+        .map_err(|e| (StatusCode::UNAUTHORIZED, Json(e)))?;
 
-    // log::info!("Signature verified for user {}", user_principal);
+    log::info!("Signature verified for user {}", user_principal);
 
     // // Verify rate limit for the user
-    // let _user_principal = verify_rate_limit(user_principal, &app_state)
-    //     .await
-    //     .map_err(|(status, error)| (status, Json(error)))?;
+    let _user_principal = verify_rate_limit(user_principal, &app_state)
+        .await
+        .map_err(|(status, error)| (status, Json(error)))?;
 
     // Deduct balance before generating video
     // let original_balance = deduct_videogen_balance(user_principal).await.map_err(|e| {
@@ -151,8 +157,14 @@ pub async fn generate_video_signed(
 
     // log::info!("Balance deducted for user {}", user_principal);
 
-    // Check if FalAi is requested (not implemented)
-    match &signed_request.request.input {
+    // Route to appropriate provider
+    let result = match &signed_request.request.input {
+        videogen_common::VideoGenInput::Veo3 { .. } => {
+            super::models::veo3::generate(signed_request.request.input, &app_state).await
+        }
+        videogen_common::VideoGenInput::Veo3Fast { .. } => {
+            super::models::veo3_fast::generate(signed_request.request.input, &app_state).await
+        }
         videogen_common::VideoGenInput::FalAi { .. } => {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -161,11 +173,10 @@ pub async fn generate_video_signed(
                 )),
             ));
         }
-        _ => {}
-    }
-
-    // Generate video
-    let result = super::veo3::generate(signed_request.request.input, &app_state).await;
+        videogen_common::VideoGenInput::LumaLabs { .. } => {
+            super::models::lumalabs::generate(signed_request.request.input, &app_state).await
+        }
+    };
 
     // let result = Ok(VideoGenResponse {
     //     operation_id: "test".to_string(),
