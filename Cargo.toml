@@ -100,17 +100,17 @@ num-bigint = "0.4"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3", features = [
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "59f2f0c461589791f56148b1bcb48fb3d7c40d43", features = [
     "full",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3" }
-videogen-common = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3", features = [
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "59f2f0c461589791f56148b1bcb48fb3d7c40d43", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", rev = "59f2f0c461589791f56148b1bcb48fb3d7c40d43", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "59f2f0c461589791f56148b1bcb48fb3d7c40d43" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "59f2f0c461589791f56148b1bcb48fb3d7c40d43" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", rev = "59f2f0c461589791f56148b1bcb48fb3d7c40d43", features = [
     "ic",
 ] }
-yral-identity = { git = "https://github.com/yral-dapp/yral-common", rev = "56c9f1c810cc49c6535bcea5d416e0fd0ec904f3" }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", rev = "59f2f0c461589791f56148b1bcb48fb3d7c40d43" }
 
 # Local (Path) - uncomment to use local development versions
 # yral-canisters-client = { path = "../yral-common/canisters-client", features = [
