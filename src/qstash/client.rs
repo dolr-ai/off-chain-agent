@@ -44,7 +44,7 @@ impl QStashClient {
 
         let qstash_client_clone = qstash_client.clone();
         tokio::spawn(async move {
-            qstash_client_clone.prune_notification_store().await.unwrap(); // register cron????
+            qstash_client_clone.register_prune_notification_store_schedule().await.unwrap(); // register cron????
         });
 
         qstash_client
@@ -299,9 +299,32 @@ impl QStashClient {
         Ok(())
     }
 
-    pub async fn prune_notification_store(&self) -> anyhow::Result<()> {
+    pub async fn register_prune_notification_store_schedule(&self) -> anyhow::Result<()> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/prune_notification_store").unwrap();
-
+        
+        // First, list all existing schedules
+        let list_url = self.base_url.join("schedules")?;
+        let response = self.client
+            .get(list_url)
+            .send()
+            .await?;
+        
+        let schedules: Vec<serde_json::Value> = response.json().await?;
+        
+        // Check if the schedule already exists
+        let schedule_exists = schedules.iter().any(|schedule| {
+            schedule.get("destination")
+                .and_then(|d| d.as_str())
+                .map(|d| d.ends_with("qstash/prune_notification_store"))
+                .unwrap_or(false)
+        });
+        
+        if schedule_exists {
+            tracing::info!("Prune notification store schedule already exists, skipping creation");
+            return Ok(());
+        }
+        
+        // Create the schedule if it doesn't exist
         let url = self.base_url.join(&format!("schedules/{}", off_chain_ep))?;
         let req = serde_json::json!({});
 
@@ -313,6 +336,8 @@ impl QStashClient {
             .json(&req)
             .send()
             .await?;
+        
+        tracing::info!("Successfully created prune notification store schedule");
 
         Ok(())
     }
