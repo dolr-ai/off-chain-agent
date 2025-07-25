@@ -7,3 +7,4 @@ google_service_account.json
 /.cargo
 .zed/*
 .vscode/
+.claude/

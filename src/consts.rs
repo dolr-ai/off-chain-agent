@@ -62,3 +62,27 @@ pub static STORJ_BACKUP_CANISTER_ACCESS_GRANT: Lazy<String> = Lazy::new(|| {
 });
 
 pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
+
+// Rate Limiting Constants
+pub static RATE_LIMITS_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
+    "h2jgv-ayaaa-aaaas-qbh4a-cai"
+        .parse()
+        .expect("Rate limits canister ID to be valid")
+});
+pub const VIDEOGEN_RATE_LIMIT_PROPERTY: &str = "VIDEOGEN";
+
+// User Info Service Constants
+pub static USER_INFO_SERVICE_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
+    "ivkka-7qaaa-aaaas-qbg3q-cai"
+        .parse()
+        .expect("User info service canister ID to be valid")
+});
+
+// Video Generation Constants
+pub const VEO3_PROJECT_ID: &str = "hot-or-not-feed-intelligence";
+pub const VEO3_STORAGE_URI: &str = "gs://yral_ai_generated_videos/veo-output/";
+pub const VEO3_LOCATION: &str = "us-central1";
+
+// LumaLabs Constants
+pub const LUMALABS_API_URL: &str = "https://api.lumalabs.ai/dream-machine/v1";
+pub const LUMALABS_IMAGE_BUCKET: &str = "videogen_tmp_image_store";

@@ -6,7 +6,7 @@ use tracing::instrument;
 use utoipa::ToSchema;
 
 use crate::{
-    app_state::AppState, canister::delete::delete_canister_data, types::DelegatedIdentityWire,
+    app_state::AppState, types::DelegatedIdentityWire,
     utils::delegated_identity::get_user_info_from_delegated_identity_wire,
 };
 
@@ -52,19 +52,23 @@ pub async fn handle_delete_user(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Use the common delete_canister_data function for steps 1-7
-    delete_canister_data(&agent, &state, user_canister, user_principal, true)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to delete canister data: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to delete canister data: {}", e),
-            )
-        })?;
 
-    // Step 8: Add to deleted canisters in SpaceTimeDB if user_principal is provided
-    #[cfg(not(feature = "local-bin"))]
+    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     {
+        use crate::canister::delete_canister_data;
+
+        delete_canister_data(&agent, &state, user_canister, user_principal, true)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to delete canister data: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to delete canister data: {}", e),
+                )
+            })?;
+
+        // Step 8: Add to deleted canisters in SpaceTimeDB if user_principal is provided
+
         if let Err(e) = state
             .canisters_ctx
             .add_deleted_canister(user_canister, user_principal)
