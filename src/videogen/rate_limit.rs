@@ -3,6 +3,7 @@ use candid::Principal;
 use std::sync::Arc;
 use yral_canisters_client::rate_limits::{RateLimitResult, RateLimits};
 use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
+use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 
 use crate::{
     app_state::AppState,
@@ -39,13 +40,59 @@ pub async fn verify_rate_limit(
                 matches!(session_type, SessionType::RegisteredSession)
             }
             yral_canisters_client::user_info_service::Result2::Err(e) => {
-                log::warn!(
-                    "Failed to get session type for principal {}: {}",
-                    user_principal,
-                    e
-                );
-                // If we can't determine session type, treat as unregistered
-                false
+                // Check if the error is "User not found"
+                if e.contains("User not found") {
+                    log::info!(
+                        "User {} not found in user info service, checking individual canister",
+                        user_principal
+                    );
+                    
+                    // Try to get the user's individual canister
+                    match app_state.get_individual_canister_by_user_principal(user_principal).await {
+                        Ok(canister_id) => {
+                            // Create individual user template and get session type
+                            let individual_user = IndividualUserTemplate(canister_id, &app_state.agent);
+                            match individual_user.get_session_type().await {
+                                Ok(session_result) => match session_result {
+                                    yral_canisters_client::individual_user_template::Result7::Ok(session_type) => {
+                                        matches!(session_type, yral_canisters_client::individual_user_template::SessionType::RegisteredSession)
+                                    }
+                                    yral_canisters_client::individual_user_template::Result7::Err(e) => {
+                                        log::warn!(
+                                            "Failed to get session type from individual canister for {}: {}",
+                                            user_principal,
+                                            e
+                                        );
+                                        false
+                                    }
+                                },
+                                Err(e) => {
+                                    log::warn!(
+                                        "Error calling get_session_type on individual canister for {}: {}",
+                                        user_principal,
+                                        e
+                                    );
+                                    false
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to get individual canister for principal {}: {}",
+                                user_principal,
+                                e
+                            );
+                            false
+                        }
+                    }
+                } else {
+                    log::warn!(
+                        "Failed to get session type for principal {}: {}",
+                        user_principal,
+                        e
+                    );
+                    false
+                }
             }
         },
         Err(e) => {
@@ -59,6 +106,13 @@ pub async fn verify_rate_limit(
             false
         }
     };
+
+    log::info!(
+        "User {} is {}registered for model {}",
+        user_principal,
+        if is_registered { "" } else { "not " },
+        model
+    );
 
     // Create rate limits client
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
