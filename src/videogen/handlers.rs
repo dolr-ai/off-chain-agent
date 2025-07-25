@@ -66,7 +66,8 @@ pub async fn generate_video(
     );
 
     // Verify rate limit for the user
-    let _user_principal = verify_rate_limit(request.principal, &app_state)
+    let model_name = request.input.model_name();
+    let _user_principal = verify_rate_limit(request.principal, model_name, &app_state)
         .await
         .map_err(|(status, error)| (status, Json(error)))?;
     // Route to appropriate provider
@@ -145,7 +146,8 @@ pub async fn generate_video_signed(
     log::info!("Signature verified for user {}", user_principal);
 
     // // Verify rate limit for the user
-    let _user_principal = verify_rate_limit(user_principal, &app_state)
+    let model_name = signed_request.request.input.model_name();
+    let _user_principal = verify_rate_limit(user_principal, model_name, &app_state)
         .await
         .map_err(|(status, error)| (status, Json(error)))?;
 

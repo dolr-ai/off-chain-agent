@@ -16,6 +16,7 @@ use videogen_common::VideoGenError;
 ///
 /// # Arguments
 /// * `user_principal` - The user's Principal
+/// * `model` - The video generation model name (e.g., "VEO3", "LUMALABS")
 /// * `app_state` - The application state containing the IC agent
 ///
 /// # Returns
@@ -23,6 +24,7 @@ use videogen_common::VideoGenError;
 /// * `Err((StatusCode, VideoGenError))` - Error with appropriate status code
 pub async fn verify_rate_limit(
     user_principal: Principal,
+    model: &str,
     app_state: &Arc<AppState>,
 ) -> Result<Principal, (StatusCode, VideoGenError)> {
     // Get user session type to determine if registered
@@ -61,20 +63,27 @@ pub async fn verify_rate_limit(
     // Create rate limits client
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
 
+    // Use VIDEOGEN_RATE_LIMIT_PROPERTY for all models except IntTest
+    let property = if model == "INTTEST" {
+        "VIDEOGEN_INTTEST".to_string()
+    } else {
+        VIDEOGEN_RATE_LIMIT_PROPERTY.to_string()
+    };
+
     let res = rate_limits_client
         .check_rate_limit(
             user_principal,
-            VIDEOGEN_RATE_LIMIT_PROPERTY.to_string(),
+            property.clone(),
             false,
         )
         .await;
-    log::info!("Rate limit check for user {}: {:?}", user_principal, res);
+    log::info!("Rate limit check for user {} with property {}: {:?}", user_principal, property, res);
 
     // Check rate limit
     let rate_limit_result = rate_limits_client
         .increment_request_count(
             user_principal,
-            VIDEOGEN_RATE_LIMIT_PROPERTY.to_string(),
+            property,
             is_registered,
         )
         .await
