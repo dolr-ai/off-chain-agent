@@ -145,9 +145,9 @@ pub async fn generate_video_signed(
     log::info!("Signature verified for user {}", user_principal);
 
     // // Verify rate limit for the user
-    // let _user_principal = verify_rate_limit(user_principal, &app_state)
-    //     .await
-    //     .map_err(|(status, error)| (status, Json(error)))?;
+    let _user_principal = verify_rate_limit(user_principal, &app_state)
+        .await
+        .map_err(|(status, error)| (status, Json(error)))?;
 
     // Deduct balance before generating video
     // let original_balance = deduct_videogen_balance(user_principal).await.map_err(|e| {
