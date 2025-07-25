@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{extract::State, response::IntoResponse, Json};
+use axum::{extract::State, response::IntoResponse};
 use http::StatusCode;
 use yral_canisters_client::{ic::NOTIFICATION_STORE_ID, notification_store::NotificationStore};
 
@@ -12,7 +12,12 @@ pub async fn prune_notification_store(
     let admin_client = state.agent.clone();
     let notif_store = NotificationStore(NOTIFICATION_STORE_ID, &admin_client);
 
-    notif_store.prune_notification_store().await?;
+    notif_store.prune_notifications().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to prune notification store: {}", e),
+        )
+    })?;
 
     Ok((
         StatusCode::OK,
