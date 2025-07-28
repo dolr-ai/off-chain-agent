@@ -1,9 +1,9 @@
 use axum::http::StatusCode;
 use candid::Principal;
 use std::sync::Arc;
+use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_canisters_client::rate_limits::{RateLimitResult, RateLimits};
 use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
-use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 
 use crate::{
     app_state::AppState,
@@ -12,6 +12,100 @@ use crate::{
     },
 };
 use videogen_common::VideoGenError;
+
+/// Checks if user is registered via individual canister
+async fn check_individual_canister_registration(
+    user_principal: Principal,
+    app_state: &Arc<AppState>,
+) -> bool {
+    let canister_id = match app_state
+        .get_individual_canister_by_user_principal(user_principal)
+        .await
+    {
+        Ok(id) => id,
+        Err(e) => {
+            log::warn!(
+                "Failed to get individual canister for principal {}: {}",
+                user_principal,
+                e
+            );
+            return false;
+        }
+    };
+
+    let individual_user = IndividualUserTemplate(canister_id, &app_state.agent);
+
+    let session_result = match individual_user.get_session_type().await {
+        Ok(result) => result,
+        Err(e) => {
+            log::warn!(
+                "Error calling get_session_type on individual canister for {}: {}",
+                user_principal,
+                e
+            );
+            return false;
+        }
+    };
+
+    match session_result {
+        yral_canisters_client::individual_user_template::Result7::Ok(session_type) => {
+            matches!(
+                session_type,
+                yral_canisters_client::individual_user_template::SessionType::RegisteredSession
+            )
+        }
+        yral_canisters_client::individual_user_template::Result7::Err(e) => {
+            log::warn!(
+                "Failed to get session type from individual canister for {}: {}",
+                user_principal,
+                e
+            );
+            false
+        }
+    }
+}
+
+/// Checks if user is registered via user info service
+async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppState>) -> bool {
+    let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &app_state.agent);
+
+    let result = match user_info_service
+        .get_user_session_type(user_principal)
+        .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            log::error!(
+                "Failed to get session type for principal {}: {}",
+                user_principal,
+                e
+            );
+            return false;
+        }
+    };
+
+    match result {
+        yral_canisters_client::user_info_service::Result2::Ok(session_type) => {
+            matches!(session_type, SessionType::RegisteredSession)
+        }
+        yral_canisters_client::user_info_service::Result2::Err(e) => {
+            if e.contains("User not found") {
+                log::info!(
+                    "User {} not found in user info service, checking individual canister",
+                    user_principal
+                );
+                check_individual_canister_registration(user_principal, app_state).await
+            } else {
+                log::warn!(
+                    "Failed to get session type for principal {}: {}",
+                    user_principal,
+                    e
+                );
+                false
+            }
+        }
+    }
+}
 
 /// Verifies rate limit for video generation requests
 ///
@@ -29,83 +123,7 @@ pub async fn verify_rate_limit(
     app_state: &Arc<AppState>,
 ) -> Result<Principal, (StatusCode, VideoGenError)> {
     // Get user session type to determine if registered
-    let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &app_state.agent);
-
-    let is_registered = match user_info_service
-        .get_user_session_type(user_principal)
-        .await
-    {
-        Ok(result) => match result {
-            yral_canisters_client::user_info_service::Result2::Ok(session_type) => {
-                matches!(session_type, SessionType::RegisteredSession)
-            }
-            yral_canisters_client::user_info_service::Result2::Err(e) => {
-                // Check if the error is "User not found"
-                if e.contains("User not found") {
-                    log::info!(
-                        "User {} not found in user info service, checking individual canister",
-                        user_principal
-                    );
-                    
-                    // Try to get the user's individual canister
-                    match app_state.get_individual_canister_by_user_principal(user_principal).await {
-                        Ok(canister_id) => {
-                            // Create individual user template and get session type
-                            let individual_user = IndividualUserTemplate(canister_id, &app_state.agent);
-                            match individual_user.get_session_type().await {
-                                Ok(session_result) => match session_result {
-                                    yral_canisters_client::individual_user_template::Result7::Ok(session_type) => {
-                                        matches!(session_type, yral_canisters_client::individual_user_template::SessionType::RegisteredSession)
-                                    }
-                                    yral_canisters_client::individual_user_template::Result7::Err(e) => {
-                                        log::warn!(
-                                            "Failed to get session type from individual canister for {}: {}",
-                                            user_principal,
-                                            e
-                                        );
-                                        false
-                                    }
-                                },
-                                Err(e) => {
-                                    log::warn!(
-                                        "Error calling get_session_type on individual canister for {}: {}",
-                                        user_principal,
-                                        e
-                                    );
-                                    false
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!(
-                                "Failed to get individual canister for principal {}: {}",
-                                user_principal,
-                                e
-                            );
-                            false
-                        }
-                    }
-                } else {
-                    log::warn!(
-                        "Failed to get session type for principal {}: {}",
-                        user_principal,
-                        e
-                    );
-                    false
-                }
-            }
-        },
-        Err(e) => {
-            // If the service is unavailable, we could either fail or continue with unregistered
-            // For now, let's log and continue as unregistered
-            log::error!(
-                "Failed to get session type for principal {}: {}",
-                user_principal,
-                e
-            );
-            false
-        }
-    };
+    let is_registered = check_user_registration(user_principal, app_state).await;
 
     log::info!(
         "User {} is {}registered for model {}",
@@ -124,22 +142,9 @@ pub async fn verify_rate_limit(
         VIDEOGEN_RATE_LIMIT_PROPERTY.to_string()
     };
 
-    let res = rate_limits_client
-        .check_rate_limit(
-            user_principal,
-            property.clone(),
-            false,
-        )
-        .await;
-    log::info!("Rate limit check for user {} with property {}: {:?}", user_principal, property, res);
-
     // Check rate limit
     let rate_limit_result = rate_limits_client
-        .increment_request_count(
-            user_principal,
-            property,
-            is_registered,
-        )
+        .increment_request_count(user_principal, property, is_registered)
         .await
         .map_err(|e| {
             (

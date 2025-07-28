@@ -49,6 +49,13 @@ struct Veo3Response {
 struct Veo3OperationResponse {
     done: Option<bool>,
     response: Option<serde_json::Value>,
+    error: Option<Veo3OperationError>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Veo3OperationError {
+    code: i32,
+    message: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -237,6 +244,24 @@ async fn poll_for_completion(
             })?;
 
         if operation_status.done == Some(true) {
+            // Check for error first
+            if let Some(error) = operation_status.error {
+                // Check if this is a content policy violation
+                if error.code == 3 && error.message.contains("violate Vertex AI's usage guidelines") {
+                    return Err(VideoGenError::InvalidInput(format!(
+                        "Content policy violation: {}",
+                        error.message
+                    )));
+                }
+                
+                // Other errors
+                return Err(VideoGenError::ProviderError(format!(
+                    "Operation failed with error code {}: {}",
+                    error.code, error.message
+                )));
+            }
+            
+            // Check for successful response
             if let Some(result_value) = operation_status.response {
                 // Parse the response as Veo3GenerateVideoResponse
                 match serde_json::from_value::<Veo3GenerateVideoResponse>(result_value.clone()) {
