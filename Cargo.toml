@@ -96,6 +96,7 @@ bb8-redis = "0.21.0"
 fasthash = { version = "0.4.0", optional = true }
 spacetimedb-sdk = "1.2.0"
 async-channel = "2.3.1"
+num-bigint = "0.4"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
@@ -106,15 +107,23 @@ yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch 
 yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete", package = "alloydb-client" }
 yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "feat/impl-hard-delete" }
 yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete", features = [
+    "ic",
+] }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete" }
 
 # Local (Path) - uncomment to use local development versions
 # yral-canisters-client = { path = "../yral-common/canisters-client", features = [
 #     "full",
+#     "rate-limits",
 # ] }
 # yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
 # yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
 # yral-qstash-types = { path = "../yral-common/qstash-types" }
 # yral-metrics = { path = "../yral-common/metrics" }
+# videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
+# yral-identity = { path = "../yral-common/identity" }
+
 
 [build-dependencies]
 tonic-build = "0.13.0"
@@ -122,6 +131,10 @@ tonic-build = "0.13.0"
 [[bin]]
 name = "icp-off-chain-agent"
 path = "src/main.rs"
+
+[[bin]]
+name = "generate_jwt"
+path = "src/bin/generate_jwt.rs"
 
 [features]
 local-bin = []
