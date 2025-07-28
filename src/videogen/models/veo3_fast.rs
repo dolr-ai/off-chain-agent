@@ -20,10 +20,9 @@ struct Veo3Instance {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Veo3Image {
-    #[serde(rename = "bytesBase64Encoded")]
     bytes_base64_encoded: String,
-    #[serde(rename = "mimeType")]
     mime_type: String,
 }
 
@@ -32,7 +31,7 @@ struct Veo3Image {
 struct Veo3Parameters {
     sample_count: u32,
     generate_audio: bool,
-    aspect_ratio: String,
+    aspect_ratio: Veo3AspectRatio,
     duration_seconds: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     storage_uri: Option<String>,
@@ -116,12 +115,6 @@ pub async fn generate(
         VEO3_LOCATION, VEO3_PROJECT_ID, VEO3_LOCATION, model_id
     );
 
-    // Convert aspect ratio to string
-    let aspect_ratio_str = match aspect_ratio {
-        Veo3AspectRatio::Ratio16x9 => "16:9",
-        Veo3AspectRatio::Ratio9x16 => "9:16",
-    };
-
     // Build instance
     let mut instance = Veo3Instance {
         prompt: prompt.clone(),
@@ -142,7 +135,7 @@ pub async fn generate(
         parameters: Veo3Parameters {
             sample_count: 1,
             generate_audio,
-            aspect_ratio: aspect_ratio_str.to_string(),
+            aspect_ratio,
             duration_seconds,
             storage_uri: Some(VEO3_STORAGE_URI.to_string()),
             negative_prompt,
@@ -153,7 +146,7 @@ pub async fn generate(
     let client = reqwest::Client::new();
     let response = client
         .post(&url)
-        .header("Authorization", format!("Bearer {}", access_token))
+        .bearer_auth(&access_token)
         .header("Content-Type", "application/json; charset=utf-8")
         .json(&request)
         .send()
@@ -214,7 +207,7 @@ async fn poll_for_completion(
 
         let response = client
             .post(&poll_url)
-            .header("Authorization", format!("Bearer {}", access_token))
+            .bearer_auth(&access_token)
             .header("Content-Type", "application/json; charset=utf-8")
             .json(&request_body)
             .send()
@@ -247,20 +240,24 @@ async fn poll_for_completion(
             // Check for error first
             if let Some(error) = operation_status.error {
                 // Check if this is a content policy violation
-                if error.code == 3 && error.message.contains("violate Vertex AI's usage guidelines") {
+                if error.code == 3
+                    && error
+                        .message
+                        .contains("violate Vertex AI's usage guidelines")
+                {
                     return Err(VideoGenError::InvalidInput(format!(
                         "Content policy violation: {}",
                         error.message
                     )));
                 }
-                
+
                 // Other errors
                 return Err(VideoGenError::ProviderError(format!(
                     "Operation failed with error code {}: {}",
                     error.code, error.message
                 )));
             }
-            
+
             // Check for successful response
             if let Some(result_value) = operation_status.response {
                 // Parse the response as Veo3GenerateVideoResponse

@@ -134,11 +134,6 @@ pub async fn generate_video_signed(
 > {
     let user_principal = signed_request.request.principal;
 
-    // log::info!(
-    //     "Received signed request from user: {:?}",
-    //     signed_request.request
-    // );
-
     // Verify signature
     verify_videogen_request(user_principal, &signed_request)
         .map_err(|e| (StatusCode::UNAUTHORIZED, Json(e)))?;
@@ -150,17 +145,6 @@ pub async fn generate_video_signed(
     let _user_principal = verify_rate_limit(user_principal, model_name, &app_state)
         .await
         .map_err(|(status, error)| (status, Json(error)))?;
-
-    // Deduct balance before generating video
-    // let original_balance = deduct_videogen_balance(user_principal).await.map_err(|e| {
-    //     let status_code = match &e {
-    //         videogen_common::VideoGenError::InsufficientBalance => StatusCode::PAYMENT_REQUIRED,
-    //         _ => StatusCode::SERVICE_UNAVAILABLE,
-    //     };
-    //     (status_code, Json(e))
-    // })?;
-
-    // log::info!("Balance deducted for user {}", user_principal);
 
     // Route to appropriate provider
     let result = match &signed_request.request.input {
@@ -186,33 +170,11 @@ pub async fn generate_video_signed(
         }
     };
 
-    // let result = Ok(VideoGenResponse {
-    //     operation_id: "test".to_string(),
-    //     video_url: "https://storage.googleapis.com/yral_ai_generated_videos/veo-output/5790230970440583959/sample_0.mp4".to_string(),
-    //     provider: "veo3".to_string(),
-    // });
-
     log::info!("Video generation result: {:?}", result);
 
     match result {
         Ok(response) => Ok(Json(response)),
         Err(e) => {
-            // Rollback balance on video generation failure
-            // let rollback_principal = user_principal;
-            // let rollback_balance = original_balance.clone();
-
-            // tokio::spawn(async move {
-            //     if let Err(rollback_err) =
-            //         rollback_videogen_balance(rollback_principal, rollback_balance).await
-            //     {
-            //         log::error!(
-            //             "Failed to rollback balance for user {}: {:?}",
-            //             rollback_principal,
-            //             rollback_err
-            //         );
-            //     }
-            // });
-
             let status_code = match &e {
                 videogen_common::VideoGenError::AuthError => StatusCode::UNAUTHORIZED,
                 videogen_common::VideoGenError::InvalidInput(_) => StatusCode::BAD_REQUEST,

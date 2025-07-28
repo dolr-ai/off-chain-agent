@@ -6,6 +6,13 @@ use videogen_common::VideoGenError;
 const VIDEOGEN_COST_SATS: u64 = 1000; // Cost for video generation in sats
 const WORKER_URL: &str = "https://yral-hot-or-not.go-bazzinga.workers.dev";
 
+#[derive(Serialize)]
+struct SatsBalanceUpdateRequestV2 {
+    previous_balance: BigUint,
+    delta: BigInt,
+    is_airdropped: bool,
+}
+
 /// Load current balance for user from worker
 pub async fn load_sats_balance(user_principal: Principal) -> Result<BigUint, VideoGenError> {
     let req_url = format!("{}/balance/{}", WORKER_URL, user_principal);
@@ -49,13 +56,6 @@ pub async fn deduct_videogen_balance(user_principal: Principal) -> Result<BigUin
     // Create balance update request with negative delta
     let delta = BigInt::from_biguint(Sign::Minus, cost_biguint);
 
-    #[derive(Serialize)]
-    struct SatsBalanceUpdateRequestV2 {
-        previous_balance: BigUint,
-        delta: BigInt,
-        is_airdropped: bool,
-    }
-
     let worker_req = SatsBalanceUpdateRequestV2 {
         previous_balance: balance.clone(),
         delta,
@@ -91,13 +91,6 @@ pub async fn rollback_videogen_balance(
     // Create balance update request with positive delta to add the cost back
     let cost_biguint = BigUint::from(VIDEOGEN_COST_SATS);
     let delta = BigInt::from_biguint(Sign::Plus, cost_biguint.clone());
-
-    #[derive(Serialize)]
-    struct SatsBalanceUpdateRequestV2 {
-        previous_balance: BigUint,
-        delta: BigInt,
-        is_airdropped: bool,
-    }
 
     // Calculate what the balance should be after deduction for the previous_balance field
     let deducted_balance = &original_balance - &cost_biguint;

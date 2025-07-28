@@ -15,9 +15,9 @@ struct LumaLabsRequest {
     prompt: String,
     model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    resolution: Option<String>,
+    resolution: Option<LumaLabsResolution>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    duration: Option<String>,
+    duration: Option<LumaLabsDuration>,
     #[serde(skip_serializing_if = "Option::is_none")]
     aspect_ratio: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -117,25 +117,12 @@ pub async fn generate(
         None
     };
 
-    // Convert enums to API strings
-    let resolution_str = match resolution {
-        LumaLabsResolution::R540p => "540p",
-        LumaLabsResolution::R720p => "720p",
-        LumaLabsResolution::R1080p => "1080p",
-        LumaLabsResolution::R4k => "4k",
-    };
-
-    let duration_str = match duration {
-        LumaLabsDuration::D5s => "5s",
-        LumaLabsDuration::D9s => "9s",
-    };
-
     // Build request
     let request = LumaLabsRequest {
         prompt: prompt.clone(),
         model: "ray-flash-2".to_string(),
-        resolution: Some(resolution_str.to_string()),
-        duration: Some(duration_str.to_string()),
+        resolution: Some(resolution),
+        duration: Some(duration),
         aspect_ratio,
         loop_video: if loop_video { Some(true) } else { None },
         keyframes,
@@ -145,7 +132,7 @@ pub async fn generate(
     let create_url = format!("{}/generations", LUMALABS_API_URL);
     let response = client
         .post(&create_url)
-        .header("Authorization", format!("Bearer {}", api_key))
+        .bearer_auth(&api_key)
         .header("accept", "application/json")
         .header("content-type", "application/json")
         .json(&request)
@@ -198,7 +185,7 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
     for attempt in 0..max_attempts {
         let response = client
             .get(&status_url)
-            .header("Authorization", format!("Bearer {}", api_key))
+            .bearer_auth(&api_key)
             .send()
             .await
             .map_err(|e| {

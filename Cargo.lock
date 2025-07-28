@@ -2955,7 +2955,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -9293,7 +9293,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -9724,7 +9724,7 @@ dependencies = [
 [[package]]
 name = "yral-identity"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#3bde12fe0b9184ae91e325f60633df0b845ed46b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0a4b5836af4574b45218aa41fd28898fdd778db1"
 dependencies = [
  "candid",
  "ic-agent",
