@@ -46,6 +46,7 @@ mod qstash;
 mod types;
 pub mod user;
 pub mod utils;
+pub mod videogen;
 pub mod yral_auth;
 
 use app_state::AppState;
@@ -54,7 +55,7 @@ async fn main_impl() -> Result<()> {
     #[derive(OpenApi)]
     #[openapi(
         tags(
-            (name = "OFF_CHAIN", description = "Off Chain Agent API")
+            (name = "OFF_CHAIN", description = "Off Chain Agent API"),
         )
     )]
     struct ApiDoc;
@@ -74,6 +75,10 @@ async fn main_impl() -> Result<()> {
             events::events_router(shared_state.clone()),
         )
         .nest("/api/v1/user", user::user_router(shared_state.clone()))
+        .nest(
+            "/api/v1/videogen",
+            videogen::videogen_router(shared_state.clone()),
+        )
         .split_for_parts();
 
     let router =

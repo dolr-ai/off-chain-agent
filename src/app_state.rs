@@ -51,9 +51,11 @@ pub struct AppState {
     pub canister_backup_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
     pub notification_client: NotificationClient,
+    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     pub canisters_ctx: WrappedContextCanisters,
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_redis: YralAuthRedis,
+    pub config: AppConfig,
 }
 
 impl AppState {
@@ -85,9 +87,11 @@ impl AppState {
             notification_client: NotificationClient::new(
                 env::var("YRAL_METADATA_NOTIFICATION_API_KEY").unwrap_or_default(),
             ),
+            #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
             canisters_ctx: init_canisters_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             yral_auth_redis: YralAuthRedis::init(&app_config).await,
+            config: app_config,
         }
     }
 
@@ -115,7 +119,7 @@ impl AppState {
     ) -> Result<Principal> {
         let meta = self
             .yral_metadata_client
-            .get_user_metadata(user_principal)
+            .get_user_metadata_v2(user_principal.to_string())
             .await
             .context("Failed to get user_metadata from yral_metadata_client")?;
 
