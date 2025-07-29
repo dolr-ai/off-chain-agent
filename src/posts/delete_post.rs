@@ -59,11 +59,12 @@ pub async fn handle_delete_post(
     let post_id = request_body.post_id;
     let video_id = request_body.video_id;
 
-    let agent =
+    let user_ic_agent =
         get_agent_from_delegated_identity_wire(&verified_request.request.delegated_identity_wire)
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let individual_user_template = IndividualUserTemplate(verified_request.user_canister, &agent);
+    let individual_user_template =
+        IndividualUserTemplate(verified_request.user_canister, &user_ic_agent);
 
     // Call the canister to delete the post
     let delete_res = individual_user_template.delete_post(post_id).await;
@@ -99,7 +100,7 @@ pub async fn handle_delete_post(
     let video_id_clone = video_id.clone();
     tokio::spawn(async move {
         if let Err(e) =
-            handle_duplicate_post_on_delete(&agent, bigquery_client, video_id_clone).await
+            handle_duplicate_post_on_delete(&state.agent, bigquery_client, video_id_clone).await
         {
             log::error!("Failed to handle duplicate post on delete: {}", e);
         }
