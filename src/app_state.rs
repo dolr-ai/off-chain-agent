@@ -44,7 +44,7 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub ml_feed_cache: MLFeedCacheState,
     pub metrics: CfMetricTx,
-    #[cfg(not(feature = "local-bin"))]
+    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     pub alloydb_client: AlloyDbInstance,
     #[cfg(not(feature = "local-bin"))]
     #[cfg(not(feature = "local-bin"))]
@@ -78,7 +78,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             ml_feed_cache: MLFeedCacheState::new().await,
             metrics: init_metrics(),
-            #[cfg(not(feature = "local-bin"))]
+            #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
             alloydb_client: init_alloydb_client().await,
             #[cfg(not(feature = "local-bin"))]
             #[cfg(not(feature = "local-bin"))]
@@ -167,7 +167,7 @@ pub async fn init_agent() -> Agent {
         }
     }
 
-    #[cfg(any(feature = "local-bin", feature = "use-local-agent"))]
+    #[cfg(feature = "local-bin")]
     {
         let agent = Agent::builder()
             .with_url("https://ic0.app")
@@ -177,6 +177,31 @@ pub async fn init_agent() -> Agent {
         // agent.fetch_root_key().await.unwrap();
 
         agent
+    }
+
+    #[cfg(feature = "use-local-agent")]
+    {
+        let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+
+        let identity = match ic_agent::identity::Secp256k1Identity::from_pem(
+            stringreader::StringReader::new(pk.as_str()),
+        ) {
+            Ok(identity) => identity,
+            Err(err) => {
+                panic!("Unable to create identity, error: {:?}", err);
+            }
+        };
+
+        match Agent::builder()
+            .with_url("https://ic0.app") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
+            .with_identity(identity)
+            .build()
+        {
+            Ok(agent) => agent,
+            Err(err) => {
+                panic!("Unable to create agent, error: {:?}", err);
+            }
+        }
     }
 }
 

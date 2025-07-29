@@ -80,29 +80,21 @@ pub async fn generate(
     input: VideoGenInput,
     app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
-    let (prompt, negative_prompt, image, aspect_ratio, duration_seconds, generate_audio) =
-        match input {
-            VideoGenInput::Veo3 {
-                prompt,
-                negative_prompt,
-                image,
-                aspect_ratio,
-                duration_seconds,
-                generate_audio,
-            } => (
-                prompt,
-                negative_prompt,
-                image,
-                aspect_ratio,
-                duration_seconds,
-                generate_audio,
-            ),
-            _ => {
-                return Err(VideoGenError::InvalidInput(
-                    "Invalid input type for Veo3 provider".to_string(),
-                ))
-            }
-        };
+    let model = match input {
+        VideoGenInput::Veo3(model) => model,
+        _ => {
+            return Err(VideoGenError::InvalidInput(
+                "Invalid input type for Veo3 provider".to_string(),
+            ))
+        }
+    };
+    
+    let prompt = model.prompt;
+    let negative_prompt = model.negative_prompt;
+    let image = model.image;
+    let aspect_ratio = model.aspect_ratio;
+    let duration_seconds = model.duration_seconds;
+    let generate_audio = model.generate_audio;
 
     // Get access token using app_state
     let access_token = app_state
