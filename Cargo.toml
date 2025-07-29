@@ -100,17 +100,17 @@ num-bigint = "0.4"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "feat/impl-hard-delete", features = [
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
     "full",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "feat/impl-hard-delete" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete" }
-videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete", features = [
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
     "ic",
 ] }
-yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "feat/impl-hard-delete" }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 
 # Local (Path) - uncomment to use local development versions
 # yral-canisters-client = { path = "../yral-common/canisters-client", features = [
