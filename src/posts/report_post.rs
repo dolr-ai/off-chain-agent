@@ -13,9 +13,7 @@ use crate::{
     app_state::AppState,
     consts::{GOOGLE_CHAT_REPORT_SPACE_URL, ML_FEED_SERVER_GRPC_URL},
     offchain_service::send_message_gchat,
-    utils::grpc_clients::ml_feed::{
-        ml_feed_client::MlFeedClient, VideoReportRequest, VideoReportRequestV3,
-    },
+    utils::grpc_clients::ml_feed::{ml_feed_client::MlFeedClient, VideoReportRequestV3},
 };
 
 use super::{types::PostRequest, verify::VerifiedPostRequest};
@@ -47,6 +45,7 @@ pub struct ReportPostRequest {
     pub reason: String,
 }
 
+// TODO: canister_id still being used
 #[instrument(skip(state, verified_request))]
 #[utoipa::path(
     post,
@@ -110,6 +109,7 @@ impl From<ReportPostRequest> for ReportPostRequestV2 {
     }
 }
 
+// TODO: canister_id still being used
 #[instrument(skip(state, verified_request))]
 #[utoipa::path(
     post,
@@ -253,8 +253,11 @@ pub async fn repost_post_common_impl(
         log::error!("Error sending data to Google Chat: {:?}", res);
     }
 
-    let qstash_client = state.qstash_client.clone();
-    qstash_client.publish_report_post(payload).await?;
+    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
+    {
+        let qstash_client = state.qstash_client.clone();
+        qstash_client.publish_report_post(payload).await?;
+    }
 
     Ok(())
 }

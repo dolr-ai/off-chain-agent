@@ -102,7 +102,6 @@ pub async fn upload_user_video_impl(
             let upload_event_result = upload_video_event
                 .send_event(
                     user_principal,
-                    user_meta_data.user_canister_id,
                     user_meta_data.user_name,
                     payload.post_details.video_uid,
                     payload.post_details.hashtags.len(),

@@ -5,9 +5,6 @@ use anyhow::Result;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
-use canister::upgrade_user_token_sns_canister::{
-    upgrade_user_token_sns_canister_for_entire_network, upgrade_user_token_sns_canister_handler,
-};
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use events::event::storj::{add_to_dedup_index, enqueue_storj_backfill_item};
@@ -28,7 +25,6 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::check_auth_grpc;
-use crate::duplicate_video::backfill::trigger_videohash_backfill;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
 use crate::offchain_service::off_chain::off_chain_server::OffChainServer;
@@ -50,6 +46,7 @@ mod qstash;
 mod types;
 pub mod user;
 pub mod utils;
+pub mod videogen;
 pub mod yral_auth;
 
 use app_state::AppState;
@@ -58,7 +55,7 @@ async fn main_impl() -> Result<()> {
     #[derive(OpenApi)]
     #[openapi(
         tags(
-            (name = "OFF_CHAIN", description = "Off Chain Agent API")
+            (name = "OFF_CHAIN", description = "Off Chain Agent API"),
         )
     )]
     struct ApiDoc;
@@ -78,6 +75,10 @@ async fn main_impl() -> Result<()> {
             events::events_router(shared_state.clone()),
         )
         .nest("/api/v1/user", user::user_router(shared_state.clone()))
+        .nest(
+            "/api/v1/videogen",
+            videogen::videogen_router(shared_state.clone()),
+        )
         .split_for_parts();
 
     let router =
@@ -86,28 +87,15 @@ async fn main_impl() -> Result<()> {
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
 
-    let admin_routes = Router::new()
-        .route("/backfill/videohash", post(trigger_videohash_backfill))
-        .with_state(shared_state.clone());
-
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/report-approved", post(report_approved_handler))
         .route("/import-video", post(upload_user_video_handler))
         .route(
-            "/upgrade_user_token_sns_canister/{individual_user_canister_id}",
-            post(upgrade_user_token_sns_canister_handler),
-        )
-        .route(
-            "/upgrade_user_token_sns_canister_for_entire_network",
-            post(upgrade_user_token_sns_canister_for_entire_network),
-        )
-        .route(
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
         .route("/add_to_dedup_index", post(add_to_dedup_index))
-        .nest("/admin", admin_routes)
         .nest("/qstash", qstash_routes)
         .fallback_service(router)
         .layer(CorsLayer::permissive())
