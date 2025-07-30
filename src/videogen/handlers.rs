@@ -4,13 +4,14 @@ use axum::{
     Json,
 };
 use std::sync::Arc;
-use videogen_common::VideoGenResponse;
+use videogen_common::VideoGenerator;
 
-use super::balance::{deduct_videogen_balance, rollback_videogen_balance};
-use super::rate_limit::verify_rate_limit;
+use super::qstash_types::QstashVideoGenRequest;
+use super::rate_limit::verify_rate_limit_and_create_request;
 use super::signature::verify_videogen_request;
 use crate::app_state::AppState;
 use crate::auth::verify_jwt_from_header;
+use crate::consts::OFF_CHAIN_AGENT_URL;
 
 /// Generate a video using the specified provider
 #[utoipa::path(
@@ -18,7 +19,7 @@ use crate::auth::verify_jwt_from_header;
     path = "/generate",
     request_body = videogen_common::VideoGenRequest,
     responses(
-        (status = 200, description = "Video generation started successfully", body = videogen_common::VideoGenResponse),
+        (status = 200, description = "Video generation started successfully", body = videogen_common::VideoGenQueuedResponse),
         (status = 400, description = "Invalid input", body = videogen_common::VideoGenError),
         (status = 401, description = "Authentication failed - Bearer token required", body = videogen_common::VideoGenError),
         (status = 429, description = "Rate limit exceeded", body = videogen_common::VideoGenError),
@@ -35,7 +36,7 @@ pub async fn generate_video(
     headers: HeaderMap,
     Json(request): Json<videogen_common::VideoGenRequest>,
 ) -> Result<
-    Json<videogen_common::VideoGenResponse>,
+    Json<videogen_common::VideoGenQueuedResponse>,
     (StatusCode, Json<videogen_common::VideoGenError>),
 > {
     // Verify JWT token
@@ -65,48 +66,72 @@ pub async fn generate_video(
         app_state.agent.get_principal().unwrap().to_text()
     );
 
-    // Verify rate limit for the user
+    // Verify rate limit and create request atomically
     let model_name = request.input.model_name();
-    let _user_principal = verify_rate_limit(request.principal, model_name, &app_state)
-        .await
-        .map_err(|(status, error)| (status, Json(error)))?;
-    // Route to appropriate provider
-    let result = match &request.input {
-        videogen_common::VideoGenInput::Veo3 { .. } => {
-            super::models::veo3::generate(request.input, &app_state).await
-        }
-        videogen_common::VideoGenInput::Veo3Fast { .. } => {
-            super::models::veo3_fast::generate(request.input, &app_state).await
-        }
-        videogen_common::VideoGenInput::FalAi { .. } => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(videogen_common::VideoGenError::InvalidInput(
-                    "FalAi provider not implemented yet".to_string(),
-                )),
-            ));
-        }
-        videogen_common::VideoGenInput::LumaLabs { .. } => {
-            super::models::lumalabs::generate(request.input, &app_state).await
-        }
-        videogen_common::VideoGenInput::IntTest { .. } => {
-            super::models::inttest::generate(request.input, &app_state).await
-        }
+    let prompt = request.input.get_prompt();
+    let property = if model_name == "INTTEST" {
+        "VIDEOGEN_INTTEST"
+    } else {
+        "VIDEOGEN"
     };
 
-    match result {
-        Ok(response) => Ok(Json(response)),
-        Err(e) => {
-            let status_code = match &e {
-                videogen_common::VideoGenError::AuthError => StatusCode::UNAUTHORIZED,
-                videogen_common::VideoGenError::InvalidInput(_) => StatusCode::BAD_REQUEST,
-                videogen_common::VideoGenError::ProviderError(_) => StatusCode::BAD_GATEWAY,
-                videogen_common::VideoGenError::NetworkError(_) => StatusCode::SERVICE_UNAVAILABLE,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            };
-            Err((status_code, Json(e)))
-        }
-    }
+    let request_key = verify_rate_limit_and_create_request(
+        request.principal,
+        model_name,
+        prompt,
+        property,
+        &app_state,
+    )
+    .await
+    .map_err(|(status, error)| (status, Json(error)))?;
+
+    // Get provider before moving input
+    let provider = request.input.provider();
+
+    // Queue to Qstash
+    let qstash_request = QstashVideoGenRequest {
+        user_principal: request.principal,
+        input: request.input,
+        request_key: request_key.clone(),
+        property: property.to_string(),
+    };
+
+    let callback_url = OFF_CHAIN_AGENT_URL
+        .join("qstash/video_gen_callback")
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(videogen_common::VideoGenError::NetworkError(format!(
+                    "Failed to construct callback URL: {}",
+                    e
+                ))),
+            )
+        })?
+        .to_string();
+
+    app_state
+        .qstash_client
+        .queue_video_generation(&qstash_request, &callback_url)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(videogen_common::VideoGenError::NetworkError(format!(
+                    "Failed to queue video generation: {}",
+                    e
+                ))),
+            )
+        })?;
+
+    // Return polling response
+    Ok(Json(videogen_common::VideoGenQueuedResponse {
+        operation_id: format!("{}_{}", request_key.principal, request_key.counter),
+        provider: provider.to_string(),
+        request_key: videogen_common::VideoGenRequestKey {
+            principal: request_key.principal,
+            counter: request_key.counter,
+        },
+    }))
 }
 
 /// Generate a video using a signed request with signature verification and balance deduction
@@ -115,7 +140,7 @@ pub async fn generate_video(
     path = "/generate_signed",
     request_body = videogen_common::VideoGenRequestWithSignature,
     responses(
-        (status = 200, description = "Video generation started successfully", body = videogen_common::VideoGenResponse),
+        (status = 200, description = "Video generation started successfully", body = videogen_common::VideoGenQueuedResponse),
         (status = 400, description = "Invalid input", body = videogen_common::VideoGenError),
         (status = 401, description = "Authentication failed - Invalid signature", body = videogen_common::VideoGenError),
         (status = 402, description = "Insufficient balance", body = videogen_common::VideoGenError),
@@ -129,7 +154,7 @@ pub async fn generate_video_signed(
     State(app_state): State<Arc<AppState>>,
     Json(signed_request): Json<videogen_common::VideoGenRequestWithSignature>,
 ) -> Result<
-    Json<videogen_common::VideoGenResponse>,
+    Json<videogen_common::VideoGenQueuedResponse>,
     (StatusCode, Json<videogen_common::VideoGenError>),
 > {
     let user_principal = signed_request.request.principal;
@@ -140,50 +165,70 @@ pub async fn generate_video_signed(
 
     log::info!("Signature verified for user {}", user_principal);
 
-    // // Verify rate limit for the user
+    // Verify rate limit and create request atomically
     let model_name = signed_request.request.input.model_name();
-    let _user_principal = verify_rate_limit(user_principal, model_name, &app_state)
-        .await
-        .map_err(|(status, error)| (status, Json(error)))?;
-
-    // Route to appropriate provider
-    let result = match &signed_request.request.input {
-        videogen_common::VideoGenInput::Veo3 { .. } => {
-            super::models::veo3::generate(signed_request.request.input, &app_state).await
-        }
-        videogen_common::VideoGenInput::Veo3Fast { .. } => {
-            super::models::veo3_fast::generate(signed_request.request.input, &app_state).await
-        }
-        videogen_common::VideoGenInput::FalAi { .. } => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(videogen_common::VideoGenError::InvalidInput(
-                    "FalAi provider not implemented yet".to_string(),
-                )),
-            ));
-        }
-        videogen_common::VideoGenInput::LumaLabs { .. } => {
-            super::models::lumalabs::generate(signed_request.request.input, &app_state).await
-        }
-        videogen_common::VideoGenInput::IntTest { .. } => {
-            super::models::inttest::generate(signed_request.request.input, &app_state).await
-        }
+    let prompt = signed_request.request.input.get_prompt();
+    let property = if model_name == "INTTEST" {
+        "VIDEOGEN_INTTEST"
+    } else {
+        "VIDEOGEN"
     };
 
-    log::info!("Video generation result: {:?}", result);
+    let request_key = verify_rate_limit_and_create_request(
+        user_principal,
+        model_name,
+        prompt,
+        property,
+        &app_state,
+    )
+    .await
+    .map_err(|(status, error)| (status, Json(error)))?;
 
-    match result {
-        Ok(response) => Ok(Json(response)),
-        Err(e) => {
-            let status_code = match &e {
-                videogen_common::VideoGenError::AuthError => StatusCode::UNAUTHORIZED,
-                videogen_common::VideoGenError::InvalidInput(_) => StatusCode::BAD_REQUEST,
-                videogen_common::VideoGenError::ProviderError(_) => StatusCode::BAD_GATEWAY,
-                videogen_common::VideoGenError::NetworkError(_) => StatusCode::SERVICE_UNAVAILABLE,
-                videogen_common::VideoGenError::InsufficientBalance => StatusCode::PAYMENT_REQUIRED,
-                videogen_common::VideoGenError::InvalidSignature => StatusCode::UNAUTHORIZED,
-            };
-            Err((status_code, Json(e)))
-        }
-    }
+    // Get provider before moving input
+    let provider = signed_request.request.input.provider();
+
+    // Queue to Qstash
+    let qstash_request = QstashVideoGenRequest {
+        user_principal: signed_request.request.principal,
+        input: signed_request.request.input,
+        request_key: request_key.clone(),
+        property: property.to_string(),
+    };
+
+    let callback_url = OFF_CHAIN_AGENT_URL
+        .join("qstash/video_gen_callback")
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(videogen_common::VideoGenError::NetworkError(format!(
+                    "Failed to construct callback URL: {}",
+                    e
+                ))),
+            )
+        })?
+        .to_string();
+
+    app_state
+        .qstash_client
+        .queue_video_generation(&qstash_request, &callback_url)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(videogen_common::VideoGenError::NetworkError(format!(
+                    "Failed to queue video generation: {}",
+                    e
+                ))),
+            )
+        })?;
+
+    // Return polling response
+    Ok(Json(videogen_common::VideoGenQueuedResponse {
+        operation_id: format!("{}_{}", request_key.principal, request_key.counter),
+        provider: provider.to_string(),
+        request_key: videogen_common::VideoGenRequestKey {
+            principal: request_key.principal,
+            counter: request_key.counter,
+        },
+    }))
 }

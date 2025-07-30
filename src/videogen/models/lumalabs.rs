@@ -66,28 +66,18 @@ pub async fn generate(
     input: VideoGenInput,
     app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
-    let (prompt, image, resolution, duration, aspect_ratio, loop_video) = match input {
-        VideoGenInput::LumaLabs {
-            prompt,
-            image,
-            resolution,
-            duration,
-            aspect_ratio,
-            loop_video,
-        } => (
-            prompt,
-            image,
-            resolution,
-            duration,
-            aspect_ratio,
-            loop_video,
-        ),
-        _ => {
-            return Err(VideoGenError::InvalidInput(
-                "Only LumaLabs input is supported".to_string(),
-            ))
-        }
+    let VideoGenInput::LumaLabs(model) = input else {
+        return Err(VideoGenError::InvalidInput(
+            "Only LumaLabs input is supported".to_string(),
+        ));
     };
+    
+    let prompt = model.prompt;
+    let image = model.image;
+    let resolution = model.resolution;
+    let duration = model.duration;
+    let aspect_ratio = model.aspect_ratio;
+    let loop_video = model.loop_video;
 
     // Get LumaLabs API key from environment
     let api_key = std::env::var("LUMALABS_API_KEY").map_err(|_| VideoGenError::AuthError)?;
