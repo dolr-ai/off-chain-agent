@@ -209,7 +209,7 @@ pub async fn handle_duplicate_post_on_delete(
         // add one of the children to video_unique table
         let new_parent_video_id = duplicate_videos[0].clone();
         let video_unique_row = VideoUniqueRow {
-            video_id: new_parent_video_id,
+            video_id: new_parent_video_id.clone(),
             videohash,
             created_at: Utc::now().to_rfc3339(),
         };
@@ -221,6 +221,8 @@ pub async fn handle_duplicate_post_on_delete(
             }],
             ..Default::default()
         };
+
+        copy_details_from_old_to_new_parent(&bq_client, &video_id, &new_parent_video_id).await?;
 
         let res = bq_client
             .tabledata()
@@ -312,6 +314,97 @@ pub async fn handle_duplicate_post_on_delete(
             ));
         }
     }
+    Ok(())
+}
+
+fn copy_embeddings(old_parent_video_id: &str, new_parent_video_id: &str) -> String {
+    format!(
+        r#"
+        INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_embeddings_agg`
+        SELECT
+        	ml_generate_embedding_result,
+        	ml_generate_embedding_status,
+        	ml_generate_embedding_start_sec,
+        	ml_generate_embedding_end_sec,
+        	"gs://yral-videos/{new_parent_video_id}.mp4" as uri,
+        	generation,
+        	content_type,
+        	size,
+        	md5_hash,
+        	updated,
+        	metadata,
+        	is_nsfw,
+        	nsfw_ec,
+        	nsfw_gore,
+        	probability,
+        	"{new_parent_video_id}" as video_id
+        FROM `hot-or-not-feed-intelligence.yral_ds.video_embeddings_agg`
+        WHERE video_id = "{old_parent_video_id}"
+    "#
+    )
+}
+
+fn copy_nsfw_details(old_parent_video_id: &str, new_parent_video_id: &str) -> String {
+    format!(
+        r#"
+        INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_nsfw_agg`
+        SELECT
+        	"{new_parent_video_id}" as video_id,
+        	"gs://yral-videos/{new_parent_video_id}.mp4" as gcs_video_id,
+            nsfw_ec,
+            nsfw_gore,
+            is_nsfw,
+            probability
+        FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw_agg`
+        WHERE video_id = "{old_parent_video_id}"
+    "#
+    )
+}
+
+async fn copy_details_from_old_to_new_parent(
+    bq_client: &Client,
+    old_parent_video_id: &str,
+    new_parent_video_id: &str,
+) -> anyhow::Result<()> {
+    // running queries serially to make debugging easier in case this routine
+    // starts to fail
+
+    let request = QueryRequest {
+        query: copy_embeddings(old_parent_video_id, new_parent_video_id),
+        ..Default::default()
+    };
+
+    let res = bq_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await
+        .context("Couldn't run query to copy embeddings for new parent")?;
+
+    if let Some(errors) = res.errors {
+        if !errors.is_empty() {
+            log::error!("copy embeddings query response: {:?}", errors);
+            return Err(anyhow::anyhow!("Couldn't copy embeddings for new parent"));
+        }
+    }
+
+    let request = QueryRequest {
+        query: copy_nsfw_details(old_parent_video_id, new_parent_video_id),
+        ..Default::default()
+    };
+
+    let res = bq_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await
+        .context("Couldn't run query to copy nsfw details for new parent")?;
+
+    if let Some(errors) = res.errors {
+        if !errors.is_empty() {
+            log::error!("copy embeddings query response: {:?}", errors);
+            return Err(anyhow::anyhow!("Couldn't copy nsfw details for new parent"));
+        }
+    }
+
     Ok(())
 }
 
