@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::types::{UserPost, VideoDeleteRow};
+use anyhow::{anyhow, Context};
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use chrono::Utc;
 use google_cloud_bigquery::{
@@ -11,14 +12,19 @@ use google_cloud_bigquery::{
     },
     query::row::Row as QueryRow,
 };
+use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use types::PostRequest;
 use verify::VerifiedPostRequest;
-use yral_canisters_client::individual_user_template::{IndividualUserTemplate, Result_};
+use yral_canisters_client::{
+    dedup_index::DedupIndex,
+    individual_user_template::{IndividualUserTemplate, Result_},
+};
 
 use crate::{
-    app_state::AppState, posts::queries::get_duplicate_children_query,
+    app_state::AppState, consts::DEDUP_INDEX_CANISTER_ID,
+    posts::queries::get_duplicate_children_query,
     user::utils::get_agent_from_delegated_identity_wire,
 };
 
@@ -53,11 +59,12 @@ pub async fn handle_delete_post(
     let post_id = request_body.post_id;
     let video_id = request_body.video_id;
 
-    let agent =
+    let user_ic_agent =
         get_agent_from_delegated_identity_wire(&verified_request.request.delegated_identity_wire)
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let individual_user_template = IndividualUserTemplate(verified_request.user_canister, &agent);
+    let individual_user_template =
+        IndividualUserTemplate(verified_request.user_canister, &user_ic_agent);
 
     // Call the canister to delete the post
     let delete_res = individual_user_template.delete_post(post_id).await;
@@ -92,7 +99,9 @@ pub async fn handle_delete_post(
     let bigquery_client = state.bigquery_client.clone();
     let video_id_clone = video_id.clone();
     tokio::spawn(async move {
-        if let Err(e) = handle_duplicate_post_on_delete(bigquery_client, video_id_clone).await {
+        if let Err(e) =
+            handle_duplicate_post_on_delete(&state.agent, bigquery_client, video_id_clone).await
+        {
             log::error!("Failed to handle duplicate post on delete: {}", e);
         }
     });
@@ -108,7 +117,34 @@ pub struct VideoUniqueRow {
 }
 
 #[instrument(skip(bq_client))]
+async fn get_hash_from_videohash_original(
+    bq_client: &Client,
+    video_id: &str,
+) -> anyhow::Result<Option<String>> {
+    let request = QueryRequest {
+        query: format!(
+            "SELECT videohash FROM `hot-or-not-feed-intelligence.yral_ds.videohash_original` WHERE video_id = '{video_id}'",
+        ),
+        ..Default::default()
+    };
+    let mut response = bq_client
+        .query::<QueryRow>("hot-or-not-feed-intelligence", request)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to query videohash_original: {}", e))?;
+    let Some(first) = response.next().await.context("Couldn't get first row")? else {
+        return Ok(None);
+    };
+
+    let videohash: String = first
+        .column(0)
+        .context("Couldn't decode videohash out of row")?;
+
+    Ok(Some(videohash))
+}
+
+#[instrument(skip(bq_client))]
 pub async fn handle_duplicate_post_on_delete(
+    agent: &Agent,
     bq_client: Client,
     video_id: String,
 ) -> Result<(), anyhow::Error> {
@@ -128,21 +164,24 @@ pub async fn handle_duplicate_post_on_delete(
     while let Some(row) = response.next().await? {
         res_list.push(row);
     }
+
+    let videohash = get_hash_from_videohash_original(&bq_client, &video_id)
+        .await
+        .context("Couldn't get video hash")?
+        .ok_or(anyhow!("No video hash associated with the given video id"))?;
+
+    DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent)
+        .remove_video_id(yral_canisters_client::dedup_index::RemoveVideoIdArgs {
+            video_hash: videohash.clone(),
+            video_id: video_id.clone(),
+        })
+        .await
+        .context("Couldn't delete video from dedup index")?;
+
     // if its not unique, return
     if res_list.is_empty() {
         return Ok(());
     }
-
-    let first_row = &res_list[0];
-    const VIDEOHASH_COLUMN_INDEX: usize = 1; // Example: Replace with correct index for videohash
-
-    let videohash: String = first_row.column(VIDEOHASH_COLUMN_INDEX).map_err(|e| {
-        anyhow::anyhow!(
-            "Failed to retrieve 'videohash' at index {}: {}",
-            VIDEOHASH_COLUMN_INDEX,
-            e
-        )
-    })?;
 
     // get children from videohash_original GROUP BY and filter from video_deleted table
     let request = QueryRequest {
@@ -202,6 +241,28 @@ pub async fn handle_duplicate_post_on_delete(
                 ));
             }
         }
+
+        let res = bq_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "video_unique_v2",
+                &request,
+            )
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to insert video unique v2 row to bigquery: {}", e)
+            })?;
+
+        if let Some(errors) = res.insert_errors {
+            if !errors.is_empty() {
+                log::error!("video_unique_v2 insert response : {:?}", errors);
+                return Err(anyhow::anyhow!(
+                    "Failed to insert video unique v2 row to bigquery"
+                ));
+            }
+        }
     }
 
     // delete old parent from video_unique table
@@ -224,6 +285,30 @@ pub async fn handle_duplicate_post_on_delete(
             log::error!("video_unique delete response : {:?}", errors);
             return Err(anyhow::anyhow!(
                 "Failed to delete video unique row to bigquery"
+            ));
+        }
+    }
+
+    // delete from video unique v2 as well
+    let request = QueryRequest {
+        query: format!(
+            "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.video_unique_v2` WHERE video_id = '{}'",
+            video_id
+        ),
+        ..Default::default()
+    };
+
+    let res = bq_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to delete video unique v2 row to bigquery: {}", e))?;
+
+    if let Some(errors) = res.errors {
+        if !errors.is_empty() {
+            log::error!("video_unique delete response : {:?}", errors);
+            return Err(anyhow::anyhow!(
+                "Failed to delete video unique v2 row to bigquery"
             ));
         }
     }

@@ -78,6 +78,8 @@ impl<'a> VideoHashDuplication<'a> {
 
         if !is_duplicate {
             self.store_unique_video(video_id, &video_hash.hash).await?;
+            self.store_unique_video_v2(video_id, &video_hash.hash)
+                .await?;
             log::info!("Unique video recorded: video_id [{}]", video_id);
         }
 
@@ -159,6 +161,34 @@ impl<'a> VideoHashDuplication<'a> {
 
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique` 
+             (video_id, videohash, created_at) 
+             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
+            video_id, hash
+        );
+
+        let request = QueryRequest {
+            query,
+            ..Default::default()
+        };
+
+        log::info!(
+            "Storing unique video in video_unique for video_id [{}]",
+            video_id
+        );
+
+        bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &request)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn store_unique_video_v2(&self, video_id: &str, hash: &str) -> Result<(), anyhow::Error> {
+        let bigquery_client = app_state::init_bigquery_client().await;
+
+        let query = format!(
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique_v2` 
              (video_id, videohash, created_at) 
              VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
             video_id, hash
