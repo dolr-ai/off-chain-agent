@@ -1,3 +1,4 @@
+use std::env;
 use std::sync::Arc;
 
 use candid::Principal;
@@ -14,7 +15,9 @@ use tracing::instrument;
 use crate::{
     canister::snapshot::snapshot_v2::BackupUserCanisterPayload, consts::OFF_CHAIN_AGENT_URL,
     events::event::UploadVideoInfo, posts::report_post::ReportPostRequestV2,
+    videogen::qstash_types::QstashVideoGenRequest,
 };
+use videogen_common::VideoGenerator;
 
 #[derive(Clone, Debug)]
 pub struct QStashClient {
@@ -35,7 +38,13 @@ impl QStashClient {
             .default_headers(headers)
             .build()
             .expect("Failed to create QStash client");
-        let base_url = Url::parse("https://qstash.upstash.io/v2/").unwrap();
+
+        // Support custom QStash URL for local development
+        let base_url_str =
+            env::var("QSTASH_URL").unwrap_or_else(|_| "https://qstash.upstash.io/v2/".to_string());
+        let base_url = Url::parse(&base_url_str).expect("Invalid QSTASH_URL");
+
+        log::info!("QStash client initialized with base URL: {}", base_url);
 
         Self {
             client,
@@ -288,6 +297,46 @@ impl QStashClient {
         }
 
         log::info!("Backup canister batch completed");
+
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn queue_video_generation(
+        &self,
+        request: &QstashVideoGenRequest,
+        callback_url: &str,
+    ) -> anyhow::Result<()> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/process_video_gen")
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+
+        // Get flow control from the model using the VideoGenerator trait
+        let flow_control = request.input.flow_control_config().map(|(rate, parallel)| {
+            let key = request.input.flow_control_key();
+            let value = format!("Rate={},Parallelism={}", rate, parallel);
+            (key, value)
+        });
+
+        let mut req_builder = self
+            .client
+            .post(url)
+            .json(&request)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("Upstash-Callback", callback_url)
+            .header("Upstash-Retries", "0");
+
+        // Add flow control headers only if flow control is configured
+        if let Some((fc_key, fc_value)) = flow_control {
+            req_builder = req_builder
+                .header("Upstash-Flow-Control-Key", fc_key)
+                .header("Upstash-Flow-Control-Value", fc_value);
+        }
+
+        req_builder.send().await?;
 
         Ok(())
     }

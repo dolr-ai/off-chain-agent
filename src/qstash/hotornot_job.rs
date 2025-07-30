@@ -22,6 +22,7 @@ pub struct InMemoryBufferItemV2 {
     pub post_id: u64,
 }
 
+#[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
 pub async fn start_hotornot_job_v2(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -150,5 +151,13 @@ pub async fn start_hotornot_job_v2(
         return Err((StatusCode::INTERNAL_SERVER_ERROR, err_str));
     }
 
+    Ok((StatusCode::OK, "OK"))
+}
+
+#[cfg(any(feature = "local-bin", feature = "use-local-agent"))]
+pub async fn start_hotornot_job_v2(
+    State(_state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    log::warn!("start_hotornot_job_v2 is not implemented for local-bin or use-local-agent");
     Ok((StatusCode::OK, "OK"))
 }

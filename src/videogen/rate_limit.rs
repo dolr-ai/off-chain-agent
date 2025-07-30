@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use candid::Principal;
 use std::sync::Arc;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
-use yral_canisters_client::rate_limits::{RateLimitResult, RateLimits};
+use yral_canisters_client::rate_limits::RateLimits;
 use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 
 use crate::{
@@ -107,21 +107,25 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
     }
 }
 
-/// Verifies rate limit for video generation requests
+/// Verifies rate limit and creates video generation request if allowed
 ///
 /// # Arguments
 /// * `user_principal` - The user's Principal
 /// * `model` - The video generation model name (e.g., "VEO3", "LUMALABS")
+/// * `prompt` - The generation prompt
+/// * `property` - The rate limit property (e.g., "VIDEOGEN")
 /// * `app_state` - The application state containing the IC agent
 ///
 /// # Returns
-/// * `Ok(Principal)` - The user principal if rate limit check passes
+/// * `Ok(VideoGenRequestKey)` - The request key if rate limit check passes and request is created
 /// * `Err((StatusCode, VideoGenError))` - Error with appropriate status code
-pub async fn verify_rate_limit(
+pub async fn verify_rate_limit_and_create_request(
     user_principal: Principal,
     model: &str,
+    prompt: &str,
+    property: &str,
     app_state: &Arc<AppState>,
-) -> Result<Principal, (StatusCode, VideoGenError)> {
+) -> Result<crate::videogen::VideoGenRequestKey, (StatusCode, VideoGenError)> {
     // Get user session type to determine if registered
     let is_registered = check_user_registration(user_principal, app_state).await;
 
@@ -135,29 +139,46 @@ pub async fn verify_rate_limit(
     // Create rate limits client
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
 
-    // Use VIDEOGEN_RATE_LIMIT_PROPERTY for all models except IntTest
-    let property = if model == "INTTEST" {
-        "VIDEOGEN_INTTEST".to_string()
-    } else {
-        VIDEOGEN_RATE_LIMIT_PROPERTY.to_string()
-    };
-
-    // Check rate limit
-    let rate_limit_result = rate_limits_client
-        .increment_request_count(user_principal, property, is_registered)
+    // Create video generation request (includes rate limit check)
+    let request_key_result = rate_limits_client
+        .create_video_generation_request(
+            user_principal,
+            model.to_string(),
+            prompt.to_string(),
+            property.to_string(),
+            is_registered,
+        )
         .await
         .map_err(|e| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                VideoGenError::NetworkError(format!("Rate limit check failed: {}", e)),
+                VideoGenError::NetworkError(format!(
+                    "Failed to create video generation request: {}",
+                    e
+                )),
             )
         })?;
 
-    match rate_limit_result {
-        RateLimitResult::Ok(_) => Ok(user_principal),
-        RateLimitResult::Err(msg) => Err((
-            StatusCode::TOO_MANY_REQUESTS,
-            VideoGenError::ProviderError(format!("Rate limit exceeded: {}", msg)),
-        )),
+    match request_key_result {
+        yral_canisters_client::rate_limits::Result_::Ok(key) => {
+            Ok(crate::videogen::VideoGenRequestKey {
+                principal: key.principal,
+                counter: key.counter,
+            })
+        }
+        yral_canisters_client::rate_limits::Result_::Err(e) => {
+            // Check if it's a rate limit error
+            if e.contains("Rate limit exceeded") {
+                Err((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    VideoGenError::ProviderError(e),
+                ))
+            } else {
+                Err((
+                    StatusCode::BAD_REQUEST,
+                    VideoGenError::InvalidInput(format!("Failed to create request: {}", e)),
+                ))
+            }
+        }
     }
 }
