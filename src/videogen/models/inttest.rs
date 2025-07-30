@@ -5,13 +5,10 @@ pub async fn generate(
     input: VideoGenInput,
     _app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
-    let model = match input {
-        VideoGenInput::IntTest(model) => model,
-        _ => {
-            return Err(VideoGenError::InvalidInput(
-                "Only IntTest input is supported".to_string(),
-            ))
-        }
+    let VideoGenInput::IntTest(model) = input else {
+        return Err(VideoGenError::InvalidInput(
+            "Only IntTest input is supported".to_string(),
+        ));
     };
 
     tokio::time::sleep(std::time::Duration::from_secs(15)).await; // Simulate processing delay

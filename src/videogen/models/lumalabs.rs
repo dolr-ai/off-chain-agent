@@ -66,13 +66,10 @@ pub async fn generate(
     input: VideoGenInput,
     app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
-    let model = match input {
-        VideoGenInput::LumaLabs(model) => model,
-        _ => {
-            return Err(VideoGenError::InvalidInput(
-                "Only LumaLabs input is supported".to_string(),
-            ))
-        }
+    let VideoGenInput::LumaLabs(model) = input else {
+        return Err(VideoGenError::InvalidInput(
+            "Only LumaLabs input is supported".to_string(),
+        ));
     };
     
     let prompt = model.prompt;

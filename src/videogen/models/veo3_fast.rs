@@ -80,13 +80,10 @@ pub async fn generate(
     input: VideoGenInput,
     app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
-    let model = match input {
-        VideoGenInput::Veo3Fast(model) => model,
-        _ => {
-            return Err(VideoGenError::InvalidInput(
-                "Only Veo3Fast input is supported".to_string(),
-            ))
-        }
+    let VideoGenInput::Veo3Fast(model) = input else {
+        return Err(VideoGenError::InvalidInput(
+            "Only Veo3Fast input is supported".to_string(),
+        ));
     };
     
     let prompt = model.prompt;

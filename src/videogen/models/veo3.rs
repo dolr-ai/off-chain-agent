@@ -80,13 +80,10 @@ pub async fn generate(
     input: VideoGenInput,
     app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
-    let model = match input {
-        VideoGenInput::Veo3(model) => model,
-        _ => {
-            return Err(VideoGenError::InvalidInput(
-                "Invalid input type for Veo3 provider".to_string(),
-            ))
-        }
+    let VideoGenInput::Veo3(model) = input else {
+        return Err(VideoGenError::InvalidInput(
+            "Invalid input type for Veo3 provider".to_string(),
+        ));
     };
     
     let prompt = model.prompt;
