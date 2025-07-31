@@ -1,6 +1,6 @@
 use candid::Principal;
 use serde::{Deserialize, Serialize};
-use videogen_common::{VideoGenInput, VideoGenResponse};
+use videogen_common::{VideoGenInput, VideoGenResponse, TokenType};
 
 /// Request structure for queueing video generation to Qstash
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +15,8 @@ pub struct QstashVideoGenRequest {
     pub property: String,
     /// Amount deducted from balance (for rollback on failure)
     pub deducted_amount: Option<u64>,
+    /// Token type used for payment
+    pub token_type: TokenType,
 }
 
 /// Key structure matching rate limit canister

@@ -9,15 +9,15 @@ use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequestKey, VideoGe
 use crate::{
     app_state::AppState,
     consts::RATE_LIMITS_CANISTER_ID,
-    videogen::balance::rollback_videogen_balance,
     videogen::qstash_types::{QstashVideoGenCallback, VideoGenCallbackResult},
+    videogen::token_operations::add_token_balance,
 };
 
 /// QStash callback wrapper structure
 #[derive(Debug, Deserialize)]
 pub struct QStashCallbackWrapper {
     pub status: u16,
-    pub body: String,  // Base64 encoded response body
+    pub body: String, // Base64 encoded response body
     pub header: HashMap<String, Vec<String>>,
     pub retried: Option<u32>,
     #[serde(rename = "maxRetries")]
@@ -40,7 +40,7 @@ async fn decrement_counter_for_failure(
         request_key.counter,
         property
     );
-    
+
     match rate_limits_client
         .decrement_video_generation_counter(request_key, property)
         .await
@@ -77,40 +77,63 @@ pub async fn handle_video_gen_callback(
     use base64::Engine;
     let decoded_body = base64::engine::general_purpose::STANDARD
         .decode(&wrapper.body)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to decode body: {}", e)))?;
-    
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to decode body: {}", e),
+            )
+        })?;
+
     // First, try to parse the outer Qstash response which contains our callback data
-    let qstash_response: serde_json::Value = serde_json::from_slice(&decoded_body)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to parse QStash response: {}", e)))?;
-    
+    let qstash_response: serde_json::Value =
+        serde_json::from_slice(&decoded_body).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to parse QStash response: {}", e),
+            )
+        })?;
+
     // Extract our callback data from the QStash response
     let callback: QstashVideoGenCallback = serde_json::from_value(qstash_response.clone())
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to parse callback data: {}", e)))?;
-    
-    // Extract deducted_amount if present in the QStash request data
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to parse callback data: {}", e),
+            )
+        })?;
+
+    // Extract deducted_amount and token_type if present in the QStash request data
     let deducted_amount = qstash_response
         .get("deducted_amount")
         .and_then(|v| v.as_u64());
-    
+
+    let token_type = qstash_response
+        .get("token_type")
+        .and_then(|v| serde_json::from_value::<videogen_common::TokenType>(v.clone()).ok())
+        .unwrap_or_default();
+
     log::info!(
         "Processing video generation callback for principal {} counter {}",
         callback.request_key.principal,
         callback.request_key.counter
     );
-    
+
     // Create rate limits client
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &state.agent);
-    
+
     // Convert our key type to the canister's key type
     let canister_key = VideoGenRequestKey {
         principal: callback.request_key.principal,
         counter: callback.request_key.counter,
     };
-    
+
     // Determine the status to update based on QStash response and callback result
     let (status, should_decrement) = if wrapper.status != 200 {
         // QStash request failed
-        log::error!("Video generation request failed with QStash status: {}", wrapper.status);
+        log::error!(
+            "Video generation request failed with QStash status: {}",
+            wrapper.status
+        );
         let error_message = format!("QStash request failed with status: {}", wrapper.status);
         (VideoGenRequestStatus::Failed(error_message), true)
     } else {
@@ -120,13 +143,12 @@ pub async fn handle_video_gen_callback(
                 VideoGenRequestStatus::Complete(response.video_url.clone()),
                 false,
             ),
-            VideoGenCallbackResult::Failure(error) => (
-                VideoGenRequestStatus::Failed(error.clone()),
-                true,
-            ),
+            VideoGenCallbackResult::Failure(error) => {
+                (VideoGenRequestStatus::Failed(error.clone()), true)
+            }
         }
     };
-    
+
     // Update the status in the rate limits canister
 
     match rate_limits_client
@@ -150,7 +172,7 @@ pub async fn handle_video_gen_callback(
                         callback.property.clone(),
                     )
                     .await;
-                    
+
                     // Rollback balance if we have the deducted amount
                     if let Some(deducted_amount) = deducted_amount {
                         // Get JWT token from environment variable
@@ -161,23 +183,39 @@ pub async fn handle_video_gen_callback(
                                 return Ok(StatusCode::OK);
                             }
                         };
-                        
+
+                        // Prepare auth based on token type
+                        let jwt_opt = match &token_type {
+                            videogen_common::TokenType::Sats => Some(jwt_token),
+                            videogen_common::TokenType::Dolr => None,
+                        };
+
+                        let agent = if matches!(&token_type, videogen_common::TokenType::Dolr) {
+                            Some(state.agent.clone())
+                        } else {
+                            None
+                        };
+
                         log::info!(
-                            "Rolling back {} SATS for failed video generation: principal {}",
+                            "Rolling back {} {:?} for failed video generation: principal {}",
                             deducted_amount,
+                            token_type,
                             callback.request_key.principal
                         );
-                        
-                        if let Err(e) = rollback_videogen_balance(
+
+                        if let Err(e) = add_token_balance(
                             callback.request_key.principal,
                             deducted_amount,
-                            &jwt_token,
+                            &token_type,
+                            jwt_opt,
+                            agent,
                         )
                         .await
                         {
                             log::error!(
-                                "Failed to rollback {} SATS for user {}: {}",
+                                "Failed to rollback {} {:?} for user {}: {}",
                                 deducted_amount,
+                                token_type,
                                 callback.request_key.principal,
                                 e
                             );

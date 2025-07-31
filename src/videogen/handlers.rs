@@ -6,7 +6,7 @@ use axum::{
 use std::sync::Arc;
 use videogen_common::VideoGenerator;
 
-use super::balance::{deduct_videogen_balance, rollback_videogen_balance};
+use super::token_operations::{deduct_token_balance, add_token_balance, get_model_cost};
 use super::qstash_types::QstashVideoGenRequest;
 use super::rate_limit::verify_rate_limit_and_create_request;
 use super::signature::verify_videogen_request;
@@ -96,6 +96,7 @@ pub async fn generate_video(
         request_key: request_key.clone(),
         property: property.to_string(),
         deducted_amount: None, // No balance deduction for JWT-based auth
+        token_type: request.token_type.clone(),
     };
 
     let callback_url = OFF_CHAIN_AGENT_URL
@@ -197,19 +198,44 @@ pub async fn generate_video_signed(
         )
     })?;
 
+    // Get the cost based on model and token type
+    let model_name = signed_request.request.input.model_name();
+    let token_type = &signed_request.request.token_type;
+    let cost = get_model_cost(&model_name, token_type);
+    
+    // Prepare auth based on token type
+    let jwt_opt = match token_type {
+        videogen_common::TokenType::Sats => Some(jwt_token.clone()),
+        videogen_common::TokenType::Dolr => None, // DOLR would need agent from app_state
+    };
+    
+    // Get agent for DOLR operations
+    let agent = if matches!(token_type, videogen_common::TokenType::Dolr) {
+        Some(app_state.agent.clone())
+    } else {
+        None
+    };
+
     // Deduct balance after successful rate limit check
-    let deducted_amount = deduct_videogen_balance(user_principal, &jwt_token)
-        .await
-        .map_err(|e| match e {
-            videogen_common::VideoGenError::InsufficientBalance => {
-                (StatusCode::PAYMENT_REQUIRED, Json(e))
-            }
-            _ => (StatusCode::SERVICE_UNAVAILABLE, Json(e)),
-        })?;
+    let deducted_amount = deduct_token_balance(
+        user_principal, 
+        cost,
+        token_type,
+        jwt_opt,
+        agent,
+    )
+    .await
+    .map_err(|e| match e {
+        videogen_common::VideoGenError::InsufficientBalance => {
+            (StatusCode::PAYMENT_REQUIRED, Json(e))
+        }
+        _ => (StatusCode::SERVICE_UNAVAILABLE, Json(e)),
+    })?;
 
     log::info!(
-        "Successfully deducted {} SATS from user {}",
+        "Successfully deducted {} {:?} from user {}",
         deducted_amount,
+        token_type,
         user_principal
     );
 
@@ -220,6 +246,7 @@ pub async fn generate_video_signed(
         request_key: request_key.clone(),
         property: property.to_string(),
         deducted_amount: Some(deducted_amount),
+        token_type: signed_request.request.token_type.clone(),
     };
 
     let callback_url = OFF_CHAIN_AGENT_URL
@@ -251,12 +278,28 @@ pub async fn generate_video_signed(
             );
 
             if let Some(deducted_amount) = qstash_request.deducted_amount {
-                if let Err(rollback_err) =
-                    rollback_videogen_balance(user_principal, deducted_amount, &jwt_token).await
-                {
+                let jwt_opt = match &qstash_request.token_type {
+                    videogen_common::TokenType::Sats => Some(jwt_token.clone()),
+                    videogen_common::TokenType::Dolr => None,
+                };
+                
+                let agent = if matches!(&qstash_request.token_type, videogen_common::TokenType::Dolr) {
+                    Some(app_state.agent.clone())
+                } else {
+                    None
+                };
+                
+                if let Err(rollback_err) = add_token_balance(
+                    user_principal,
+                    deducted_amount,
+                    &qstash_request.token_type,
+                    jwt_opt,
+                    agent,
+                ).await {
                     log::error!(
-                        "Failed to rollback {} SATS for user {}: {}",
+                        "Failed to rollback {} {:?} for user {}: {}",
                         deducted_amount,
+                        qstash_request.token_type,
                         user_principal,
                         rollback_err
                     );
