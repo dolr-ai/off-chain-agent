@@ -75,7 +75,6 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -5429,7 +5428,6 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.2.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "anyhow",
  "bb8",
@@ -5722,7 +5720,7 @@ dependencies = [
  "uuid",
  "videogen-common",
  "yral-canisters-client",
- "yral-identity",
+ "yral-identity 0.1.0",
  "yral-metadata-client",
  "yral-metadata-types 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
  "yral-metrics",
@@ -9138,7 +9136,6 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "videogen-common"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "candid",
  "enum_dispatch",
@@ -9150,7 +9147,7 @@ dependencies = [
  "thiserror 1.0.69",
  "utoipa",
  "web-sys",
- "yral-identity",
+ "yral-identity 0.1.0",
 ]
 
 [[package]]
@@ -9754,7 +9751,6 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "anyhow",
  "candid",
@@ -9774,12 +9770,23 @@ dependencies = [
 [[package]]
 name = "yral-identity"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "candid",
  "ic-agent",
  "ic-types 0.9.0 (git+https://github.com/dfinity/ic.git?rev=b2a4053f1dca2455511f2c6c0dc12cb65f93b4b1)",
  "ic-validator-ingress-message",
+ "serde",
+ "thiserror 2.0.12",
+ "web-time",
+]
+
+[[package]]
+name = "yral-identity"
+version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
+dependencies = [
+ "candid",
+ "ic-agent",
  "serde",
  "thiserror 2.0.12",
  "web-time",
@@ -9793,7 +9800,7 @@ dependencies = [
  "ic-agent",
  "reqwest 0.12.22",
  "thiserror 1.0.69",
- "yral-identity",
+ "yral-identity 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=master)",
  "yral-metadata-types 0.1.0 (git+https://github.com/yral-dapp/yral-metadata.git)",
 ]
 
@@ -9808,7 +9815,7 @@ dependencies = [
  "thiserror 1.0.69",
  "utoipa",
  "utoipa-swagger-ui",
- "yral-identity",
+ "yral-identity 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=master)",
 ]
 
 [[package]]
@@ -9822,13 +9829,12 @@ dependencies = [
  "thiserror 1.0.69",
  "utoipa",
  "utoipa-swagger-ui",
- "yral-identity",
+ "yral-identity 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=master)",
 ]
 
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "candid",
  "log",
@@ -9843,7 +9849,6 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "candid",
  "serde",
@@ -9861,7 +9866,6 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "ic-agent",
  "k256",

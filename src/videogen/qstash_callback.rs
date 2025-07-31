@@ -9,6 +9,7 @@ use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequestKey, VideoGe
 use crate::{
     app_state::AppState,
     consts::RATE_LIMITS_CANISTER_ID,
+    videogen::balance::rollback_videogen_balance,
     videogen::qstash_types::{QstashVideoGenCallback, VideoGenCallbackResult},
 };
 
@@ -78,9 +79,18 @@ pub async fn handle_video_gen_callback(
         .decode(&wrapper.body)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to decode body: {}", e)))?;
     
-    // Try to parse the callback data
-    let callback: QstashVideoGenCallback = serde_json::from_slice(&decoded_body)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to parse callback: {}", e)))?;
+    // First, try to parse the outer Qstash response which contains our callback data
+    let qstash_response: serde_json::Value = serde_json::from_slice(&decoded_body)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to parse QStash response: {}", e)))?;
+    
+    // Extract our callback data from the QStash response
+    let callback: QstashVideoGenCallback = serde_json::from_value(qstash_response.clone())
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to parse callback data: {}", e)))?;
+    
+    // Extract deducted_amount if present in the QStash request data
+    let deducted_amount = qstash_response
+        .get("deducted_amount")
+        .and_then(|v| v.as_u64());
     
     log::info!(
         "Processing video generation callback for principal {} counter {}",
@@ -131,14 +141,48 @@ pub async fn handle_video_gen_callback(
                     callback.request_key.counter
                 );
 
-                // If the request failed (either QStash or video generation), decrement counter
+                // If the request failed (either QStash or video generation), handle cleanup
                 if should_decrement {
+                    // Decrement the rate limit counter
                     decrement_counter_for_failure(
                         &rate_limits_client,
                         canister_key,
-                        callback.property,
+                        callback.property.clone(),
                     )
                     .await;
+                    
+                    // Rollback balance if we have the deducted amount
+                    if let Some(deducted_amount) = deducted_amount {
+                        // Get JWT token from environment variable
+                        let jwt_token = match std::env::var("YRAL_HON_WORKER_JWT") {
+                            Ok(token) => token,
+                            Err(_) => {
+                                log::error!("YRAL_HON_WORKER_JWT not set, cannot rollback balance");
+                                return Ok(StatusCode::OK);
+                            }
+                        };
+                        
+                        log::info!(
+                            "Rolling back {} SATS for failed video generation: principal {}",
+                            deducted_amount,
+                            callback.request_key.principal
+                        );
+                        
+                        if let Err(e) = rollback_videogen_balance(
+                            callback.request_key.principal,
+                            deducted_amount,
+                            &jwt_token,
+                        )
+                        .await
+                        {
+                            log::error!(
+                                "Failed to rollback {} SATS for user {}: {}",
+                                deducted_amount,
+                                callback.request_key.principal,
+                                e
+                            );
+                        }
+                    }
                 }
 
                 Ok(StatusCode::OK)

@@ -1,7 +1,8 @@
 use candid::Principal;
 use num_bigint::{BigInt, BigUint, Sign};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use videogen_common::VideoGenError;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
 const VIDEOGEN_COST_SATS: u64 = 1000; // Cost for video generation in sats
 const WORKER_URL: &str = "https://yral-hot-or-not.go-bazzinga.workers.dev";
@@ -42,8 +43,8 @@ pub async fn load_sats_balance(user_principal: Principal) -> Result<BigUint, Vid
         .map_err(|e| VideoGenError::NetworkError(format!("Failed to parse balance: {}", e)))
 }
 
-/// Deduct balance for video generation
-pub async fn deduct_videogen_balance(user_principal: Principal) -> Result<BigUint, VideoGenError> {
+/// Deduct balance for video generation and return the deducted amount
+pub async fn deduct_videogen_balance(user_principal: Principal, jwt_token: &str) -> Result<u64, VideoGenError> {
     // Load current balance
     let balance = load_sats_balance(user_principal).await?;
 
@@ -65,8 +66,18 @@ pub async fn deduct_videogen_balance(user_principal: Principal) -> Result<BigUin
     // Send balance update to worker
     let req_url = format!("{}/v2/update_balance/{}", WORKER_URL, user_principal);
     let client = reqwest::Client::new();
+    
+    // Add JWT authorization header
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {}", jwt_token))
+            .map_err(|_| VideoGenError::AuthError)?,
+    );
+    
     let res = client
         .post(&req_url)
+        .headers(headers)
         .json(&worker_req)
         .send()
         .await
@@ -79,24 +90,25 @@ pub async fn deduct_videogen_balance(user_principal: Principal) -> Result<BigUin
         )));
     }
 
-    // Return the original balance for potential rollback
-    Ok(balance)
+    // Return the deducted amount
+    Ok(VIDEOGEN_COST_SATS)
 }
 
-/// Rollback balance deduction by adding the cost back
+/// Rollback balance deduction by adding the specified amount back
 pub async fn rollback_videogen_balance(
     user_principal: Principal,
-    original_balance: BigUint,
+    deducted_amount: u64,
+    jwt_token: &str,
 ) -> Result<(), VideoGenError> {
-    // Create balance update request with positive delta to add the cost back
-    let cost_biguint = BigUint::from(VIDEOGEN_COST_SATS);
-    let delta = BigInt::from_biguint(Sign::Plus, cost_biguint.clone());
+    // Load current balance
+    let current_balance = load_sats_balance(user_principal).await?;
 
-    // Calculate what the balance should be after deduction for the previous_balance field
-    let deducted_balance = &original_balance - &cost_biguint;
+    // Create balance update request with positive delta to add the amount back
+    let amount_biguint = BigUint::from(deducted_amount);
+    let delta = BigInt::from_biguint(Sign::Plus, amount_biguint);
 
     let worker_req = SatsBalanceUpdateRequestV2 {
-        previous_balance: deducted_balance,
+        previous_balance: current_balance,
         delta,
         is_airdropped: false,
     };
@@ -104,9 +116,19 @@ pub async fn rollback_videogen_balance(
     // Send balance update to worker
     let req_url = format!("{}/v2/update_balance/{}", WORKER_URL, user_principal);
     let client = reqwest::Client::new();
+    
+    // Add JWT authorization header
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {}", jwt_token))
+            .map_err(|_| VideoGenError::AuthError)?,
+    );
+    
     let res = client
         .post(&req_url)
-        .json(&worker_req) // TODO: need to add Auth jwt , but when being used
+        .headers(headers)
+        .json(&worker_req)
         .send()
         .await
         .map_err(|e| VideoGenError::NetworkError(format!("Failed to rollback balance: {}", e)))?;

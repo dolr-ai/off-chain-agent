@@ -6,6 +6,7 @@ use axum::{
 use std::sync::Arc;
 use videogen_common::VideoGenerator;
 
+use super::balance::{deduct_videogen_balance, rollback_videogen_balance};
 use super::qstash_types::QstashVideoGenRequest;
 use super::rate_limit::verify_rate_limit_and_create_request;
 use super::signature::verify_videogen_request;
@@ -94,6 +95,7 @@ pub async fn generate_video(
         input: request.input,
         request_key: request_key.clone(),
         property: property.to_string(),
+        deducted_amount: None, // No balance deduction for JWT-based auth
     };
 
     let callback_url = OFF_CHAIN_AGENT_URL
@@ -187,12 +189,37 @@ pub async fn generate_video_signed(
     // Get provider before moving input
     let provider = signed_request.request.input.provider();
 
+    // Get JWT token from environment variable
+    let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(videogen_common::VideoGenError::AuthError),
+        )
+    })?;
+
+    // Deduct balance after successful rate limit check
+    let deducted_amount = deduct_videogen_balance(user_principal, &jwt_token)
+        .await
+        .map_err(|e| match e {
+            videogen_common::VideoGenError::InsufficientBalance => {
+                (StatusCode::PAYMENT_REQUIRED, Json(e))
+            }
+            _ => (StatusCode::SERVICE_UNAVAILABLE, Json(e)),
+        })?;
+
+    log::info!(
+        "Successfully deducted {} SATS from user {}",
+        deducted_amount,
+        user_principal
+    );
+
     // Queue to Qstash
     let qstash_request = QstashVideoGenRequest {
         user_principal: signed_request.request.principal,
         input: signed_request.request.input,
         request_key: request_key.clone(),
         property: property.to_string(),
+        deducted_amount: Some(deducted_amount),
     };
 
     let callback_url = OFF_CHAIN_AGENT_URL
@@ -208,19 +235,43 @@ pub async fn generate_video_signed(
         })?
         .to_string();
 
-    app_state
+    match app_state
         .qstash_client
         .queue_video_generation(&qstash_request, &callback_url)
         .await
-        .map_err(|e| {
-            (
+    {
+        Ok(()) => {
+            // Successfully queued
+        }
+        Err(e) => {
+            // Failed to queue - rollback balance
+            log::error!(
+                "Failed to queue video generation: {}. Rolling back balance.",
+                e
+            );
+
+            if let Some(deducted_amount) = qstash_request.deducted_amount {
+                if let Err(rollback_err) =
+                    rollback_videogen_balance(user_principal, deducted_amount, &jwt_token).await
+                {
+                    log::error!(
+                        "Failed to rollback {} SATS for user {}: {}",
+                        deducted_amount,
+                        user_principal,
+                        rollback_err
+                    );
+                }
+            }
+
+            return Err((
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(videogen_common::VideoGenError::NetworkError(format!(
                     "Failed to queue video generation: {}",
                     e
                 ))),
-            )
-        })?;
+            ));
+        }
+    }
 
     // Return polling response
     Ok(Json(videogen_common::VideoGenQueuedResponse {

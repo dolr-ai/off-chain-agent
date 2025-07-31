@@ -13,6 +13,8 @@ pub struct QstashVideoGenRequest {
     pub request_key: VideoGenRequestKey,
     /// Property name for rate limiting (e.g., "VIDEOGEN")
     pub property: String,
+    /// Amount deducted from balance (for rollback on failure)
+    pub deducted_amount: Option<u64>,
 }
 
 /// Key structure matching rate limit canister
