@@ -28,13 +28,16 @@ pub mod warehouse_events {
         tonic::include_file_descriptor_set!("warehouse_events_descriptor");
 }
 
+pub mod cloudflare;
 pub mod event;
+pub mod hls;
 pub mod nsfw;
 pub mod push_notifications;
 pub mod queries;
 pub mod types;
 pub mod utils;
 pub mod verify;
+pub mod video_finalize_v2;
 
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
