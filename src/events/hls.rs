@@ -28,6 +28,14 @@ pub struct HlsProcessingRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HlsProcessingResponse {
+    pub hls_url: String,
+    pub video_1080p_url: Option<String>,  // Only present if video was >1080p
+    pub original_resolution: (u32, u32),
+    pub processed_resolution: (u32, u32),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VideoMetadata {
     pub width: u32,
     pub height: u32,
@@ -108,6 +116,86 @@ async fn download_video(video_url: &str) -> Result<Vec<u8>, Error> {
     }
 
     Ok(buf)
+}
+
+#[instrument]
+async fn reencode_video_to_1080p(
+    video_bytes: &[u8],
+    target_width: i32,
+    target_height: i32,
+) -> Result<Vec<u8>, Error> {
+    // Create temp files for input and output
+    let temp_dir = tempfile::tempdir()?;
+    let input_path = temp_dir.path().join("input.mp4");
+    let output_path = temp_dir.path().join("output_1080p.mp4");
+
+    // Write input video
+    fs::write(&input_path, video_bytes)?;
+
+    // Re-encode to 1080p using ffmpeg
+    let status = tokio::task::spawn_blocking({
+        let input_path = input_path.clone();
+        let output_path = output_path.clone();
+        move || {
+            Command::new("ffmpeg")
+                .args(&[
+                    "-i", input_path.to_str().unwrap(),
+                    "-vf", &format!("scale={}:{}", target_width, target_height),
+                    "-c:v", "libx264",
+                    "-crf", "23",
+                    "-preset", "medium",
+                    "-c:a", "aac",
+                    "-b:a", "256k",
+                    "-movflags", "+faststart",
+                    output_path.to_str().unwrap(),
+                ])
+                .output()
+        }
+    })
+    .await??;
+
+    if !status.status.success() {
+        return Err(anyhow!("Failed to re-encode video to 1080p: {}", 
+            String::from_utf8_lossy(&status.stderr)));
+    }
+
+    // Read the output file
+    let output_bytes = fs::read(&output_path)?;
+    Ok(output_bytes)
+}
+
+#[instrument(skip(qstash_client))]
+async fn upload_1080p_video_to_storj(
+    video_id: &str,
+    video_bytes: Vec<u8>,
+    video_info: &UploadVideoInfo,
+    qstash_client: &crate::qstash::client::QStashClient,
+) -> Result<String, Error> {
+    // Create temp file for 1080p video
+    let temp_path = format!("/tmp/{}_1080p.mp4", video_id);
+    fs::write(&temp_path, &video_bytes)?;
+
+    // Upload 1080p video via QStash/Storj duplicate mechanism
+    let video_args = storj_interface::duplicate::Args {
+        publisher_user_id: video_info.publisher_user_id.clone(),
+        video_id: format!("videos/{}_1080p.mp4", video_id),
+        is_nsfw: false,
+        metadata: [
+            ("post_id".into(), video_info.post_id.to_string()),
+            ("timestamp".into(), video_info.timestamp.clone()),
+            ("file_type".into(), "video_1080p".into()),
+            ("original_video_id".into(), video_id.to_string()),
+        ]
+        .into(),
+    };
+    
+    qstash_client.duplicate_to_storj(video_args).await?;
+
+    // Clean up temp file
+    fs::remove_file(&temp_path).ok();
+
+    // Return the URL for the 1080p video
+    Ok(format!("https://link.storjshare.io/raw/videos/{}_1080p.mp4", video_id))
 }
 
 #[instrument(skip(hls_data, qstash_client))]
@@ -234,6 +322,26 @@ pub async fn process_hls(
     log::info!("Downloading video...");
     let video_bytes = download_video(&video_url).await?;
 
+    // Check if we need to re-encode to 1080p
+    let (video_1080p_url, video_bytes_for_hls) = if metadata.height > 1080 {
+        log::info!("Video is higher than 1080p, re-encoding...");
+        let video_1080p_bytes = reencode_video_to_1080p(&video_bytes, target_width, target_height).await?;
+        
+        // Upload 1080p video to Storj
+        log::info!("Uploading 1080p video to Storj...");
+        let video_1080p_url = upload_1080p_video_to_storj(
+            &request.video_id,
+            video_1080p_bytes.clone(),
+            &request.video_info,
+            &state.qstash_client
+        ).await?;
+        
+        (Some(video_1080p_url), video_1080p_bytes)
+    } else {
+        log::info!("Video is 1080p or lower, using original");
+        (None, video_bytes)
+    };
+
     // Process video with HLS
     log::info!("Processing video with HLS...");
     let profiles = vec![
@@ -260,14 +368,14 @@ pub async fn process_hls(
         },
     ];
 
-    let hls_result = process_video(video_bytes, profiles).await
+    let hls_result = process_video(video_bytes_for_hls, profiles).await
         .map_err(|e| anyhow!("HLS processing failed: {}", e))?;
 
-    // Upload to Storj
+    // Upload HLS to Storj
     log::info!("Uploading HLS files to Storj...");
     let hls_url = upload_hls_to_storj(&request.video_id, hls_result, &request.video_info, &state.qstash_client).await?;
 
-    // Store HLS info in BigQuery
+    // Store HLS info
     #[cfg(not(feature = "local-bin"))]
     store_hls_info(
         &request.video_id,
@@ -278,10 +386,15 @@ pub async fn process_hls(
 
     log::info!("HLS processing completed for video: {}", request.video_id);
 
-    Ok(Json(serde_json::json!({
-        "message": "HLS processing completed",
-        "hls_url": hls_url,
-        "original_resolution": format!("{}x{}", metadata.width, metadata.height),
-        "processed_resolution": format!("{}x{}", target_width, target_height),
-    })))
+    // Return the response with all URLs
+    let response = HlsProcessingResponse {
+        hls_url,
+        video_1080p_url,
+        original_resolution: (metadata.width, metadata.height),
+        processed_resolution: (target_width as u32, target_height as u32),
+    };
+
+    log::info!("HLS processing complete for video: {}", request.video_id);
+
+    Ok(Json(serde_json::to_value(&response)?))
 }

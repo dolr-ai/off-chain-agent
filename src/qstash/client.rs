@@ -224,6 +224,47 @@ impl QStashClient {
     }
 
     #[instrument(skip(self))]
+    pub async fn publish_hls_with_callback(
+        &self,
+        video_id: &str,
+        video_info: &UploadVideoInfo,
+        is_nsfw: bool,
+    ) -> Result<(), anyhow::Error> {
+        let hls_ep = OFF_CHAIN_AGENT_URL.join("qstash/process_hls").unwrap();
+        let finalize_ep = OFF_CHAIN_AGENT_URL.join("qstash/finalize_video_v2").unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", hls_ep))?;
+        let req = serde_json::json!({
+            "video_id": video_id,
+            "video_info": video_info,
+        });
+
+        // The callback body will include the HLS response
+        let callback_body = json!({
+            "video_id": video_id,
+            "video_info": video_info,
+            "is_nsfw": is_nsfw,
+        });
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("Upstash-Flow-Control-Key", "HLS_PROCESSING")
+            .header("Upstash-Flow-Control-Value", "Rate=5,Parallelism=3")
+            // Add callback to finalize after HLS completes
+            .header("Upstash-Callback", finalize_ep.to_string())
+            .header("Upstash-Failure-Callback", finalize_ep.to_string())
+            .header("Upstash-Callback-Body", serde_json::to_string(&callback_body)?)
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+
+    #[instrument(skip(self))]
     pub async fn publish_report_post(
         &self,
         report_request: ReportPostRequestV2,

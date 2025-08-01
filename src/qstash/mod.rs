@@ -85,15 +85,6 @@ async fn video_deduplication_handler(
     );
 
     let qstash_client = state.qstash_client.clone();
-    let video_info = req.video_info.clone().unwrap_or_else(|| {
-        crate::events::event::UploadVideoInfo {
-            video_id: req.video_id.clone(),
-            post_id: req.publisher_data.post_id,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            publisher_user_id: req.publisher_data.publisher_principal.clone(),
-            channel_id: None,
-        }
-    });
 
     if let Err(e) = duplication_handler
         .process_video_deduplication(
@@ -109,24 +100,12 @@ async fn video_deduplication_handler(
 
                 // Use the cloned qstash_client instead of accessing through state
                 let qstash_client = qstash_client.clone();
-                let video_info_clone = video_info.clone();
 
                 Box::pin(async move {
-                    // Trigger both video processing and HLS processing in parallel
-                    let video_future = qstash_client
-                        .publish_video(&vid_id, post_id, timestamp.clone(), &publisher_user_id);
-                    
-                    let hls_future = qstash_client
-                        .publish_hls_processing(&vid_id, &video_info_clone);
-
-                    // Execute both futures in parallel
-                    let (video_result, hls_result) = tokio::join!(video_future, hls_future);
-                    
-                    // Check both results
-                    video_result?;
-                    hls_result?;
-                    
-                    Ok(())
+                    // Only trigger video processing (HLS will be triggered after NSFW)
+                    qstash_client
+                        .publish_video(&vid_id, post_id, timestamp, &publisher_user_id)
+                        .await
                 })
             },
         )
@@ -154,6 +133,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
         .route("/enqueue_video_nsfw_detection_v2", post(nsfw_job_v2))
         .route("/process_hls", post(process_hls))
+        .route("/finalize_video_v2", post(crate::events::video_finalize_v2::finalize_video_v2))
         .route("/report_post", post(qstash_report_post))
         .route("/storj_ingest", post(storj_ingest))
         .route(
