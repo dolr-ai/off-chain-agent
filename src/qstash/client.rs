@@ -197,6 +197,33 @@ impl QStashClient {
     }
 
     #[instrument(skip(self))]
+    pub async fn publish_hls_processing(
+        &self,
+        video_id: &str,
+        video_info: &UploadVideoInfo,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/process_hls").unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let req = serde_json::json!({
+            "video_id": video_id,
+            "video_info": video_info,
+        });
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("Upstash-Flow-Control-Key", "HLS_PROCESSING")
+            .header("Upstash-Flow-Control-Value", "Rate=5,Parallelism=3")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
     pub async fn publish_report_post(
         &self,
         report_request: ReportPostRequestV2,
