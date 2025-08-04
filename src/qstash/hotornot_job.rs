@@ -83,7 +83,7 @@ pub async fn start_hotornot_job_v2(
 
         for (_, inmem_buffer_item) in post_items {
             let query = format!(
-                "select hot_or_not_evaluator.update_counter('{}',{},{})",
+                "select hot_or_not_evaluator.update_counter_v3('{}',{},{})",
                 inmem_buffer_item.video_id,
                 inmem_buffer_item.liked_video,
                 inmem_buffer_item.max_percent_watched
