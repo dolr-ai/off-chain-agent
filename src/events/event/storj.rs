@@ -21,7 +21,8 @@ pub async fn storj_ingest(
         .json(&payload)
         .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
         .send()
-        .await?;
+        .await?
+        .error_for_status()?;
 
     Ok(())
 }

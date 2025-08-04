@@ -1,5 +1,5 @@
-mod verify;
 pub mod notification_store_job;
+mod verify;
 
 use std::sync::Arc;
 
@@ -71,6 +71,16 @@ async fn video_deduplication_handler(
         req.video_id
     );
 
+    sentry::configure_scope(|scope| {
+        scope.set_tag("yral.video_id", &req.video_id);
+        scope.set_tag(
+            "yral.publisher_user_id",
+            &req.publisher_data.publisher_principal,
+        );
+    });
+
+    sentry::capture_message("starting to process for duplication", sentry::Level::Info);
+
     let publisher_data = VideoPublisherData {
         publisher_principal: req.publisher_data.publisher_principal.clone(),
         post_id: req.publisher_data.post_id,
@@ -111,6 +121,10 @@ async fn video_deduplication_handler(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
+    sentry::capture_message(
+        "responding that video deduplication check was completed",
+        sentry::Level::Info,
+    );
     let response = Response::builder()
         .status(StatusCode::OK)
         .body("Video deduplication check completed".into())
@@ -142,8 +156,14 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(handle_delete_and_reclaim_canisters),
         )
         .route("/prune_notification_store", post(prune_notification_store))
-        .route("/process_video_gen", post(crate::videogen::qstash_process::process_video_generation))
-        .route("/video_gen_callback", post(crate::videogen::qstash_callback::handle_video_gen_callback))
+        .route(
+            "/process_video_gen",
+            post(crate::videogen::qstash_process::process_video_generation),
+        )
+        .route(
+            "/video_gen_callback",
+            post(crate::videogen::qstash_callback::handle_video_gen_callback),
+        )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
