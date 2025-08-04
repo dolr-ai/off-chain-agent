@@ -71,18 +71,19 @@ impl QStashClient {
             .send()
             .await?;
 
-        let _guard = sentry::Hub::current().push_scope();
-        configure_scope(|scope| {
-            scope.clear();
-            scope.set_tag("yral.video_id", &data.video_id);
-            scope.set_tag("yral.publisher_user_id", &data.publisher_user_id);
-            scope.set_tag("yral.is_nsfw", data.is_nsfw);
-            scope.set_extra(
-                "yral.metadata",
-                serde_json::to_value(&data.metadata).expect("metadata to be serializable as json"),
-            );
-        });
-        sentry::capture_message("enqueing for storj duplication", sentry::Level::Info);
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("yral.video_id", &data.video_id);
+                scope.set_tag("yral.publisher_user_id", &data.publisher_user_id);
+                scope.set_tag("yral.is_nsfw", data.is_nsfw);
+                scope.set_extra(
+                    "yral.metadata",
+                    serde_json::to_value(&data.metadata)
+                        .expect("metadata to be serializable as json"),
+                );
+            },
+            || sentry::capture_message("enqueing for storj duplication", sentry::Level::Info),
+        );
 
         Ok(())
     }
@@ -113,13 +114,13 @@ impl QStashClient {
             .send()
             .await?;
 
-        let _guard = sentry::Hub::current().push_scope();
-        configure_scope(|scope| {
-            scope.clear();
-            scope.set_tag("yral.video_id", &video_id);
-            scope.set_tag("yral.publisher_user_id", &publisher_user_id);
-        });
-        sentry::capture_message("enqueing for upload to gcs", sentry::Level::Info);
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.publisher_user_id", &publisher_user_id);
+            },
+            || sentry::capture_message("enqueing for upload to gcs", sentry::Level::Info),
+        );
 
         Ok(())
     }
@@ -148,18 +149,18 @@ impl QStashClient {
             .send()
             .await?;
 
-        let _guard = sentry::Hub::current().push_scope();
-        configure_scope(|scope| {
-            scope.clear();
-            scope.set_tag("yral.video_id", &video_id);
-            scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
-            scope.set_extra(
-                "yral.upload_info",
-                serde_json::to_value(&video_info)
-                    .expect("upload video info to be serializable as json"),
-            );
-        });
-        sentry::capture_message("enqueing for video frames", sentry::Level::Info);
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
+                scope.set_extra(
+                    "yral.upload_info",
+                    serde_json::to_value(&video_info)
+                        .expect("upload video info to be serializable as json"),
+                );
+            },
+            || sentry::capture_message("enqueing for video frames", sentry::Level::Info),
+        );
 
         Ok(())
     }
@@ -188,20 +189,22 @@ impl QStashClient {
             .send()
             .await?;
 
-        let _guard = sentry::Hub::current().push_scope();
-        configure_scope(|scope| {
-            scope.clear();
-            scope.set_tag("yral.video_id", &video_id);
-            scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
-            scope.set_extra(
-                "yral.upload_info",
-                serde_json::to_value(&video_info)
-                    .expect("upload video info to be serializable as json"),
-            );
-        });
-        sentry::capture_message(
-            "enqueing for nsfw detection v1 (shouldn't happen)",
-            sentry::Level::Info,
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
+                scope.set_extra(
+                    "yral.upload_info",
+                    serde_json::to_value(&video_info)
+                        .expect("upload video info to be serializable as json"),
+                );
+            },
+            || {
+                sentry::capture_message(
+                    "enqueing for nsfw detection v1 (shouldn't happen)",
+                    sentry::Level::Info,
+                )
+            },
         );
 
         Ok(())
@@ -244,19 +247,19 @@ impl QStashClient {
             .send()
             .await?;
 
-        let _guard = sentry::Hub::current().push_scope();
-        configure_scope(|scope| {
-            scope.clear();
-            scope.set_tag("yral.video_id", &video_id);
-            scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
-            scope.set_extra("yral.delay_seconds", delay_seconds.into());
-            scope.set_extra(
-                "yral.upload_info",
-                serde_json::to_value(&video_info)
-                    .expect("upload video info to be serializable as json"),
-            );
-        });
-        sentry::capture_message("enqueing for nsfw detection v2", sentry::Level::Info);
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
+                scope.set_extra("yral.delay_seconds", delay_seconds.into());
+                scope.set_extra(
+                    "yral.upload_info",
+                    serde_json::to_value(&video_info)
+                        .expect("upload video info to be serializable as json"),
+                );
+            },
+            || sentry::capture_message("enqueing for nsfw detection v2", sentry::Level::Info),
+        );
 
         Ok(())
     }
