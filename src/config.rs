@@ -32,6 +32,7 @@ impl AppConfig {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open("google_service_account.json")
             .expect("create file");
 

@@ -32,7 +32,7 @@ pub async fn snapshot_alert_job(
     let agent = state.agent.clone();
     let canister_backup_redis_pool = state.canister_backup_redis_pool.clone();
 
-    let _ = tokio::spawn(async move {
+    tokio::spawn(async move {
         snapshot_alert_job_impl(&agent, &canister_backup_redis_pool, payload.date_str)
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))

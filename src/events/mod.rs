@@ -65,6 +65,7 @@ pub struct VideoUploadSuccessful {
 }
 
 impl VideoUploadSuccessful {
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_event(
         &self,
         user_principal: Principal,

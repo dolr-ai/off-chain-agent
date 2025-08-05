@@ -1,14 +1,12 @@
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::info;
-use uuid::Uuid;
 use videogen_common::{
     LumaLabsDuration, LumaLabsResolution, VideoGenError, VideoGenInput, VideoGenResponse,
 };
 
 use crate::app_state::AppState;
-use crate::consts::{LUMALABS_API_URL, LUMALABS_IMAGE_BUCKET};
+use crate::consts::LUMALABS_API_URL;
 
 #[derive(Serialize)]
 struct LumaLabsRequest {
@@ -42,13 +40,13 @@ struct LumaLabsFrame {
 #[derive(Deserialize)]
 struct LumaLabsResponse {
     id: String,
-    state: String,
-    created_at: String,
+    // state: String,
+    // created_at: String,
 }
 
 #[derive(Deserialize)]
 struct LumaLabsGenerationStatus {
-    id: String,
+    // id: String,
     state: String,
     assets: Option<LumaLabsAssets>,
     #[serde(rename = "failure_reason")]
@@ -58,8 +56,8 @@ struct LumaLabsGenerationStatus {
 #[derive(Deserialize)]
 struct LumaLabsAssets {
     video: Option<String>,
-    image: Option<String>,
-    progress_video: Option<String>,
+    // image: Option<String>,
+    // progress_video: Option<String>,
 }
 
 pub async fn generate(
@@ -71,7 +69,7 @@ pub async fn generate(
             "Only LumaLabs input is supported".to_string(),
         ));
     };
-    
+
     let prompt = model.prompt;
     let image = model.image;
     let resolution = model.resolution;
@@ -99,6 +97,7 @@ pub async fn generate(
         }
         #[cfg(feature = "local-bin")]
         {
+            let _ = (app_state, img);
             return Err(VideoGenError::InvalidInput(
                 "Image upload not supported in local mode".to_string(),
             ));
@@ -265,6 +264,10 @@ async fn upload_image_to_gcs(
     mime_type: &str,
 ) -> Result<String, VideoGenError> {
     // Decode base64 image
+
+    use crate::consts::LUMALABS_IMAGE_BUCKET;
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+    use uuid::Uuid;
     let image_bytes = BASE64
         .decode(image_data)
         .map_err(|e| VideoGenError::InvalidInput(format!("Invalid base64 image data: {}", e)))?;

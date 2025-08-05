@@ -12,33 +12,11 @@ pub struct VideoPublisherData {
     pub post_id: u64,
 }
 
-// Add these structures to support the indexer API response
-#[derive(Debug, Deserialize)]
-struct VideoHashIndexerResponse {
-    match_found: bool,
-    match_details: Option<MatchDetails>,
-    hash_added: bool,
-}
+/// The VideoHashDuplication struct will contain the deduplication logic
+pub struct VideoHashDuplication;
 
-#[derive(Debug, Deserialize)]
-struct MatchDetails {
-    video_id: String,
-    similarity_percentage: f64,
-    is_duplicate: bool,
-}
-
-// The VideoHashDuplication struct will contain the deduplication logic
-pub struct VideoHashDuplication<'a> {
-    client: &'a reqwest::Client,
-    base_url: &'a reqwest::Url,
-}
-
-impl<'a> VideoHashDuplication<'a> {
-    pub fn new(client: &'a reqwest::Client, base_url: &'a reqwest::Url) -> Self {
-        Self { client, base_url }
-    }
-
-    pub async fn process_video_deduplication(
+impl VideoHashDuplication {
+    pub async fn process_video_deduplication<'a>(
         &self,
         agent: &ic_agent::Agent,
         bigquery_client: &google_cloud_bigquery::client::Client,

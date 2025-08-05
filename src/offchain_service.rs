@@ -113,40 +113,42 @@ pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
         return Err(anyhow::anyhow!("Error sending data to Google Chat"));
     }
 
-    let body = response.unwrap().text().await.unwrap();
+    let _body = response.unwrap().text().await.unwrap();
 
     Ok(())
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct GoogleJWT {
+    #[allow(dead_code)]
     aud: String,
+    #[allow(dead_code)]
     iss: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct GChatPayload {
-    #[serde(rename = "type")]
-    payload_type: String,
-    #[serde(rename = "eventTime")]
-    event_time: String,
-    message: serde_json::Value,
-    space: serde_json::Value,
-    user: serde_json::Value,
+    // #[serde(rename = "type")]
+    // payload_type: String,
+    // #[serde(rename = "eventTime")]
+    // event_time: String,
+    // message: serde_json::Value,
+    // space: serde_json::Value,
+    // user: serde_json::Value,
     action: GChatPayloadAction,
-    common: serde_json::Value,
+    // common: serde_json::Value,
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct GChatPayloadAction {
-    #[serde(rename = "actionMethodName")]
-    action_method_name: String,
+    // #[serde(rename = "actionMethodName")]
+    // action_method_name: String,
     parameters: Vec<GChatPayloadActionParameter>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct GChatPayloadActionParameter {
-    key: String,
+    // key: String,
     value: String,
 }
 
@@ -190,7 +192,7 @@ pub async fn report_approved_handler(
 
     let mut valid = false;
 
-    for (k, v) in &certs {
+    for v in certs.values() {
         let jwt = jsonwebtoken::decode::<GoogleJWT>(
             auth_token,
             &DecodingKey::from_rsa_pem(v.as_bytes())?,

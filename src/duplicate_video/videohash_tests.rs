@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
+#[allow(dead_code)]
 fn create_test_video(
     path: &str,
     duration: u32,
