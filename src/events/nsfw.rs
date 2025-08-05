@@ -303,6 +303,22 @@ pub async fn nsfw_job_v2(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id.clone();
     let video_info = payload.video_info.clone();
+    sentry::with_scope(
+        |scope| {
+            scope.set_tag("yral.video_id", &payload.video_id);
+            scope.set_tag(
+                "yral.publisher_user_id",
+                &payload.video_info.publisher_user_id,
+            );
+            scope.set_extra(
+                "yral.upload_info",
+                serde_json::to_value(&payload.video_info)
+                    .expect("upload info to be json serializable"),
+            );
+        },
+        || sentry::capture_message("Processing for nsfw detection v2", sentry::Level::Info),
+    );
+    let video_id = payload.video_id;
 
     // Start NSFW detection
     let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;
