@@ -52,8 +52,12 @@ fn main() {
     }
 
     // Read the private key
-    let enc_key_raw = fs::read(&jwt_pem_file)
-        .unwrap_or_else(|_| panic!("Failed to read JWT PEM file: {}", jwt_pem_file));
+    let enc_key_raw = fs::read(&jwt_pem_file).unwrap_or_else(|err| {
+        panic!(
+            "Failed to read JWT PEM file: {} reason:\n{err:?}",
+            jwt_pem_file
+        )
+    });
 
     let enc_key = EncodingKey::from_ed_pem(&enc_key_raw)
         .expect("Invalid PEM file - must be Ed25519 private key in PEM format");
