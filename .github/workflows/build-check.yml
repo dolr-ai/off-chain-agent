@@ -39,7 +39,7 @@ jobs:
         with:
           toolchain: "stable"
           targets: "x86_64-unknown-linux-gnu"
-          components: "clippy,rusfmt"
+          components: "clippy,rustfmt"
 
       - name: Build setup
         run: |
