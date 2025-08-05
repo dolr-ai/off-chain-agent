@@ -6,7 +6,6 @@ use crate::{
     AppError,
 };
 use axum::{extract::State, Json};
-use candid::Principal;
 use http::header::CONTENT_TYPE;
 use log::error;
 use reqwest::Client;

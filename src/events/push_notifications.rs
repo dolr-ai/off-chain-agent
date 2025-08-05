@@ -51,13 +51,13 @@ pub async fn dispatch_notif(
     match event {
         EventPayload::VideoUploadSuccessful(payload) => {
             notification_store.add_notification(payload.publisher_user_id, NotificationType::VideoUpload(VideoUploadPayload{
-                video_uid: payload.post_id.clone()
+                video_uid: payload.post_id
             })).await?;
         }
         EventPayload::LikeVideo(payload) => {
             notification_store.add_notification(payload.publisher_user_id, NotificationType::Liked(LikedPayload{
-                post_id: payload.post_id.clone(),
-                by_user_principal: payload.user_id.clone()
+                post_id: payload.post_id,
+                by_user_principal: payload.user_id
             })).await?;
         }
         _ => {}

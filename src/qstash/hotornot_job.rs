@@ -4,10 +4,7 @@ use axum::{extract::State, response::IntoResponse};
 use futures::{stream::FuturesUnordered, StreamExt};
 use http::StatusCode;
 use yral_ml_feed_cache::{
-    consts::{
-        USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
-    },
-    types::{MLFeedCacheHistoryItem, PlainPostItem},
+    consts::USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
     types_v2::{MLFeedCacheHistoryItemV2, PlainPostItemV2},
 };
 

@@ -85,7 +85,7 @@ impl<'a> VideoHashDuplication<'a> {
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.video_id", video_id);
                 scope.set_tag(
                     "yral.publisher_user_id",
                     &publisher_data.publisher_principal,

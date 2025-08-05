@@ -9,7 +9,6 @@ use http::{
     HeaderMap, HeaderValue,
 };
 use reqwest::{Client, Url};
-use sentry::configure_scope;
 use serde_json::json;
 use tracing::instrument;
 
@@ -116,8 +115,8 @@ impl QStashClient {
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
-                scope.set_tag("yral.publisher_user_id", &publisher_user_id);
+                scope.set_tag("yral.video_id", video_id);
+                scope.set_tag("yral.publisher_user_id", publisher_user_id);
             },
             || sentry::capture_message("enqueing for upload to gcs", sentry::Level::Info),
         );
@@ -151,11 +150,11 @@ impl QStashClient {
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.video_id", video_id);
                 scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
                 scope.set_extra(
                     "yral.upload_info",
-                    serde_json::to_value(&video_info)
+                    serde_json::to_value(video_info)
                         .expect("upload video info to be serializable as json"),
                 );
             },
@@ -191,11 +190,11 @@ impl QStashClient {
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.video_id", video_id);
                 scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
                 scope.set_extra(
                     "yral.upload_info",
-                    serde_json::to_value(&video_info)
+                    serde_json::to_value(video_info)
                         .expect("upload video info to be serializable as json"),
                 );
             },
@@ -249,7 +248,7 @@ impl QStashClient {
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.video_id", video_id);
                 scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
                 scope.set_extra("yral.delay_seconds", delay_seconds.into());
                 scope.set_extra(

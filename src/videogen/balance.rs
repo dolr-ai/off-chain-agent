@@ -1,6 +1,6 @@
 use candid::Principal;
 use num_bigint::{BigInt, BigUint, Sign};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use videogen_common::VideoGenError;
 
 const VIDEOGEN_COST_SATS: u64 = 1000; // Cost for video generation in sats

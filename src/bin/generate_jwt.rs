@@ -26,7 +26,7 @@ fn main() {
 
         // Generate Ed25519 key pair using openssl command
         let _ = std::process::Command::new("openssl")
-            .args(&[
+            .args([
                 "genpkey",
                 "-algorithm",
                 "ed25519",
@@ -37,7 +37,7 @@ fn main() {
             .expect("Failed to generate private key");
 
         let _ = std::process::Command::new("openssl")
-            .args(&[
+            .args([
                 "pkey",
                 "-in",
                 "jwt_private_key.pem",
@@ -53,7 +53,7 @@ fn main() {
 
     // Read the private key
     let enc_key_raw =
-        fs::read(&jwt_pem_file).expect(&format!("Failed to read JWT PEM file: {}", jwt_pem_file));
+        fs::read(&jwt_pem_file).unwrap_or_else(|_| panic!("Failed to read JWT PEM file: {}", jwt_pem_file));
 
     let enc_key = EncodingKey::from_ed_pem(&enc_key_raw)
         .expect("Invalid PEM file - must be Ed25519 private key in PEM format");

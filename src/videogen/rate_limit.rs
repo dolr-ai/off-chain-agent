@@ -8,7 +8,7 @@ use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 use crate::{
     app_state::AppState,
     consts::{
-        RATE_LIMITS_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID, VIDEOGEN_RATE_LIMIT_PROPERTY,
+        RATE_LIMITS_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID,
     },
 };
 use videogen_common::VideoGenError;

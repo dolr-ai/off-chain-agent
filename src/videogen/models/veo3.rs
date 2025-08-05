@@ -196,7 +196,7 @@ async fn poll_for_completion(
 
         let response = client
             .post(&poll_url)
-            .bearer_auth(&access_token)
+            .bearer_auth(access_token)
             .header("Content-Type", "application/json; charset=utf-8")
             .json(&request_body)
             .send()

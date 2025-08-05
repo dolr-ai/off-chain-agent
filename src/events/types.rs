@@ -1,11 +1,7 @@
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use utoipa::ToSchema;
-use yral_canisters_client::notification_store::{
-    LikedPayload, NotificationStore, NotificationType, VideoUploadPayload,
-};
 use yral_metadata_types::{
     AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
     SendNotificationReq, WebpushConfig, WebpushFcmOptions,

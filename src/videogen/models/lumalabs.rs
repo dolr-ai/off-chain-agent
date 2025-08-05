@@ -175,7 +175,7 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
     for attempt in 0..max_attempts {
         let response = client
             .get(&status_url)
-            .bearer_auth(&api_key)
+            .bearer_auth(api_key)
             .send()
             .await
             .map_err(|e| {
