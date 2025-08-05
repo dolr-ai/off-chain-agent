@@ -31,7 +31,7 @@ impl VideoHashDuplication {
         )
             -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
     ) -> Result<(), anyhow::Error> {
-        log::info!("Calculating videohash for video URL: {}", video_url);
+        log::info!("Calculating videohash for video URL: {video_url}");
         let video_hash = VideoHash::from_url(video_url)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
@@ -58,7 +58,7 @@ impl VideoHashDuplication {
             self.store_unique_video(video_id, &video_hash.hash).await?;
             self.store_unique_video_v2(video_id, &video_hash.hash)
                 .await?;
-            log::info!("Unique video recorded: video_id [{}]", video_id);
+            log::info!("Unique video recorded: video_id [{video_id}]");
         }
 
         sentry::with_scope(
@@ -99,8 +99,7 @@ impl VideoHashDuplication {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
         let request = QueryRequest {
@@ -109,8 +108,7 @@ impl VideoHashDuplication {
         };
 
         log::info!(
-            "Storing hash in videohash_original for video_id [{}]",
-            video_id
+            "Storing hash in videohash_original for video_id [{video_id}]"
         );
 
         bigquery_client
@@ -153,8 +151,7 @@ impl VideoHashDuplication {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
         let request = QueryRequest {
@@ -163,8 +160,7 @@ impl VideoHashDuplication {
         };
 
         log::info!(
-            "Storing unique video in video_unique for video_id [{}]",
-            video_id
+            "Storing unique video in video_unique for video_id [{video_id}]"
         );
 
         bigquery_client
@@ -181,8 +177,7 @@ impl VideoHashDuplication {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique_v2` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
         let request = QueryRequest {
@@ -191,8 +186,7 @@ impl VideoHashDuplication {
         };
 
         log::info!(
-            "Storing unique video in video_unique for video_id [{}]",
-            video_id
+            "Storing unique video in video_unique for video_id [{video_id}]"
         );
 
         bigquery_client

@@ -38,7 +38,7 @@ impl NotificationClient {
             .await;
 
         if let Err(e) = res {
-            log::error!("Error sending notification: {:?}", e);
+            log::error!("Error sending notification: {e:?}");
         }
     }
 }

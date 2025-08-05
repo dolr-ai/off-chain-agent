@@ -102,8 +102,7 @@ pub async fn generate_video(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(videogen_common::VideoGenError::NetworkError(format!(
-                    "Failed to construct callback URL: {}",
-                    e
+                    "Failed to construct callback URL: {e}"
                 ))),
             )
         })?
@@ -117,8 +116,7 @@ pub async fn generate_video(
             (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(videogen_common::VideoGenError::NetworkError(format!(
-                    "Failed to queue video generation: {}",
-                    e
+                    "Failed to queue video generation: {e}"
                 ))),
             )
         })?;
@@ -163,7 +161,7 @@ pub async fn generate_video_signed(
     verify_videogen_request(user_principal, &signed_request)
         .map_err(|e| (StatusCode::UNAUTHORIZED, Json(e)))?;
 
-    log::info!("Signature verified for user {}", user_principal);
+    log::info!("Signature verified for user {user_principal}");
 
     // Verify rate limit and create request atomically
     let model_name = signed_request.request.input.model_name();
@@ -201,8 +199,7 @@ pub async fn generate_video_signed(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(videogen_common::VideoGenError::NetworkError(format!(
-                    "Failed to construct callback URL: {}",
-                    e
+                    "Failed to construct callback URL: {e}"
                 ))),
             )
         })?
@@ -216,8 +213,7 @@ pub async fn generate_video_signed(
             (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(videogen_common::VideoGenError::NetworkError(format!(
-                    "Failed to queue video generation: {}",
-                    e
+                    "Failed to queue video generation: {e}"
                 ))),
             )
         })?;

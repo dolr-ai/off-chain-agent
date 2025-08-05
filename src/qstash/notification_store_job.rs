@@ -15,7 +15,7 @@ pub async fn prune_notification_store(
     notif_store.prune_notifications().await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to prune notification store: {}", e),
+            format!("Failed to prune notification store: {e}"),
         )
     })?;
 

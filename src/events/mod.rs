@@ -52,7 +52,7 @@ impl WarehouseEvents for WarehouseEventsService {
         let event = event::Event::new(request);
 
         process_event_impl(event, shared_state).await.map_err(|e| {
-            log::error!("Failed to process event grpc: {}", e);
+            log::error!("Failed to process event grpc: {e}");
             tonic::Status::internal("Failed to process event")
         })?;
 
@@ -160,7 +160,7 @@ async fn post_event(
     process_event_impl(event, state.clone())
         .await
         .map_err(|e| {
-            log::error!("Failed to process event rest: {}", e);
+            log::error!("Failed to process event rest: {e}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to process event".to_string(),
@@ -192,13 +192,13 @@ async fn process_event_impl(
         use crate::events::push_notifications::dispatch_notif;
 
         let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
-            log::error!("Failed to parse params: {}", e);
+            log::error!("Failed to parse params: {e}");
             anyhow::anyhow!("Failed to parse params: {}", e)
         })?;
 
         let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
         if let Err(e) = res {
-            log::error!("Failed to dispatch notification: {:?}", e);
+            log::error!("Failed to dispatch notification: {e:?}");
         }
     }
 
@@ -242,7 +242,7 @@ async fn handle_bulk_events(
         metric_events.push(req_event);
 
         if let Err(e) = process_event_impl(event, state.clone()).await {
-            log::error!("Failed to process event rest: {}", e); // not sending any error to the client as it is a bulk request
+            log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
     }
 
@@ -251,7 +251,7 @@ async fn handle_bulk_events(
         .push_list("metrics_list".into(), metric_events)
         .await
     {
-        log::error!("Failed to push metrics to vector: {}", e);
+        log::error!("Failed to push metrics to vector: {e}");
     }
 
     Ok((StatusCode::OK, "Events processed".to_string()))

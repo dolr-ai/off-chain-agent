@@ -48,8 +48,7 @@ impl<'de> Deserialize<'de> for AnalyticsEvent {
                 Ok(AnalyticsEvent::LikeVideo(like_video))
             }
             Some(event_type) => Err(serde::de::Error::custom(format!(
-                "Unknown event type: {}",
-                event_type
+                "Unknown event type: {event_type}"
             ))),
             None => Err(serde::de::Error::custom("Missing 'event' field")),
         }

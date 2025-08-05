@@ -118,7 +118,7 @@ pub async fn generate(
     };
 
     // Create generation
-    let create_url = format!("{}/generations", LUMALABS_API_URL);
+    let create_url = format!("{LUMALABS_API_URL}/generations");
     let response = client
         .post(&create_url)
         .bearer_auth(&api_key)
@@ -127,7 +127,7 @@ pub async fn generate(
         .json(&request)
         .send()
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to create generation: {}", e)))?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to create generation: {e}")))?;
 
     if !response.status().is_success() {
         let error_text = response
@@ -135,13 +135,12 @@ pub async fn generate(
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
         return Err(VideoGenError::ProviderError(format!(
-            "LumaLabs API error: {}",
-            error_text
+            "LumaLabs API error: {error_text}"
         )));
     }
 
     let generation_response: LumaLabsResponse = response.json().await.map_err(|e| {
-        VideoGenError::ProviderError(format!("Failed to parse generation response: {}", e))
+        VideoGenError::ProviderError(format!("Failed to parse generation response: {e}"))
     })?;
 
     info!(
@@ -161,11 +160,10 @@ pub async fn generate(
 
 async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<String, VideoGenError> {
     let client = reqwest::Client::new();
-    let status_url = format!("{}/generations/{}", LUMALABS_API_URL, generation_id);
+    let status_url = format!("{LUMALABS_API_URL}/generations/{generation_id}");
 
     log::info!(
-        "Starting to poll for completion of generation: {}",
-        generation_id
+        "Starting to poll for completion of generation: {generation_id}"
     );
 
     let max_attempts = 120; // 10 minutes max
@@ -178,7 +176,7 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
             .send()
             .await
             .map_err(|e| {
-                VideoGenError::NetworkError(format!("Failed to check generation status: {}", e))
+                VideoGenError::NetworkError(format!("Failed to check generation status: {e}"))
             })?;
 
         if !response.status().is_success() {
@@ -187,22 +185,20 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(VideoGenError::ProviderError(format!(
-                "Failed to check generation status: {}",
-                error_text
+                "Failed to check generation status: {error_text}"
             )));
         }
 
         let response_text = response.text().await.map_err(|e| {
-            VideoGenError::NetworkError(format!("Failed to read response text: {}", e))
+            VideoGenError::NetworkError(format!("Failed to read response text: {e}"))
         })?;
 
-        log::info!("Attempting to parse status response: {}", response_text);
+        log::info!("Attempting to parse status response: {response_text}");
 
         let status: LumaLabsGenerationStatus =
             serde_json::from_str(&response_text).map_err(|e| {
                 VideoGenError::ProviderError(format!(
-                    "Failed to parse status response: {}. Response was: {}",
-                    e, response_text
+                    "Failed to parse status response: {e}. Response was: {response_text}"
                 ))
             })?;
 
@@ -228,8 +224,7 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
                     .failure_reason
                     .unwrap_or_else(|| "Unknown error".to_string());
                 return Err(VideoGenError::ProviderError(format!(
-                    "Video generation failed: {}",
-                    reason
+                    "Video generation failed: {reason}"
                 )));
             }
             "pending" | "processing" | "dreaming" => {
@@ -270,7 +265,7 @@ async fn upload_image_to_gcs(
     use uuid::Uuid;
     let image_bytes = BASE64
         .decode(image_data)
-        .map_err(|e| VideoGenError::InvalidInput(format!("Invalid base64 image data: {}", e)))?;
+        .map_err(|e| VideoGenError::InvalidInput(format!("Invalid base64 image data: {e}")))?;
 
     // Generate unique filename
     let file_extension = match mime_type {
@@ -288,13 +283,12 @@ async fn upload_image_to_gcs(
         .create(LUMALABS_IMAGE_BUCKET, image_bytes, &filename, mime_type)
         .await
         .map_err(|e| {
-            VideoGenError::NetworkError(format!("Failed to upload image to GCS: {}", e))
+            VideoGenError::NetworkError(format!("Failed to upload image to GCS: {e}"))
         })?;
 
     // Return public URL
     let public_url = format!(
-        "https://storage.googleapis.com/{}/{}",
-        LUMALABS_IMAGE_BUCKET, filename
+        "https://storage.googleapis.com/{LUMALABS_IMAGE_BUCKET}/{filename}"
     );
 
     info!("Uploaded image to GCS: {}", public_url);

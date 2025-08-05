@@ -68,7 +68,7 @@ impl OffChain for OffChainService {
         repost_post_common_impl(shared_state.clone(), post_report_request)
             .await
             .map_err(|e| {
-                log::error!("Failed to report post: {}", e);
+                log::error!("Failed to report post: {e}");
                 tonic::Status::new(tonic::Code::Unknown, "Failed to report post")
             })?;
 
@@ -109,7 +109,7 @@ pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
         .await;
 
     if response.is_err() {
-        log::error!("Error sending data to Google Chat: {:?}", response);
+        log::error!("Error sending data to Google Chat: {response:?}");
         return Err(anyhow::anyhow!("Error sending data to Google Chat"));
     }
 

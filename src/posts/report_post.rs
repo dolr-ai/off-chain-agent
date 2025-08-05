@@ -28,7 +28,7 @@ pub enum ReportMode {
 
 impl Display for ReportMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -67,11 +67,11 @@ pub async fn handle_report_post(
     repost_post_common_impl(state, request_body.into())
         .await
         .map_err(|e| {
-            log::error!("Failed to report post: {}", e);
+            log::error!("Failed to report post: {e}");
 
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to report post: {}", e),
+                format!("Failed to report post: {e}"),
             )
         })?;
 
@@ -130,11 +130,11 @@ pub async fn handle_report_post_v2(
     repost_post_common_impl(state, request_body)
         .await
         .map_err(|e| {
-            log::error!("Failed to report post: {}", e);
+            log::error!("Failed to report post: {e}");
 
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to report post: {}", e),
+                format!("Failed to report post: {e}"),
             )
         })?;
 
@@ -152,7 +152,7 @@ pub async fn qstash_report_post(
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to create channel: {}", e),
+                format!("Failed to create channel: {e}"),
             )
         })?
         .connect()
@@ -160,7 +160,7 @@ pub async fn qstash_report_post(
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to connect to ML feed server: {}", e),
+                format!("Failed to connect to ML feed server: {e}"),
             )
         })?;
 
@@ -173,11 +173,11 @@ pub async fn qstash_report_post(
     };
 
     client.report_video_v3(request).await.map_err(|e| {
-        log::error!("Failed to report video: {}", e);
+        log::error!("Failed to report video: {e}");
 
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to report video: {}", e),
+            format!("Failed to report video: {e}"),
         )
     })?;
 
@@ -250,7 +250,7 @@ pub async fn repost_post_common_impl(
 
     let res = send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, data).await;
     if res.is_err() {
-        log::error!("Error sending data to Google Chat: {:?}", res);
+        log::error!("Error sending data to Google Chat: {res:?}");
     }
 
     #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]

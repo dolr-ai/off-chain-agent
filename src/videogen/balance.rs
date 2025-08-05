@@ -15,14 +15,14 @@ struct SatsBalanceUpdateRequestV2 {
 
 /// Load current balance for user from worker
 pub async fn load_sats_balance(user_principal: Principal) -> Result<BigUint, VideoGenError> {
-    let req_url = format!("{}/balance/{}", WORKER_URL, user_principal);
+    let req_url = format!("{WORKER_URL}/balance/{user_principal}");
 
     let client = reqwest::Client::new();
     let res = client
         .get(&req_url)
         .send()
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to fetch balance: {}", e)))?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to fetch balance: {e}")))?;
 
     if !res.status().is_success() {
         return Err(VideoGenError::NetworkError(format!(
@@ -32,14 +32,14 @@ pub async fn load_sats_balance(user_principal: Principal) -> Result<BigUint, Vid
     }
 
     let balance_str = res.text().await.map_err(|e| {
-        VideoGenError::NetworkError(format!("Failed to read balance response: {}", e))
+        VideoGenError::NetworkError(format!("Failed to read balance response: {e}"))
     })?;
 
     // Parse the balance from string to BigUint
     balance_str
         .trim()
         .parse::<BigUint>()
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to parse balance: {}", e)))
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to parse balance: {e}")))
 }
 
 /// Deduct balance for video generation
@@ -63,14 +63,14 @@ pub async fn deduct_videogen_balance(user_principal: Principal) -> Result<BigUin
     };
 
     // Send balance update to worker
-    let req_url = format!("{}/v2/update_balance/{}", WORKER_URL, user_principal);
+    let req_url = format!("{WORKER_URL}/v2/update_balance/{user_principal}");
     let client = reqwest::Client::new();
     let res = client
         .post(&req_url)
         .json(&worker_req)
         .send()
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to update balance: {}", e)))?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to update balance: {e}")))?;
 
     if !res.status().is_success() {
         return Err(VideoGenError::NetworkError(format!(
@@ -102,14 +102,14 @@ pub async fn rollback_videogen_balance(
     };
 
     // Send balance update to worker
-    let req_url = format!("{}/v2/update_balance/{}", WORKER_URL, user_principal);
+    let req_url = format!("{WORKER_URL}/v2/update_balance/{user_principal}");
     let client = reqwest::Client::new();
     let res = client
         .post(&req_url)
         .json(&worker_req) // TODO: need to add Auth jwt , but when being used
         .send()
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to rollback balance: {}", e)))?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to rollback balance: {e}")))?;
 
     if !res.status().is_success() {
         return Err(VideoGenError::NetworkError(format!(

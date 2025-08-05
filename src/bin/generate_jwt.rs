@@ -54,8 +54,7 @@ fn main() {
     // Read the private key
     let enc_key_raw = fs::read(&jwt_pem_file).unwrap_or_else(|err| {
         panic!(
-            "Failed to read JWT PEM file: {} reason:\n{err:?}",
-            jwt_pem_file
+            "Failed to read JWT PEM file: {jwt_pem_file} reason:\n{err:?}"
         )
     });
 
@@ -74,13 +73,13 @@ fn main() {
     ];
 
     println!("\n=== JWT Token Generator ===");
-    println!("Audience: {}", jwt_aud);
-    println!("Private Key: {}", jwt_pem_file);
+    println!("Audience: {jwt_aud}");
+    println!("Private Key: {jwt_pem_file}");
 
     // Print public key if it exists
     if let Ok(public_key) = fs::read_to_string("jwt_public_key.pem") {
         println!("\nPublic Key (for JWT_PUBLIC_KEY_PEM env var):");
-        println!("{}", public_key);
+        println!("{public_key}");
     }
 
     println!("\n=== Generated JWT Tokens ===");
@@ -95,15 +94,15 @@ fn main() {
 
         let token = encode(&header, &claims, &enc_key).expect("Failed to encode JWT");
 
-        println!("\nJWT with {} expiry:", duration_name);
-        println!("{}", token);
-        println!("Expires at: timestamp {}", expiry);
+        println!("\nJWT with {duration_name} expiry:");
+        println!("{token}");
+        println!("Expires at: timestamp {expiry}");
     }
 
     println!("\n=== Usage Instructions ===");
     println!("1. Set environment variables:");
     println!("   export JWT_PUBLIC_KEY_PEM=\"$(cat jwt_public_key.pem)\"");
-    println!("   export JWT_AUD=\"{}\"", jwt_aud);
+    println!("   export JWT_AUD=\"{jwt_aud}\"");
     println!("\n2. Use the token in requests:");
     println!("   curl -H \"Authorization: Bearer <JWT_TOKEN>\" ...");
 }

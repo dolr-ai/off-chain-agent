@@ -37,7 +37,7 @@ pub async fn start_hotornot_job_v2(
         .get_user_buffer_items_by_timestamp_v2(timestamps_secs)
         .await
         .map_err(|e| {
-            log::error!("Error getting user buffer items: {:?}", e);
+            log::error!("Error getting user buffer items: {e:?}");
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?;
 
@@ -74,8 +74,7 @@ pub async fn start_hotornot_job_v2(
     for (user_id, post_items) in inmem_index {
         let mut plain_post_items = Vec::new();
         let plain_key = format!(
-            "{}{}",
-            user_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2
+            "{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}"
         );
 
         for (_, inmem_buffer_item) in post_items {
@@ -102,7 +101,7 @@ pub async fn start_hotornot_job_v2(
             .add_user_history_plain_items_v2(&plain_key, plain_post_items)
             .await
         {
-            log::error!("Error adding user watch history plain items: {:?}", e);
+            log::error!("Error adding user watch history plain items: {e:?}");
         }
     }
 
@@ -114,7 +113,7 @@ pub async fn start_hotornot_job_v2(
             let alloydb_client = alloydb_client.clone();
             async move {
                 alloydb_client.execute_sql_raw(query).await.map_err(|e| {
-                    log::error!("Error executing alloydb query: {:?}", e);
+                    log::error!("Error executing alloydb query: {e:?}");
                     anyhow::anyhow!("Error executing alloydb query: {:?}", e)
                 })
             }
@@ -133,7 +132,7 @@ pub async fn start_hotornot_job_v2(
             .remove_user_buffer_items_by_timestamp_v2(timestamps_secs)
             .await
             .map_err(|e| {
-                log::error!("Error removing user buffer items: {:?}", e);
+                log::error!("Error removing user buffer items: {e:?}");
                 (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
             })?;
     }
@@ -144,7 +143,7 @@ pub async fn start_hotornot_job_v2(
             errors.len(),
             errors
         );
-        log::error!("{}", err_str);
+        log::error!("{err_str}");
         return Err((StatusCode::INTERNAL_SERVER_ERROR, err_str));
     }
 

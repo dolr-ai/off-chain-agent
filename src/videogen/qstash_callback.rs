@@ -49,12 +49,12 @@ async fn decrement_counter_for_failure(
                 log::info!("Successfully decremented rate limit counter");
             }
             yral_canisters_client::rate_limits::Result1::Err(e) => {
-                log::error!("Failed to decrement rate limit counter: {}", e);
+                log::error!("Failed to decrement rate limit counter: {e}");
                 // Don't fail the callback if decrement fails
             }
         },
         Err(e) => {
-            log::error!("Failed to call decrement_video_generation_counter: {}", e);
+            log::error!("Failed to call decrement_video_generation_counter: {e}");
             // Don't fail the callback if decrement fails
         }
     }
@@ -79,7 +79,7 @@ pub async fn handle_video_gen_callback(
         .map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
-                format!("Failed to decode body: {}", e),
+                format!("Failed to decode body: {e}"),
             )
         })?;
 
@@ -87,7 +87,7 @@ pub async fn handle_video_gen_callback(
     let callback: QstashVideoGenCallback = serde_json::from_slice(&decoded_body).map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
-            format!("Failed to parse callback: {}", e),
+            format!("Failed to parse callback: {e}"),
         )
     })?;
 
@@ -155,15 +155,15 @@ pub async fn handle_video_gen_callback(
                 Ok(StatusCode::OK)
             }
             yral_canisters_client::rate_limits::Result1::Err(e) => {
-                log::error!("Failed to update video generation status: {}", e);
+                log::error!("Failed to update video generation status: {e}");
                 Err((StatusCode::INTERNAL_SERVER_ERROR, e))
             }
         },
         Err(e) => {
-            log::error!("Failed to call update_video_generation_status: {}", e);
+            log::error!("Failed to call update_video_generation_status: {e}");
             Err((
                 StatusCode::SERVICE_UNAVAILABLE,
-                format!("Canister call failed: {}", e),
+                format!("Canister call failed: {e}"),
             ))
         }
     }

@@ -112,7 +112,7 @@ async fn video_deduplication_handler(
         )
         .await
     {
-        log::error!("Video deduplication failed: {}", e);
+        log::error!("Video deduplication failed: {e}");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
