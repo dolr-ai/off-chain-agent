@@ -85,7 +85,7 @@ pub async fn generate(
             "Invalid input type for Veo3 provider".to_string(),
         ));
     };
-    
+
     let prompt = model.prompt;
     let negative_prompt = model.negative_prompt;
     let image = model.image;

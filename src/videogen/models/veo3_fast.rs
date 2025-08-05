@@ -85,7 +85,7 @@ pub async fn generate(
             "Only Veo3Fast input is supported".to_string(),
         ));
     };
-    
+
     let prompt = model.prompt;
     let negative_prompt = model.negative_prompt;
     let image = model.image;

@@ -19,8 +19,5 @@ pub async fn prune_notification_store(
         )
     })?;
 
-    Ok((
-        StatusCode::OK,
-        "Notification store pruned".to_string(),
-    ))
+    Ok((StatusCode::OK, "Notification store pruned".to_string()))
 }
