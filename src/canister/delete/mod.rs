@@ -63,9 +63,7 @@ pub async fn delete_canister_data(
         .delete_metadata_bulk(vec![user_principal])
         .await
     {
-        log::error!(
-            "Failed to delete metadata for user {user_principal}: {e}"
-        );
+        log::error!("Failed to delete metadata for user {user_principal}: {e}");
     }
 
     // Step 2: Get all posts for the canister
@@ -100,9 +98,7 @@ pub async fn delete_canister_data(
         .delete_user_caches(&canister_id.to_string())
         .await
     {
-        log::error!(
-            "Failed to delete Redis caches for canister {canister_id}: {e}"
-        );
+        log::error!("Failed to delete Redis caches for canister {canister_id}: {e}");
     }
 
     if let Err(e) = state
@@ -110,9 +106,7 @@ pub async fn delete_canister_data(
         .delete_user_caches_v2(&user_principal.to_string())
         .await
     {
-        log::error!(
-            "Failed to delete Redis caches for canister {canister_id}: {e}"
-        );
+        log::error!("Failed to delete Redis caches for canister {canister_id}: {e}");
     }
 
     Ok(())

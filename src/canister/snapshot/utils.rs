@@ -40,9 +40,7 @@ pub async fn get_canister_backup_date_list(
 ) -> Result<Vec<String>, anyhow::Error> {
     let mut conn = canister_backup_redis_pool.get().await?;
     let len = conn
-        .llen::<String, usize>(format!(
-            "canister_backup_date:{canister_type:?}:{date_str}"
-        ))
+        .llen::<String, usize>(format!("canister_backup_date:{canister_type:?}:{date_str}"))
         .await?;
 
     // fetch in chunks of 10000

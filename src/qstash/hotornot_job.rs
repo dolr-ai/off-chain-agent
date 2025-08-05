@@ -73,9 +73,7 @@ pub async fn start_hotornot_job_v2(
 
     for (user_id, post_items) in inmem_index {
         let mut plain_post_items = Vec::new();
-        let plain_key = format!(
-            "{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}"
-        );
+        let plain_key = format!("{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}");
 
         for (_, inmem_buffer_item) in post_items {
             let query = format!(

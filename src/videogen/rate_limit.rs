@@ -22,9 +22,7 @@ async fn check_individual_canister_registration(
     {
         Ok(id) => id,
         Err(e) => {
-            log::warn!(
-                "Failed to get individual canister for principal {user_principal}: {e}"
-            );
+            log::warn!("Failed to get individual canister for principal {user_principal}: {e}");
             return false;
         }
     };
@@ -67,9 +65,7 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
     {
         Ok(result) => result,
         Err(e) => {
-            log::error!(
-                "Failed to get session type for principal {user_principal}: {e}"
-            );
+            log::error!("Failed to get session type for principal {user_principal}: {e}");
             return false;
         }
     };
@@ -85,9 +81,7 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
                 );
                 check_individual_canister_registration(user_principal, app_state).await
             } else {
-                log::warn!(
-                    "Failed to get session type for principal {user_principal}: {e}"
-                );
+                log::warn!("Failed to get session type for principal {user_principal}: {e}");
                 false
             }
         }

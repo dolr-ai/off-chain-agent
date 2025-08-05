@@ -69,9 +69,7 @@ impl Event {
             let params: Value = match serde_json::from_str(&self.event.params) {
                 Ok(params) => params,
                 Err(e) => {
-                    error!(
-                        "Failed to parse video_upload_successful event params: {e}"
-                    );
+                    error!("Failed to parse video_upload_successful event params: {e}");
                     return;
                 }
             };
@@ -219,9 +217,8 @@ impl Event {
                 // if already present in history, return
                 // else add to history and user buffer
 
-                let plain_key = format!(
-                    "{user_canister_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX}"
-                );
+                let plain_key =
+                    format!("{user_canister_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX}");
 
                 match ml_feed_cache
                     .is_user_history_plain_item_exists(
@@ -324,9 +321,7 @@ impl Event {
                 // if already present in history, return
                 // else add to history and user buffer
 
-                let plain_key = format!(
-                    "{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}"
-                );
+                let plain_key = format!("{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}");
 
                 match ml_feed_cache
                     .is_user_history_plain_item_exists_v2(
@@ -478,9 +473,8 @@ impl Event {
 
             // add to history plain items
             if item_type == "like_video" {
-                let plain_key = format!(
-                    "{user_canister_id}{USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX}"
-                );
+                let plain_key =
+                    format!("{user_canister_id}{USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX}");
 
                 match ml_feed_cache
                     .is_user_history_plain_item_exists(

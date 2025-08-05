@@ -210,9 +210,10 @@ async fn poll_for_completion(
             )));
         }
 
-        let resjson = response.json::<Value>().await.map_err(|e| {
-            VideoGenError::ProviderError(format!("Failed to parse response: {e}"))
-        })?;
+        let resjson = response
+            .json::<Value>()
+            .await
+            .map_err(|e| VideoGenError::ProviderError(format!("Failed to parse response: {e}")))?;
 
         log::debug!("Operation status response: {resjson:?}");
 
@@ -284,9 +285,7 @@ async fn poll_for_completion(
                         ));
                     }
                     Err(e) => {
-                        log::error!(
-                            "Failed to parse video response: {e:?}, raw: {result_value:?}"
-                        );
+                        log::error!("Failed to parse video response: {e:?}, raw: {result_value:?}");
                         return Err(VideoGenError::ProviderError(format!(
                             "Failed to parse video generation response: {e}"
                         )));

@@ -107,9 +107,7 @@ impl VideoHashDuplication {
             ..Default::default()
         };
 
-        log::info!(
-            "Storing hash in videohash_original for video_id [{video_id}]"
-        );
+        log::info!("Storing hash in videohash_original for video_id [{video_id}]");
 
         bigquery_client
             .job()
@@ -159,9 +157,7 @@ impl VideoHashDuplication {
             ..Default::default()
         };
 
-        log::info!(
-            "Storing unique video in video_unique for video_id [{video_id}]"
-        );
+        log::info!("Storing unique video in video_unique for video_id [{video_id}]");
 
         bigquery_client
             .job()
@@ -185,9 +181,7 @@ impl VideoHashDuplication {
             ..Default::default()
         };
 
-        log::info!(
-            "Storing unique video in video_unique for video_id [{video_id}]"
-        );
+        log::info!("Storing unique video in video_unique for video_id [{video_id}]");
 
         bigquery_client
             .job()

@@ -162,9 +162,7 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
     let client = reqwest::Client::new();
     let status_url = format!("{LUMALABS_API_URL}/generations/{generation_id}");
 
-    log::info!(
-        "Starting to poll for completion of generation: {generation_id}"
-    );
+    log::info!("Starting to poll for completion of generation: {generation_id}");
 
     let max_attempts = 120; // 10 minutes max
     let poll_interval = Duration::from_secs(5);
@@ -282,14 +280,10 @@ async fn upload_image_to_gcs(
         .object()
         .create(LUMALABS_IMAGE_BUCKET, image_bytes, &filename, mime_type)
         .await
-        .map_err(|e| {
-            VideoGenError::NetworkError(format!("Failed to upload image to GCS: {e}"))
-        })?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to upload image to GCS: {e}")))?;
 
     // Return public URL
-    let public_url = format!(
-        "https://storage.googleapis.com/{LUMALABS_IMAGE_BUCKET}/{filename}"
-    );
+    let public_url = format!("https://storage.googleapis.com/{LUMALABS_IMAGE_BUCKET}/{filename}");
 
     info!("Uploaded image to GCS: {}", public_url);
     Ok(public_url)

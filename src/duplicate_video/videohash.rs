@@ -118,9 +118,7 @@ impl VideoHash {
         let temp_dir = TempDir::new("videohash")?;
         let temp_file = temp_dir.path().join("temp_video.mp4");
 
-        log::info!(
-            "Downloading video from URL to temporary file: {temp_file:?}"
-        );
+        log::info!("Downloading video from URL to temporary file: {temp_file:?}");
 
         // Clone needed values for the spawn_blocking closure
         let url_clone = url.to_string();
