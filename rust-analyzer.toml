@@ -1,0 +1,10 @@
+[cargo]
+features = []
+allTargets = true
+noDefaultFeatures = true
+
+[checkOnSave]
+command = "check"
+allTargets = true
+noDefaultFeatures = true
+features = []
