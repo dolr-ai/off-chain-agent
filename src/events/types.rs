@@ -1,11 +1,7 @@
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use utoipa::ToSchema;
-use yral_canisters_client::notification_store::{
-    LikedPayload, NotificationStore, NotificationType, VideoUploadPayload,
-};
 use yral_metadata_types::{
     AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
     SendNotificationReq, WebpushConfig, WebpushFcmOptions,
@@ -52,8 +48,7 @@ impl<'de> Deserialize<'de> for AnalyticsEvent {
                 Ok(AnalyticsEvent::LikeVideo(like_video))
             }
             Some(event_type) => Err(serde::de::Error::custom(format!(
-                "Unknown event type: {}",
-                event_type
+                "Unknown event type: {event_type}"
             ))),
             None => Err(serde::de::Error::custom("Missing 'event' field")),
         }
@@ -445,6 +440,7 @@ pub struct ReferPayload {
     pub refer_location: Option<String>,
 }
 
+#[allow(dead_code)]
 pub type ReferShareLinkPayload = ReferPayload;
 
 // --------------------------------------------------
@@ -501,6 +497,7 @@ pub struct LogoutClickedPayload {
     pub canister_id: Principal,
 }
 
+#[allow(dead_code)]
 pub type LogoutConfirmationPayload = LogoutClickedPayload;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -659,11 +656,9 @@ pub enum EventPayload {
 /// # Errors
 /// * Returns `serde_json::Error` if the event name is unknown OR the payload cannot
 ///   be deserialized into the expected structure.
-///
-
-// TODO: canister_id is used
-
 impl EventPayload {
+    // TODO: canister_id is used
+
     pub async fn send_notification(&self, app_state: &AppState) {
         match self {
             EventPayload::VideoUploadSuccessful(payload) => {
@@ -862,8 +857,8 @@ pub fn deserialize_event_payload(
 }
 
 #[test]
-fn test_data_payload_serialization(){
-    let payload = VideoUploadSuccessfulPayload{
+fn test_data_payload_serialization() {
+    let payload = VideoUploadSuccessfulPayload {
         canister_id: Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
         post_id: 123,
         publisher_user_id: Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
@@ -884,21 +879,15 @@ fn test_data_payload_serialization(){
         notification: Some(NotificationPayload {
             title: Some("test".to_string()),
             body: Some("test".to_string()),
-            image: Some(
-                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
-            ),
+            image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
         }),
         data: Some(json!({
             "payload": serde_json::to_string(&data).unwrap()
         })),
         android: Some(AndroidConfig {
             notification: Some(AndroidNotification {
-                icon: Some(
-                    "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
-                ),
-                image: Some(
-                    "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
-                ),
+                icon: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
+                image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -916,9 +905,7 @@ fn test_data_payload_serialization(){
         }),
         apns: Some(ApnsConfig {
             fcm_options: Some(ApnsFcmOptions {
-                image: Some(
-                    "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
-                ),
+                image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
                 ..Default::default()
             }),
             payload: Some(json!({
@@ -935,10 +922,11 @@ fn test_data_payload_serialization(){
         }),
         ..Default::default()
     };
-    
+
     let stringed_payload = serde_json::to_string(&notif_payload).unwrap();
 
-    let deserialized_payload: SendNotificationReq = serde_json::from_str(&stringed_payload).unwrap();
+    let deserialized_payload: SendNotificationReq =
+        serde_json::from_str(&stringed_payload).unwrap();
 
     assert!(deserialized_payload.clone().data.unwrap()["payload"].is_string());
 

@@ -74,7 +74,7 @@ pub async fn backup_canisters_job_v2(
         if let Err(e) =
             backup_pf_and_subnet_orchs(&agent, &canister_backup_redis_pool, date_str.clone()).await
         {
-            log::error!("Failed to backup PF and subnet orchs: {}", e);
+            log::error!("Failed to backup PF and subnet orchs: {e}");
         }
 
         log::info!("Successfully backed up PF and subnet orchs. Starting snapshot alert job");
@@ -82,7 +82,7 @@ pub async fn backup_canisters_job_v2(
         if let Err(e) =
             snapshot_alert_job_impl(&agent, &canister_backup_redis_pool, date_str.clone()).await
         {
-            log::error!("Failed to run snapshot alert job: {}", e);
+            log::error!("Failed to run snapshot alert job: {e}");
         }
     });
 
@@ -134,11 +134,7 @@ pub async fn backup_user_canisters_bulk(
                 let failed_count = failed_counter.load(Ordering::Relaxed);
                 let success_count = current_completed - failed_count;
                 log::info!(
-                    "Backup progress: {}/{} completed - {} successful, {} failed",
-                    current_completed,
-                    total_canisters,
-                    success_count,
-                    failed_count
+                    "Backup progress: {current_completed}/{total_canisters} completed - {success_count} successful, {failed_count} failed"
                 );
             }
 
@@ -218,7 +214,7 @@ pub async fn backup_pf_and_subnet_orchs(
     )
     .await
     {
-        log::error!("Failed to backup platform orchestrator: {}", e);
+        log::error!("Failed to backup platform orchestrator: {e}");
     }
 
     let subnet_orch_ids =
@@ -239,7 +235,7 @@ pub async fn backup_pf_and_subnet_orchs(
         )
         .await
         {
-            log::error!("Failed to backup subnet orchestrator: {}", e);
+            log::error!("Failed to backup subnet orchestrator: {e}");
         }
     }
 
@@ -259,9 +255,7 @@ pub async fn backup_canister_impl(
         .await
         .map_err(|e| {
             log::error!(
-                "Failed to get user canister snapshot for canister: {} error: {}",
-                canister_id,
-                e
+                "Failed to get user canister snapshot for canister: {canister_id} error: {e}"
             );
             anyhow::anyhow!("get_canister_snapshot error: {}", e)
         })?;
@@ -270,9 +264,7 @@ pub async fn backup_canister_impl(
         .await
         .map_err(|e| {
             log::error!(
-                "Failed to upload user canister snapshot to storj for canister: {} error: {}",
-                canister_id,
-                e
+                "Failed to upload user canister snapshot to storj for canister: {canister_id} error: {e}"
             );
             anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
         })?;
@@ -284,7 +276,7 @@ pub async fn backup_canister_impl(
     )
     .await
     {
-        log::error!("Failed to insert into redis: {}", e);
+        log::error!("Failed to insert into redis: {e}");
     }
 
     Ok(())

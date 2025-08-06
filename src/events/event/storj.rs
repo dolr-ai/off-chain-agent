@@ -1,16 +1,23 @@
 use std::sync::Arc;
 
 use axum::{extract::State, Json};
+use tracing::instrument;
 
 use crate::{
     app_state::AppState,
     consts::{STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL},
-    AppError,
+    pipeline::Step,
+    setup_context, AppError,
 };
 
+#[instrument]
 pub async fn storj_ingest(
     Json(payload): Json<storj_interface::duplicate::Args>,
 ) -> Result<(), AppError> {
+    setup_context!(&payload.video_id, Step::StorjIngest, {
+        "args": &payload
+    });
+
     let client = reqwest::Client::new();
     client
         .post(
@@ -21,7 +28,8 @@ pub async fn storj_ingest(
         .json(&payload)
         .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
         .send()
-        .await?;
+        .await?
+        .error_for_status()?;
 
     Ok(())
 }

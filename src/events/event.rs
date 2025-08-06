@@ -1,12 +1,13 @@
 use crate::consts::OFF_CHAIN_AGENT_URL;
 use crate::events::types::{VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2};
 use crate::events::utils::parse_success_history_params;
+use crate::pipeline::Step;
+use crate::setup_context;
 use crate::{
     app_state::AppState, consts::BIGQUERY_INGESTION_URL, events::warehouse_events::WarehouseEvent,
     AppError,
 };
 use axum::{extract::State, Json};
-use candid::Principal;
 use http::header::CONTENT_TYPE;
 use log::error;
 use reqwest::Client;
@@ -70,10 +71,7 @@ impl Event {
             let params: Value = match serde_json::from_str(&self.event.params) {
                 Ok(params) => params,
                 Err(e) => {
-                    error!(
-                        "Failed to parse video_upload_successful event params: {}",
-                        e
-                    );
+                    error!("Failed to parse video_upload_successful event params: {e}");
                     return;
                 }
             };
@@ -109,11 +107,10 @@ impl Event {
 
                 // Construct video URL
                 let video_url = format!(
-                    "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-                    video_id
+                    "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
                 );
 
-                log::info!("Sending video for deduplication check: {}", video_id);
+                log::info!("Sending video for deduplication check: {video_id}");
 
                 // Create request for video_deduplication endpoint
                 let off_chain_ep = OFF_CHAIN_AGENT_URL
@@ -121,7 +118,7 @@ impl Event {
                     .unwrap();
                 let url = qstash_client
                     .base_url
-                    .join(&format!("publish/{}", off_chain_ep))
+                    .join(&format!("publish/{off_chain_ep}"))
                     .unwrap();
 
                 // TODO: change to struct
@@ -147,12 +144,10 @@ impl Event {
 
                 match result {
                     Ok(_) => log::info!(
-                        "Video deduplication check successfully queued for video_id: {}",
-                        video_id
+                        "Video deduplication check successfully queued for video_id: {video_id}"
                     ),
                     Err(e) => error!(
-                        "Failed to queue video deduplication check for video_id {}: {:?}",
-                        video_id, e
+                        "Failed to queue video deduplication check for video_id {video_id}: {e:?}"
                     ),
                 }
             });
@@ -170,7 +165,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -224,10 +219,8 @@ impl Event {
                 // if already present in history, return
                 // else add to history and user buffer
 
-                let plain_key = format!(
-                    "{}{}",
-                    user_canister_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX
-                );
+                let plain_key =
+                    format!("{user_canister_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX}");
 
                 match ml_feed_cache
                     .is_user_history_plain_item_exists(
@@ -254,11 +247,11 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user watch history buffer items: {:?}", e);
+                            error!("Error adding user watch history buffer items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user watch history plain item: {:?}", e);
+                        error!("Error checking user watch history plain item: {e:?}");
                     }
                 }
             });
@@ -273,7 +266,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -330,10 +323,7 @@ impl Event {
                 // if already present in history, return
                 // else add to history and user buffer
 
-                let plain_key = format!(
-                    "{}{}",
-                    user_id, USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2
-                );
+                let plain_key = format!("{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}");
 
                 match ml_feed_cache
                     .is_user_history_plain_item_exists_v2(
@@ -359,11 +349,11 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user watch history buffer items: {:?}", e);
+                            error!("Error adding user watch history buffer items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user watch history plain item: {:?}", e);
+                        error!("Error checking user watch history plain item: {e:?}");
                     }
                 }
             });
@@ -379,7 +369,7 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {:?}", e);
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -393,7 +383,7 @@ impl Event {
 
                 let percentage_watched = params.percentage_watched as u8;
                 if percentage_watched == 0 || percentage_watched > 100 {
-                    error!("Invalid percentage_watched: {}", percentage_watched);
+                    error!("Invalid percentage_watched: {percentage_watched}");
                     return;
                 }
                 let post_id = params.post_id.unwrap_or_default();
@@ -419,8 +409,7 @@ impl Event {
                     .await
                 {
                     error!(
-                        "Failed to update view details for post {} in canister {}: {:?}",
-                        post_id, publisher_canister_id, e
+                        "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
                     );
                 }
             });
@@ -486,10 +475,8 @@ impl Event {
 
             // add to history plain items
             if item_type == "like_video" {
-                let plain_key = format!(
-                    "{}{}",
-                    user_canister_id, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX
-                );
+                let plain_key =
+                    format!("{user_canister_id}{USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX}");
 
                 match ml_feed_cache
                     .is_user_history_plain_item_exists(
@@ -516,7 +503,7 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user like history buffer items: {:?}", e);
+                            error!("Error adding user like history buffer items: {e:?}");
                         }
 
                         // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
@@ -524,11 +511,11 @@ impl Event {
                             .add_user_history_plain_items(&plain_key, vec![success_history_item])
                             .await
                         {
-                            error!("Error adding user like history plain items: {:?}", e);
+                            error!("Error adding user like history plain items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user like history plain item: {:?}", e);
+                        error!("Error checking user like history plain item: {e:?}");
                     }
                 }
             }
@@ -553,7 +540,7 @@ impl Event {
                 Ok(Some(p)) => p,
                 Ok(None) => return, // Early return for video_duration_watched < 30%
                 Err(e) => {
-                    error!("Failed to parse params in update_success_history_v2: {}", e);
+                    error!("Failed to parse params in update_success_history_v2: {e}");
                     return;
                 }
             };
@@ -619,7 +606,7 @@ impl Event {
                             }])
                             .await
                         {
-                            error!("Error adding user like history buffer items: {:?}", e);
+                            error!("Error adding user like history buffer items: {e:?}");
                         }
 
                         // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
@@ -627,11 +614,11 @@ impl Event {
                             .add_user_history_plain_items_v2(&plain_key, vec![success_history_item])
                             .await
                         {
-                            error!("Error adding user like history plain items: {:?}", e);
+                            error!("Error adding user like history plain items: {e:?}");
                         }
                     }
                     Err(e) => {
-                        error!("Error checking user like history plain item: {:?}", e);
+                        error!("Error checking user like history plain item: {e:?}");
                     }
                 }
             }
@@ -675,6 +662,10 @@ pub async fn upload_video_gcs(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UploadVideoInfo>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    setup_context!(&payload.video_id, Step::GcsUpload, {
+        "upload_info": &payload
+    });
+
     upload_gcs_impl(
         &payload.video_id,
         &payload.publisher_user_id,
@@ -700,10 +691,9 @@ pub async fn upload_gcs_impl(
     timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
     let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        uid
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{uid}/downloads/default.mp4"
     );
-    let name = format!("{}.mp4", uid);
+    let name = format!("{uid}.mp4");
 
     let file = reqwest::Client::new()
         .get(&url)

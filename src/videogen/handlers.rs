@@ -7,9 +7,13 @@ use std::sync::Arc;
 use videogen_common::VideoGenerator;
 
 use super::qstash_types::QstashVideoGenRequest;
-use super::rate_limit::{verify_rate_limit_and_create_request, verify_rate_limit_and_create_request_v1};
+use super::rate_limit::{
+    verify_rate_limit_and_create_request, verify_rate_limit_and_create_request_v1,
+};
 use super::signature::verify_videogen_request;
-use super::token_operations::{add_token_balance, deduct_token_balance, deduct_balance_with_cleanup, get_model_cost};
+use super::token_operations::{
+    add_token_balance, deduct_balance_with_cleanup, deduct_token_balance, get_model_cost,
+};
 use crate::app_state::AppState;
 use crate::auth::verify_jwt_from_header;
 use crate::consts::OFF_CHAIN_AGENT_URL;
@@ -168,7 +172,7 @@ pub async fn generate_video_signed(
     verify_videogen_request(user_principal, &signed_request)
         .map_err(|e| (StatusCode::UNAUTHORIZED, Json(e)))?;
 
-    log::info!("Signature verified for user {}", user_principal);
+    log::info!("Signature verified for user {user_principal}");
 
     // Get token type and model info
     let model_name = signed_request.request.input.model_name();
@@ -228,8 +232,12 @@ pub async fn generate_video_signed(
 
     // Process image if present - upload large images to GCS
     let mut input = signed_request.request.input;
-    process_input_image(&mut input, app_state.gcs_client.clone(), &user_principal.to_string())
-        .await?;
+    process_input_image(
+        &mut input,
+        app_state.gcs_client.clone(),
+        &user_principal.to_string(),
+    )
+    .await?;
 
     // Queue to Qstash with potentially updated input (image uploaded to GCS)
     let qstash_request = QstashVideoGenRequest {
@@ -247,8 +255,7 @@ pub async fn generate_video_signed(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(videogen_common::VideoGenError::NetworkError(format!(
-                    "Failed to construct callback URL: {}",
-                    e
+                    "Failed to construct callback URL: {e}"
                 ))),
             )
         })?
@@ -305,8 +312,7 @@ pub async fn generate_video_signed(
             return Err((
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(videogen_common::VideoGenError::NetworkError(format!(
-                    "Failed to queue video generation: {}",
-                    e
+                    "Failed to queue video generation: {e}"
                 ))),
             ));
         }
@@ -333,22 +339,19 @@ async fn process_input_image(
     // Get mutable reference to image if it exists
     if let Some(image_data) = input.get_image_mut() {
         // Process the image and update it in place
-        *image_data = maybe_upload_image_to_gcs(
-            gcs_client,
-            image_data.clone(),
-            user_principal,
-        )
-        .await
-        .map_err(|e| {
-            log::error!("Failed to upload image to GCS: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(videogen_common::VideoGenError::NetworkError(
-                    format!("Failed to upload image: {}", e),
-                )),
-            )
-        })?;
+        *image_data = maybe_upload_image_to_gcs(gcs_client, image_data.clone(), user_principal)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to upload image to GCS: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(videogen_common::VideoGenError::NetworkError(format!(
+                        "Failed to upload image: {}",
+                        e
+                    ))),
+                )
+            })?;
     }
-    
+
     Ok(())
 }

@@ -7,9 +7,7 @@ use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 
 use crate::{
     app_state::AppState,
-    consts::{
-        RATE_LIMITS_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID, VIDEOGEN_RATE_LIMIT_PROPERTY,
-    },
+    consts::{RATE_LIMITS_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID},
 };
 use videogen_common::{TokenType, VideoGenError};
 
@@ -24,11 +22,7 @@ async fn check_individual_canister_registration(
     {
         Ok(id) => id,
         Err(e) => {
-            log::warn!(
-                "Failed to get individual canister for principal {}: {}",
-                user_principal,
-                e
-            );
+            log::warn!("Failed to get individual canister for principal {user_principal}: {e}");
             return false;
         }
     };
@@ -39,9 +33,7 @@ async fn check_individual_canister_registration(
         Ok(result) => result,
         Err(e) => {
             log::warn!(
-                "Error calling get_session_type on individual canister for {}: {}",
-                user_principal,
-                e
+                "Error calling get_session_type on individual canister for {user_principal}: {e}"
             );
             return false;
         }
@@ -56,9 +48,7 @@ async fn check_individual_canister_registration(
         }
         yral_canisters_client::individual_user_template::Result7::Err(e) => {
             log::warn!(
-                "Failed to get session type from individual canister for {}: {}",
-                user_principal,
-                e
+                "Failed to get session type from individual canister for {user_principal}: {e}"
             );
             false
         }
@@ -75,11 +65,7 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
     {
         Ok(result) => result,
         Err(e) => {
-            log::error!(
-                "Failed to get session type for principal {}: {}",
-                user_principal,
-                e
-            );
+            log::error!("Failed to get session type for principal {user_principal}: {e}");
             return false;
         }
     };
@@ -91,16 +77,11 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
         yral_canisters_client::user_info_service::Result2::Err(e) => {
             if e.contains("User not found") {
                 log::info!(
-                    "User {} not found in user info service, checking individual canister",
-                    user_principal
+                    "User {user_principal} not found in user info service, checking individual canister"
                 );
                 check_individual_canister_registration(user_principal, app_state).await
             } else {
-                log::warn!(
-                    "Failed to get session type for principal {}: {}",
-                    user_principal,
-                    e
-                );
+                log::warn!("Failed to get session type for principal {user_principal}: {e}");
                 false
             }
         }
@@ -154,8 +135,7 @@ pub async fn verify_rate_limit_and_create_request(
             (
                 StatusCode::SERVICE_UNAVAILABLE,
                 VideoGenError::NetworkError(format!(
-                    "Failed to create video generation request: {}",
-                    e
+                    "Failed to create video generation request: {e}"
                 )),
             )
         })?;
@@ -177,7 +157,7 @@ pub async fn verify_rate_limit_and_create_request(
             } else {
                 Err((
                     StatusCode::BAD_REQUEST,
-                    VideoGenError::InvalidInput(format!("Failed to create request: {}", e)),
+                    VideoGenError::InvalidInput(format!("Failed to create request: {e}")),
                 ))
             }
         }

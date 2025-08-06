@@ -12,8 +12,10 @@ use tower::ServiceBuilder;
 use tracing::instrument;
 use verify::verify_qstash_message;
 
+use crate::pipeline::Step;
 use crate::qstash::duplicate::VideoPublisherData;
 use crate::qstash::notification_store_job::prune_notification_store;
+use crate::setup_context;
 use crate::{
     app_state::AppState,
     canister::{
@@ -66,6 +68,8 @@ async fn video_deduplication_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VideoHashIndexingRequest>,
 ) -> Result<Response, StatusCode> {
+    setup_context!(&req.video_id, Step::Deduplication);
+
     log::info!(
         "Processing video deduplication for video ID: {}",
         req.video_id
@@ -76,14 +80,9 @@ async fn video_deduplication_handler(
         post_id: req.publisher_data.post_id,
     };
 
-    let duplication_handler = duplicate::VideoHashDuplication::new(
-        &state.qstash_client.client,
-        &state.qstash_client.base_url,
-    );
-
     let qstash_client = state.qstash_client.clone();
 
-    if let Err(e) = duplication_handler
+    if let Err(e) = duplicate::VideoHashDuplication
         .process_video_deduplication(
             &state.agent,
             &state.bigquery_client,
@@ -107,7 +106,7 @@ async fn video_deduplication_handler(
         )
         .await
     {
-        log::error!("Video deduplication failed: {}", e);
+        log::error!("Video deduplication failed: {e}");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 

@@ -98,6 +98,7 @@ fasthash = { version = "0.4.0", optional = true }
 spacetimedb-sdk = "1.2.0"
 async-channel = "2.3.1"
 num-bigint = "0.4"
+sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
@@ -112,6 +113,7 @@ num-bigint = "0.4"
 #     "ic",
 # ] }
 # yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+
 
 # Local (Path) - uncomment to use local development versions
 yral-canisters-client = { path = "../yral-common/canisters-client", features = [

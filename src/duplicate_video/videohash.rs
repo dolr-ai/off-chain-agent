@@ -14,11 +14,13 @@ use uuid::Uuid;
 pub const FRAME_SIZE: u32 = 144;
 /// Grid size for hash generation (8x8)
 pub const GRID_SIZE: u32 = 8;
+#[allow(dead_code)]
 /// Default sample rate in seconds between frames
 pub const SAMPLE_RATE: f32 = 1.0;
 /// Maximum number of frames to process
 pub const MAX_FRAMES: usize = 60;
 /// Size of the generated hash in bits
+#[allow(dead_code)]
 pub const HASH_SIZE: usize = 64;
 
 struct TempDir {
@@ -56,7 +58,7 @@ fn create_ram_temp_dir(prefix: &str) -> Result<PathBuf, Box<dyn Error + Send + S
             PathBuf::from("/dev/shm")
         } else if Path::new("/run/user").exists() {
             match std::env::var("UID") {
-                Ok(uid) => PathBuf::from(format!("/run/user/{}", uid)),
+                Ok(uid) => PathBuf::from(format!("/run/user/{uid}")),
                 Err(_) => std::env::temp_dir(),
             }
         } else {
@@ -79,7 +81,7 @@ fn create_ram_temp_dir(prefix: &str) -> Result<PathBuf, Box<dyn Error + Send + S
     let dir_path = base_dir.join(unique_id);
     fs::create_dir_all(&dir_path)?;
 
-    log::debug!("Created RAM-based temp directory at: {:?}", dir_path);
+    log::debug!("Created RAM-based temp directory at: {dir_path:?}");
     Ok(dir_path)
 }
 
@@ -102,7 +104,7 @@ impl VideoHash {
     }
 
     pub async fn from_url(url: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        log::info!("Generating video hash from URL: {}", url);
+        log::info!("Generating video hash from URL: {url}");
 
         if url.starts_with("file://") {
             if let Some(path_str) = url.strip_prefix("file://") {
@@ -116,10 +118,7 @@ impl VideoHash {
         let temp_dir = TempDir::new("videohash")?;
         let temp_file = temp_dir.path().join("temp_video.mp4");
 
-        log::info!(
-            "Downloading video from URL to temporary file: {:?}",
-            temp_file
-        );
+        log::info!("Downloading video from URL to temporary file: {temp_file:?}");
 
         // Clone needed values for the spawn_blocking closure
         let url_clone = url.to_string();
@@ -211,10 +210,10 @@ impl VideoHash {
             output_pattern
         );
 
-        log::debug!("Running FFmpeg with args: {}", ffmpeg_args);
+        log::debug!("Running FFmpeg with args: {ffmpeg_args}");
 
         let status = Command::new("sh")
-            .args(["-c", &format!("timeout 300 ffmpeg {}", ffmpeg_args)])
+            .args(["-c", &format!("timeout 300 ffmpeg {ffmpeg_args}")])
             .stderr(Stdio::null())
             .stdout(Stdio::null())
             .status()?;
@@ -464,6 +463,7 @@ impl VideoHash {
             .collect()
     }
 
+    #[allow(dead_code)]
     /// Calculate the Hamming distance between this hash and another
     pub fn hamming_distance(&self, other: &VideoHash) -> u32 {
         self.hash
@@ -473,6 +473,7 @@ impl VideoHash {
             .count() as u32
     }
 
+    #[allow(dead_code)]
     /// Calculate similarity percentage between hashes (100% = identical)
     pub fn similarity(&self, other: &VideoHash) -> f64 {
         let distance = self.hamming_distance(other) as f64;
@@ -480,6 +481,7 @@ impl VideoHash {
         (max_distance - distance) / max_distance * 100.0
     }
 
+    #[allow(dead_code)]
     /// Determine if two videos are likely duplicates based on threshold
     pub fn is_duplicate(&self, other: &VideoHash, threshold: Option<f64>) -> bool {
         let threshold = threshold.unwrap_or(85.0);

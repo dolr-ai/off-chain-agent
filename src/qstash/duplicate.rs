@@ -12,33 +12,11 @@ pub struct VideoPublisherData {
     pub post_id: u64,
 }
 
-// Add these structures to support the indexer API response
-#[derive(Debug, Deserialize)]
-struct VideoHashIndexerResponse {
-    match_found: bool,
-    match_details: Option<MatchDetails>,
-    hash_added: bool,
-}
+/// The VideoHashDuplication struct will contain the deduplication logic
+pub struct VideoHashDuplication;
 
-#[derive(Debug, Deserialize)]
-struct MatchDetails {
-    video_id: String,
-    similarity_percentage: f64,
-    is_duplicate: bool,
-}
-
-// The VideoHashDuplication struct will contain the deduplication logic
-pub struct VideoHashDuplication<'a> {
-    client: &'a reqwest::Client,
-    base_url: &'a reqwest::Url,
-}
-
-impl<'a> VideoHashDuplication<'a> {
-    pub fn new(client: &'a reqwest::Client, base_url: &'a reqwest::Url) -> Self {
-        Self { client, base_url }
-    }
-
-    pub async fn process_video_deduplication(
+impl VideoHashDuplication {
+    pub async fn process_video_deduplication<'a>(
         &self,
         agent: &ic_agent::Agent,
         bigquery_client: &google_cloud_bigquery::client::Client,
@@ -53,7 +31,7 @@ impl<'a> VideoHashDuplication<'a> {
         )
             -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
     ) -> Result<(), anyhow::Error> {
-        log::info!("Calculating videohash for video URL: {}", video_url);
+        log::info!("Calculating videohash for video URL: {video_url}");
         let video_hash = VideoHash::from_url(video_url)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
@@ -80,7 +58,7 @@ impl<'a> VideoHashDuplication<'a> {
             self.store_unique_video(video_id, &video_hash.hash).await?;
             self.store_unique_video_v2(video_id, &video_hash.hash)
                 .await?;
-            log::info!("Unique video recorded: video_id [{}]", video_id);
+            log::info!("Unique video recorded: video_id [{video_id}]");
         }
 
         // Always proceed with normal video processing, regardless of duplicate status
@@ -108,8 +86,7 @@ impl<'a> VideoHashDuplication<'a> {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
         let request = QueryRequest {
@@ -117,10 +94,7 @@ impl<'a> VideoHashDuplication<'a> {
             ..Default::default()
         };
 
-        log::info!(
-            "Storing hash in videohash_original for video_id [{}]",
-            video_id
-        );
+        log::info!("Storing hash in videohash_original for video_id [{video_id}]");
 
         bigquery_client
             .job()
@@ -162,8 +136,7 @@ impl<'a> VideoHashDuplication<'a> {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
         let request = QueryRequest {
@@ -171,10 +144,7 @@ impl<'a> VideoHashDuplication<'a> {
             ..Default::default()
         };
 
-        log::info!(
-            "Storing unique video in video_unique for video_id [{}]",
-            video_id
-        );
+        log::info!("Storing unique video in video_unique for video_id [{video_id}]");
 
         bigquery_client
             .job()
@@ -190,8 +160,7 @@ impl<'a> VideoHashDuplication<'a> {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique_v2` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
         let request = QueryRequest {
@@ -199,10 +168,7 @@ impl<'a> VideoHashDuplication<'a> {
             ..Default::default()
         };
 
-        log::info!(
-            "Storing unique video in video_unique for video_id [{}]",
-            video_id
-        );
+        log::info!("Storing unique video in video_unique for video_id [{video_id}]");
 
         bigquery_client
             .job()

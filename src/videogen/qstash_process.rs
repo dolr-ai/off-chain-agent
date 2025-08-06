@@ -58,8 +58,7 @@ pub async fn process_video_generation(
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(VideoGenError::ProviderError(format!(
-                "Failed to serialize callback: {}",
-                e
+                "Failed to serialize callback: {e}"
             ))),
         )
     })?;

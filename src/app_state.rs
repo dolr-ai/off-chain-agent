@@ -151,7 +151,7 @@ pub async fn init_agent() -> Agent {
         ) {
             Ok(identity) => identity,
             Err(err) => {
-                panic!("Unable to create identity, error: {:?}", err);
+                panic!("Unable to create identity, error: {err:?}");
             }
         };
 
@@ -162,7 +162,7 @@ pub async fn init_agent() -> Agent {
         {
             Ok(agent) => agent,
             Err(err) => {
-                panic!("Unable to create agent, error: {:?}", err);
+                panic!("Unable to create agent, error: {err:?}");
             }
         }
     }
