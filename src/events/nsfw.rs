@@ -218,6 +218,8 @@ pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    use sentry_anyhow::capture_anyhow;
+
     setup_context!(&payload.video_id, Step::NsfwDetection, {
         "upload_info": &payload.video_info
     });
@@ -225,7 +227,11 @@ pub async fn nsfw_job(
     let video_id = payload.video_id;
     let video_info = payload.video_info;
 
-    let nsfw_info = get_video_nsfw_info(video_id.clone()).await?;
+    let nsfw_info = get_video_nsfw_info(video_id.clone())
+        .await
+        .inspect_err(|e| {
+            capture_anyhow(e);
+        })?;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
@@ -334,13 +340,19 @@ pub async fn nsfw_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    use sentry_anyhow::capture_anyhow;
+
     setup_context!(&payload.video_id, Step::NsfwDetectionV2, {
         "upload_info": &payload.video_info
     });
 
     let video_id = payload.video_id;
 
-    let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;
+    let nsfw_prob = get_video_nsfw_info_v2(video_id.clone())
+        .await
+        .inspect_err(|err| {
+            capture_anyhow(err);
+        })?;
     let is_nsfw = nsfw_prob >= NSFW_THRESHOLD;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
