@@ -111,7 +111,6 @@ videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "
     "ic",
 ] }
 yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-sentry-anyhow = "0.42.0"
 
 # Local (Path) - uncomment to use local development versions
 # yral-canisters-client = { path = "../yral-common/canisters-client", features = [
@@ -138,10 +137,7 @@ name = "generate_jwt"
 path = "src/bin/generate_jwt.rs"
 
 [features]
-# enable extensive sentry logging for the entire pipeline
-# default = ["extensive-pipeline-logs"]
 local-bin = []
-extensive-pipeline-logs = []
 use-local-agent = []
 # use-uplink = ["dep:uplink"]
 prod-bin = ["dep:fasthash"]
