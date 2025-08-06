@@ -1,7 +1,6 @@
 use candid::Principal;
 use videogen_common::{TokenType, VideoGenError, TOKEN_COST_CONFIG};
 use yral_canisters_common::utils::token::{TokenOperations, TokenOperationsProvider, SatsOperations, DolrOperations};
-use yral_canisters_common::utils::token::balance::TokenBalance;
 use num_bigint::BigUint;
 use std::str::FromStr;
 use axum::{http::StatusCode, Json};
@@ -38,11 +37,11 @@ pub async fn load_token_balance(
     let balance = ops
         .load_balance(user_principal)
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to load balance: {}", e)))?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to load balance: {e}")))?;
     
     // Convert TokenBalance to BigUint
     BigUint::from_str(&balance.e8s.0.to_string())
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to parse balance: {}", e)))
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to parse balance: {e}")))
 }
 
 /// Deduct balance for any token type
@@ -70,7 +69,7 @@ pub async fn deduct_token_balance(
     // Deduct the balance
     ops.deduct_balance(user_principal, amount)
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to deduct balance: {}", e)))
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to deduct balance: {e}")))
 }
 
 /// Add balance back for any token type (used for rollback)
@@ -90,7 +89,7 @@ pub async fn add_token_balance(
     
     ops.add_balance(user_principal, amount)
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to add balance: {}", e)))
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to add balance: {e}")))
 }
 
 /// Get the cost for a specific model and token type
@@ -131,18 +130,13 @@ pub async fn deduct_balance_with_cleanup(
     match deduct_token_balance(user_principal, cost, token_type, jwt_opt, agent_opt).await {
         Ok(amount) => {
             log::info!(
-                "Successfully deducted {} {:?} from user {}",
-                amount,
-                token_type,
-                user_principal
+                "Successfully deducted {amount} {token_type:?} from user {user_principal}"
             );
             Ok(Some(amount))
         }
         Err(e) => {
             log::error!(
-                "Balance deduction failed for user {}: {:?}. Decrementing rate limit counter.",
-                user_principal,
-                e
+                "Balance deduction failed for user {user_principal}: {e:?}. Decrementing rate limit counter."
             );
             
             // Cleanup: decrement rate limit counter
@@ -161,7 +155,7 @@ pub async fn deduct_balance_with_cleanup(
                 .decrement_video_generation_counter_v_1(canister_key, property.to_string())
                 .await
             {
-                log::error!("Failed to decrement rate limit counter after balance deduction failure: {}", dec_err);
+                log::error!("Failed to decrement rate limit counter after balance deduction failure: {dec_err}");
             }
             
             // Return appropriate error

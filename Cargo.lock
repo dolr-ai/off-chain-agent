@@ -75,6 +75,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -2467,6 +2468,7 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 [[package]]
 name = "global-constants"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "num-bigint 0.4.6",
@@ -2913,6 +2915,7 @@ dependencies = [
 [[package]]
 name = "hon-worker-common"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "global-constants",
@@ -2922,7 +2925,7 @@ dependencies = [
  "serde_with 3.14.0",
  "thiserror 2.0.12",
  "url",
- "yral-identity 0.1.0",
+ "yral-identity 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=videogen_payment)",
 ]
 
 [[package]]
@@ -5454,6 +5457,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.2.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "anyhow",
  "bb8",
@@ -5749,7 +5753,7 @@ dependencies = [
  "videogen-common",
  "yral-canisters-client",
  "yral-canisters-common",
- "yral-identity 0.1.0",
+ "yral-identity 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=videogen_payment)",
  "yral-metadata-client 0.1.0 (git+https://github.com/yral-dapp/yral-metadata.git)",
  "yral-metadata-types 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
  "yral-metrics",
@@ -7949,6 +7953,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "sns-validation"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "humantime",
@@ -9237,6 +9242,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "videogen-common"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "enum_dispatch",
@@ -9249,7 +9255,7 @@ dependencies = [
  "thiserror 1.0.69",
  "utoipa",
  "web-sys",
- "yral-identity 0.1.0",
+ "yral-identity 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=videogen_payment)",
 ]
 
 [[package]]
@@ -9853,6 +9859,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "anyhow",
  "candid",
@@ -9872,6 +9879,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-common"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "async-trait",
  "candid",
@@ -9896,7 +9904,7 @@ dependencies = [
  "url",
  "web-time",
  "yral-canisters-client",
- "yral-identity 0.1.0",
+ "yral-identity 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=videogen_payment)",
  "yral-metadata-client 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
  "yral-metadata-types 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
  "yral-pump-n-dump-common",
@@ -9907,11 +9915,10 @@ dependencies = [
 [[package]]
 name = "yral-identity"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
 dependencies = [
  "candid",
  "ic-agent",
- "ic-types 0.9.0 (git+https://github.com/dfinity/ic.git?rev=b2a4053f1dca2455511f2c6c0dc12cb65f93b4b1)",
- "ic-validator-ingress-message",
  "serde",
  "thiserror 2.0.12",
  "web-time",
@@ -9920,10 +9927,12 @@ dependencies = [
 [[package]]
 name = "yral-identity"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#157ef9c724d1c5676b68c35994e43c56f534fe60"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "ic-agent",
+ "ic-types 0.9.0 (git+https://github.com/dfinity/ic.git?rev=b2a4053f1dca2455511f2c6c0dc12cb65f93b4b1)",
+ "ic-validator-ingress-message",
  "serde",
  "thiserror 2.0.12",
  "web-time",
@@ -9984,6 +9993,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "log",
@@ -9998,18 +10008,20 @@ dependencies = [
 [[package]]
 name = "yral-pump-n-dump-common"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "serde",
  "serde_json",
  "uuid",
  "yral-canisters-client",
- "yral-identity 0.1.0",
+ "yral-identity 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=videogen_payment)",
 ]
 
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "serde",
@@ -10027,6 +10039,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "ic-agent",
  "k256",
@@ -10041,6 +10054,7 @@ dependencies = [
 [[package]]
 name = "yral-username-gen"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?branch=videogen_payment#002bd8a7c9ce01976eddd6262c8befa786cfa5ba"
 dependencies = [
  "candid",
  "rand 0.9.2",

@@ -102,31 +102,32 @@ sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-# yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
-#     "full",
-# ] }
-# yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
-# yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
-# yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
-# yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-# videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
-#     "ic",
-# ] }
-# yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "videogen_payment", features = [
+    "full",
+] }
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "videogen_payment" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment", features = [
+    "ic",
+] }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
+yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
 
 
 # Local (Path) - uncomment to use local development versions
-yral-canisters-client = { path = "../yral-common/canisters-client", features = [
-    "full",
-    "rate-limits",
-] }
-yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
-yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
-yral-qstash-types = { path = "../yral-common/qstash-types" }
-yral-metrics = { path = "../yral-common/metrics" }
-videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
-yral-identity = { path = "../yral-common/identity" }
-yral-canisters-common = { path = "../yral-common/canisters-common" }
+# yral-canisters-client = { path = "../yral-common/canisters-client", features = [
+#     "full",
+#     "rate-limits",
+# ] }
+# yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
+# yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
+# yral-qstash-types = { path = "../yral-common/qstash-types" }
+# yral-metrics = { path = "../yral-common/metrics" }
+# videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
+# yral-identity = { path = "../yral-common/identity" }
+# yral-canisters-common = { path = "../yral-common/canisters-common" }
 
 
 [build-dependencies]

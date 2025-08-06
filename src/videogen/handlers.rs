@@ -1,26 +1,23 @@
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     Json,
 };
 use std::sync::Arc;
 use videogen_common::VideoGenerator;
 
 use super::qstash_types::QstashVideoGenRequest;
-use super::rate_limit::{
-    verify_rate_limit_and_create_request, verify_rate_limit_and_create_request_v1,
-};
+use super::rate_limit::verify_rate_limit_and_create_request_v1;
 use super::signature::verify_videogen_request;
 use super::token_operations::{
-    add_token_balance, deduct_balance_with_cleanup, deduct_token_balance, get_model_cost,
+    add_token_balance, deduct_balance_with_cleanup, get_model_cost,
 };
 use crate::app_state::AppState;
-use crate::auth::verify_jwt_from_header;
 use crate::consts::OFF_CHAIN_AGENT_URL;
 use crate::utils::gcs::maybe_upload_image_to_gcs;
 use cloud_storage::Client;
 
-/// Generate a video using the specified provider
+// /// Generate a video using the specified provider
 // #[utoipa::path(
 //     post,
 //     path = "/generate",
@@ -159,6 +156,7 @@ use cloud_storage::Client;
     ),
     tag = "VideoGen"
 )]
+
 pub async fn generate_video_signed(
     State(app_state): State<Arc<AppState>>,
     Json(signed_request): Json<videogen_common::VideoGenRequestWithSignature>,
@@ -188,7 +186,7 @@ pub async fn generate_video_signed(
     let provider = signed_request.request.input.provider();
 
     // Get the cost based on model and token type
-    let cost = get_model_cost(&model_name, token_type);
+    let cost = get_model_cost(model_name, token_type);
 
     // Determine the payment amount for rate limit check
     let payment_amount = if matches!(token_type, videogen_common::TokenType::Free) {
@@ -246,7 +244,7 @@ pub async fn generate_video_signed(
         request_key: request_key.clone(),
         property: property.to_string(),
         deducted_amount, // Now it's Option<u64> - None for free, Some for paid
-        token_type: signed_request.request.token_type.clone(),
+        token_type: signed_request.request.token_type,
     };
 
     let callback_url = OFF_CHAIN_AGENT_URL
@@ -272,8 +270,7 @@ pub async fn generate_video_signed(
         Err(e) => {
             // Failed to queue - rollback balance
             log::error!(
-                "Failed to queue video generation: {}. Rolling back balance.",
-                e
+                "Failed to queue video generation: {e}. Rolling back balance."
             );
 
             if let Some(deducted_amount) = qstash_request.deducted_amount {
@@ -342,12 +339,11 @@ async fn process_input_image(
         *image_data = maybe_upload_image_to_gcs(gcs_client, image_data.clone(), user_principal)
             .await
             .map_err(|e| {
-                log::error!("Failed to upload image to GCS: {}", e);
+                log::error!("Failed to upload image to GCS: {e}");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(videogen_common::VideoGenError::NetworkError(format!(
-                        "Failed to upload image: {}",
-                        e
+                        "Failed to upload image: {e}"
                     ))),
                 )
             })?;

@@ -111,16 +111,12 @@ pub async fn generate(
     let client = reqwest::Client::new();
 
     // Create keyframes if image URL is available
-    let keyframes = if let Some(url) = image_url {
-        Some(LumaLabsKeyframes {
-            frame0: LumaLabsFrame {
-                frame_type: "image".to_string(),
-                url,
-            },
-        })
-    } else {
-        None
-    };
+    let keyframes = image_url.map(|url| LumaLabsKeyframes {
+        frame0: LumaLabsFrame {
+            frame_type: "image".to_string(),
+            url,
+        },
+    });
 
     // Build request
     let request = LumaLabsRequest {

@@ -97,7 +97,7 @@ pub async fn generate(
     // Convert ImageData to ImageInput if needed
     let image = if let Some(ref img_data) = image_data {
         Some(image_data_to_input(img_data).await.map_err(|e| {
-            VideoGenError::InvalidInput(format!("Failed to process image: {}", e))
+            VideoGenError::InvalidInput(format!("Failed to process image: {e}"))
         })?)
     } else {
         None

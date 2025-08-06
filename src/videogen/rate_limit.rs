@@ -225,8 +225,7 @@ pub async fn verify_rate_limit_and_create_request_v1(
             (
                 StatusCode::SERVICE_UNAVAILABLE,
                 VideoGenError::NetworkError(format!(
-                    "Failed to create video generation request: {}",
-                    e
+                    "Failed to create video generation request: {e}"
                 )),
             )
         })?;
@@ -248,7 +247,7 @@ pub async fn verify_rate_limit_and_create_request_v1(
             } else {
                 Err((
                     StatusCode::BAD_REQUEST,
-                    VideoGenError::InvalidInput(format!("Failed to create request: {}", e)),
+                    VideoGenError::InvalidInput(format!("Failed to create request: {e}")),
                 ))
             }
         }

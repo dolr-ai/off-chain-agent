@@ -47,6 +47,7 @@ pub struct Claims {
     pub exp: usize,
 }
 
+#[allow(dead_code)]
 pub fn verify_jwt(
     public_key_pem: &str,
     aud: String,
@@ -65,6 +66,7 @@ pub fn verify_jwt(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn verify_jwt_from_header(
     public_key_pem: &str,
     aud: String,

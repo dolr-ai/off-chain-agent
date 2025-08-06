@@ -2,7 +2,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use cloud_storage::Client;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 use videogen_common::{ImageData, ImageInput};
 
 /// Configuration for GCS image storage
@@ -70,7 +70,7 @@ pub async fn upload_image_to_gcs(
     // Decode base64
     let image_bytes = BASE64
         .decode(&image.data)
-        .map_err(|e| format!("Failed to decode base64 image: {}", e))?;
+        .map_err(|e| format!("Failed to decode base64 image: {e}"))?;
 
     // Generate unique filename
     let timestamp = chrono::Utc::now().timestamp_millis();
@@ -89,8 +89,7 @@ pub async fn upload_image_to_gcs(
     };
 
     let object_name = format!(
-        "videogen/{}/{}-{}.{}",
-        user_principal, timestamp, hash_short, extension
+        "videogen/{user_principal}/{timestamp}-{hash_short}.{extension}"
     );
 
     info!("Uploading image to GCS: {}/{}", config.bucket, object_name);
@@ -100,7 +99,7 @@ pub async fn upload_image_to_gcs(
         .object()
         .create(&config.bucket, image_bytes, &object_name, &image.mime_type)
         .await
-        .map_err(|e| format!("Failed to upload image to GCS: {}", e))?;
+        .map_err(|e| format!("Failed to upload image to GCS: {e}"))?;
 
     // Generate public URL
     let public_url = format!(
@@ -120,7 +119,7 @@ pub async fn download_image_from_url(url: &str) -> Result<ImageInput, String> {
     // Download the image
     let response = reqwest::get(url)
         .await
-        .map_err(|e| format!("Failed to download image from {}: {}", url, e))?;
+        .map_err(|e| format!("Failed to download image from {url}: {e}"))?;
 
     if !response.status().is_success() {
         return Err(format!(
@@ -142,7 +141,7 @@ pub async fn download_image_from_url(url: &str) -> Result<ImageInput, String> {
     let bytes = response
         .bytes()
         .await
-        .map_err(|e| format!("Failed to read image bytes: {}", e))?;
+        .map_err(|e| format!("Failed to read image bytes: {e}"))?;
 
     // Encode to base64
     let base64_data = BASE64.encode(&bytes);
