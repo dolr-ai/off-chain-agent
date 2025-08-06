@@ -12,8 +12,10 @@ use tower::ServiceBuilder;
 use tracing::instrument;
 use verify::verify_qstash_message;
 
+use crate::pipeline::Step;
 use crate::qstash::duplicate::VideoPublisherData;
 use crate::qstash::notification_store_job::prune_notification_store;
+use crate::setup_context;
 use crate::{
     app_state::AppState,
     canister::{
@@ -66,20 +68,12 @@ async fn video_deduplication_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VideoHashIndexingRequest>,
 ) -> Result<Response, StatusCode> {
+    setup_context!(&req.video_id, Step::Deduplication);
+
     log::info!(
         "Processing video deduplication for video ID: {}",
         req.video_id
     );
-
-    sentry::configure_scope(|scope| {
-        scope.set_tag("yral.video_id", &req.video_id);
-        scope.set_tag(
-            "yral.publisher_user_id",
-            &req.publisher_data.publisher_principal,
-        );
-    });
-
-    sentry::capture_message("starting to process for duplication", sentry::Level::Info);
 
     let publisher_data = VideoPublisherData {
         publisher_principal: req.publisher_data.publisher_principal.clone(),
@@ -116,10 +110,6 @@ async fn video_deduplication_handler(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    sentry::capture_message(
-        "responding that video deduplication check was completed",
-        sentry::Level::Info,
-    );
     let response = Response::builder()
         .status(StatusCode::OK)
         .body("Video deduplication check completed".into())

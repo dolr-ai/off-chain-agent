@@ -7,7 +7,9 @@ use std::{
 
 use crate::{
     consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
+    pipeline::Step,
     qstash::client::QStashClient,
+    setup_context,
 };
 use anyhow::Error;
 use axum::{extract::State, Json};
@@ -128,6 +130,10 @@ pub async fn extract_frames_and_upload(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    setup_context!(&payload.video_id, Step::ExtractFrames, {
+        "upload_info": &payload.video_info
+    });
+
     let video_id = payload.video_id;
     let video_path = format!(
         "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
@@ -212,6 +218,10 @@ pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    setup_context!(&payload.video_id, Step::NsfwDetection, {
+        "upload_info": &payload.video_info
+    });
+
     let video_id = payload.video_id;
     let video_info = payload.video_info;
 
@@ -324,21 +334,10 @@ pub async fn nsfw_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    sentry::with_scope(
-        |scope| {
-            scope.set_tag("yral.video_id", &payload.video_id);
-            scope.set_tag(
-                "yral.publisher_user_id",
-                &payload.video_info.publisher_user_id,
-            );
-            scope.set_extra(
-                "yral.upload_info",
-                serde_json::to_value(&payload.video_info)
-                    .expect("upload info to be json serializable"),
-            );
-        },
-        || sentry::capture_message("Processing for nsfw detection v2", sentry::Level::Info),
-    );
+    setup_context!(&payload.video_id, Step::NsfwDetectionV2, {
+        "upload_info": &payload.video_info
+    });
+
     let video_id = payload.video_id;
 
     let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;

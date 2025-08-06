@@ -1,6 +1,8 @@
 use crate::consts::OFF_CHAIN_AGENT_URL;
 use crate::events::types::{VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2};
 use crate::events::utils::parse_success_history_params;
+use crate::pipeline::Step;
+use crate::setup_context;
 use crate::{
     app_state::AppState, consts::BIGQUERY_INGESTION_URL, events::warehouse_events::WarehouseEvent,
     AppError,
@@ -660,6 +662,10 @@ pub async fn upload_video_gcs(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UploadVideoInfo>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    setup_context!(&payload.video_id, Step::GcsUpload, {
+        "upload_info": &payload
+    });
+
     upload_gcs_impl(
         &payload.video_id,
         &payload.publisher_user_id,

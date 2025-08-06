@@ -41,6 +41,7 @@ mod error;
 mod events;
 pub mod metrics;
 mod offchain_service;
+pub mod pipeline;
 mod posts;
 mod qstash;
 mod types;

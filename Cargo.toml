@@ -137,7 +137,10 @@ name = "generate_jwt"
 path = "src/bin/generate_jwt.rs"
 
 [features]
+# enable extensive sentry logging for the entire pipeline
+# default = ["extensive-pipeline-logs"]
 local-bin = []
+extensive-pipeline-logs = []
 use-local-agent = []
 # use-uplink = ["dep:uplink"]
 prod-bin = ["dep:fasthash"]
