@@ -150,6 +150,7 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
+            .header("Upstash-Retries", "5")
             .send()
             .await?;
 
@@ -190,6 +191,7 @@ impl QStashClient {
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
             .header("upstash-delay", format!("{delay_seconds}s"))
+            .header("Upstash-Retries", "5")
             .send()
             .await?;
 
