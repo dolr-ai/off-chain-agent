@@ -114,6 +114,7 @@ videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "
 ] }
 yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
 yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
+yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
 
 
 # Local (Path) - uncomment to use local development versions
@@ -128,6 +129,7 @@ yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", bran
 # videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
 # yral-identity = { path = "../yral-common/identity" }
 # yral-canisters-common = { path = "../yral-common/canisters-common" }
+# yral-types = { path = "../yral-common/types" }
 
 
 [build-dependencies]

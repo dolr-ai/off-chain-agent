@@ -1,4 +1,5 @@
 use axum::{extract::State, http::StatusCode, Json};
+use ic_agent::{identity::DelegatedIdentity, Identity};
 use std::sync::Arc;
 use videogen_common::VideoGenerator;
 
@@ -219,6 +220,7 @@ pub async fn generate_video_signed(
         &app_state.agent,
         &request_key,
         property,
+        None, // No user agent for signature-based auth
     )
     .await?;
 
@@ -272,7 +274,7 @@ pub async fn generate_video_signed(
                     videogen_common::TokenType::Free => None, // Should not reach here
                 };
 
-                let agent =
+                let admin_agent =
                     if matches!(&qstash_request.token_type, videogen_common::TokenType::Dolr) {
                         Some(app_state.agent.clone())
                     } else {
@@ -284,7 +286,7 @@ pub async fn generate_video_signed(
                     deducted_amount,
                     &qstash_request.token_type,
                     jwt_opt,
-                    agent,
+                    admin_agent,
                 )
                 .await
                 {
@@ -342,4 +344,231 @@ async fn process_input_image(
     }
 
     Ok(())
+}
+
+/// Generate a video using delegated identity for authentication and balance deduction
+#[utoipa::path(
+    post,
+    path = "/generate_with_identity",
+    request_body = videogen_common::VideoGenRequestWithIdentity,
+    responses(
+        (status = 200, description = "Video generation started successfully", body = videogen_common::VideoGenQueuedResponse),
+        (status = 400, description = "Invalid input", body = videogen_common::VideoGenError),
+        (status = 401, description = "Authentication failed - Invalid identity", body = videogen_common::VideoGenError),
+        (status = 402, description = "Insufficient balance", body = videogen_common::VideoGenError),
+        (status = 429, description = "Rate limit exceeded", body = videogen_common::VideoGenError),
+        (status = 502, description = "Provider error", body = videogen_common::VideoGenError),
+        (status = 503, description = "Service unavailable", body = videogen_common::VideoGenError),
+    ),
+    tag = "VideoGen"
+)]
+pub async fn generate_video_with_identity(
+    State(app_state): State<Arc<AppState>>,
+    Json(identity_request): Json<videogen_common::VideoGenRequestWithIdentity>,
+) -> Result<
+    Json<videogen_common::VideoGenQueuedResponse>,
+    (StatusCode, Json<videogen_common::VideoGenError>),
+> {
+    // Extract user principal from delegated identity
+    let identity: DelegatedIdentity = identity_request
+        .delegated_identity
+        .clone()
+        .try_into()
+        .map_err(|e: k256::elliptic_curve::Error| {
+            log::error!("Failed to create delegated identity: {e}");
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(videogen_common::VideoGenError::AuthError),
+            )
+        })?;
+
+    let user_principal = identity.sender().map_err(|_| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(videogen_common::VideoGenError::AuthError),
+        )
+    })?;
+
+    // Verify the principal matches the request
+    if user_principal != identity_request.request.principal {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(videogen_common::VideoGenError::AuthError),
+        ));
+    }
+
+    log::info!("Identity verified for user {user_principal}");
+
+    // Get token type and model info
+    let model_name = identity_request.request.input.model_name();
+    let prompt = identity_request.request.input.get_prompt();
+    let token_type = &identity_request.request.token_type;
+    let property = if model_name == "INTTEST" {
+        "VIDEOGEN_INTTEST"
+    } else {
+        "VIDEOGEN"
+    };
+
+    // Get provider before moving input
+    let provider = identity_request.request.input.provider();
+
+    // Get the cost based on model and token type
+    let cost = get_model_cost(model_name, token_type);
+
+    // Determine the payment amount for rate limit check
+    let payment_amount = if matches!(token_type, videogen_common::TokenType::Free) {
+        None
+    } else {
+        Some(cost)
+    };
+
+    // First verify rate limit with v1 function
+    let request_key = verify_rate_limit_and_create_request_v1(
+        user_principal,
+        model_name,
+        prompt,
+        property,
+        token_type,
+        payment_amount,
+        &app_state,
+    )
+    .await
+    .map_err(|(status, error)| (status, Json(error)))?;
+
+    // Create agent from delegated identity for DOLR operations
+    let user_agent = if matches!(token_type, videogen_common::TokenType::Dolr) {
+        let agent = ic_agent::Agent::builder()
+            .with_identity(identity)
+            .with_url("https://ic0.app")
+            .build()
+            .map_err(|e| {
+                log::error!("Failed to build agent: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(videogen_common::VideoGenError::NetworkError(
+                        "Failed to create agent".to_string(),
+                    )),
+                )
+            })?;
+        Some(agent)
+    } else {
+        None
+    };
+
+    // Get JWT token from environment variable (for SATS)
+    let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(videogen_common::VideoGenError::AuthError),
+        )
+    })?;
+
+    // Handle balance deduction with automatic cleanup on failure
+    let deducted_amount = deduct_balance_with_cleanup(
+        user_principal,
+        cost,
+        token_type,
+        jwt_token.clone(),
+        &app_state.agent,
+        &request_key,
+        property,
+        user_agent.as_ref(),
+    )
+    .await?;
+
+    // Process image if present - upload large images to GCS
+    let mut input = identity_request.request.input;
+    process_input_image(
+        &mut input,
+        app_state.gcs_client.clone(),
+        &user_principal.to_string(),
+    )
+    .await?;
+
+    // Queue to Qstash with potentially updated input (image uploaded to GCS)
+    let qstash_request = QstashVideoGenRequest {
+        user_principal,
+        input, // Use the potentially modified input
+        request_key: request_key.clone(),
+        property: property.to_string(),
+        deducted_amount, // Now it's Option<u64> - None for free, Some for paid
+        token_type: identity_request.request.token_type,
+    };
+
+    let callback_url = OFF_CHAIN_AGENT_URL
+        .join("qstash/video_gen_callback")
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(videogen_common::VideoGenError::NetworkError(format!(
+                    "Failed to construct callback URL: {e}"
+                ))),
+            )
+        })?
+        .to_string();
+
+    match app_state
+        .qstash_client
+        .queue_video_generation(&qstash_request, &callback_url)
+        .await
+    {
+        Ok(()) => {
+            // Successfully queued
+        }
+        Err(e) => {
+            // Failed to queue - rollback balance
+            log::error!("Failed to queue video generation: {e}. Rolling back balance.");
+
+            if let Some(deducted_amount) = qstash_request.deducted_amount {
+                let jwt_opt = match &qstash_request.token_type {
+                    videogen_common::TokenType::Sats => Some(jwt_token.clone()),
+                    videogen_common::TokenType::Dolr => None,
+                    videogen_common::TokenType::Free => None, // Should not reach here
+                };
+
+                // Always use admin agent for rollback
+                let admin_agent =
+                    if matches!(&qstash_request.token_type, videogen_common::TokenType::Dolr) {
+                        Some(app_state.agent.clone())
+                    } else {
+                        None
+                    };
+
+                if let Err(rollback_err) = add_token_balance(
+                    user_principal,
+                    deducted_amount,
+                    &qstash_request.token_type,
+                    jwt_opt,
+                    admin_agent,
+                )
+                .await
+                {
+                    log::error!(
+                        "Failed to rollback {} {:?} for user {}: {}",
+                        deducted_amount,
+                        qstash_request.token_type,
+                        user_principal,
+                        rollback_err
+                    );
+                }
+            }
+
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(videogen_common::VideoGenError::NetworkError(format!(
+                    "Failed to queue video generation: {e}"
+                ))),
+            ));
+        }
+    }
+
+    // Return polling response
+    Ok(Json(videogen_common::VideoGenQueuedResponse {
+        operation_id: format!("{}_{}", request_key.principal, request_key.counter),
+        provider: provider.to_string(),
+        request_key: videogen_common::VideoGenRequestKey {
+            principal: request_key.principal,
+            counter: request_key.counter,
+        },
+    }))
 }
