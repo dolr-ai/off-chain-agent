@@ -27,7 +27,7 @@ pub async fn verify_event_bulk_request(
         Err(e) => {
             return Err((
                 StatusCode::BAD_REQUEST,
-                format!("Failed to parse request body #1: {}", e),
+                format!("Failed to parse request body #1: {e}"),
             ))
         }
     };
@@ -38,7 +38,7 @@ pub async fn verify_event_bulk_request(
         Err(e) => {
             return Err((
                 StatusCode::BAD_REQUEST,
-                format!("Failed to parse request body to EventBulkRequest: {}", e),
+                format!("Failed to parse request body to EventBulkRequest: {e}"),
             ))
         }
     };
@@ -51,7 +51,7 @@ pub async fn verify_event_bulk_request(
     .map_err(|e| {
         (
             StatusCode::UNAUTHORIZED,
-            format!("Failed to get user info: {}", e),
+            format!("Failed to get user info: {e}"),
         )
     })?;
     let user_principal = user_info.user_principal;

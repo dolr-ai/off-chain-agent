@@ -22,7 +22,7 @@ impl YralAuthRedis {
     pub async fn delete_principal(&self, principal: Principal) -> Result<(), anyhow::Error> {
         let mut conn = self.pool.get().await.unwrap();
         let key = principal.to_string();
-        
+
         conn.del::<String, ()>(key).await?;
         Ok(())
     }

@@ -86,14 +86,9 @@ async fn video_deduplication_handler(
         post_id: req.publisher_data.post_id,
     };
 
-    let duplication_handler = duplicate::VideoHashDuplication::new(
-        &state.qstash_client.client,
-        &state.qstash_client.base_url,
-    );
-
     let qstash_client = state.qstash_client.clone();
 
-    if let Err(e) = duplication_handler
+    if let Err(e) = duplicate::VideoHashDuplication
         .process_video_deduplication(
             &state.agent,
             &state.bigquery_client,
@@ -117,7 +112,7 @@ async fn video_deduplication_handler(
         )
         .await
     {
-        log::error!("Video deduplication failed: {}", e);
+        log::error!("Video deduplication failed: {e}");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 

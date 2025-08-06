@@ -9,7 +9,6 @@ use http::{
     HeaderMap, HeaderValue,
 };
 use reqwest::{Client, Url};
-use sentry::configure_scope;
 use serde_json::json;
 use tracing::instrument;
 
@@ -28,7 +27,7 @@ pub struct QStashClient {
 
 impl QStashClient {
     pub fn new(auth_token: &str) -> Self {
-        let mut bearer: HeaderValue = format!("Bearer {}", auth_token)
+        let mut bearer: HeaderValue = format!("Bearer {auth_token}")
             .parse()
             .expect("Invalid QStash auth token");
         bearer.set_sensitive(true);
@@ -45,7 +44,7 @@ impl QStashClient {
             env::var("QSTASH_URL").unwrap_or_else(|_| "https://qstash.upstash.io/v2/".to_string());
         let base_url = Url::parse(&base_url_str).expect("Invalid QSTASH_URL");
 
-        log::info!("QStash client initialized with base URL: {}", base_url);
+        log::info!("QStash client initialized with base URL: {base_url}");
 
         Self {
             client,
@@ -59,7 +58,7 @@ impl QStashClient {
         data: storj_interface::duplicate::Args,
     ) -> anyhow::Result<()> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/storj_ingest").unwrap();
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
 
         self.client
             .post(url)
@@ -98,7 +97,7 @@ impl QStashClient {
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/upload_video_gcs").unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "post_id": post_id,
@@ -116,8 +115,8 @@ impl QStashClient {
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
-                scope.set_tag("yral.publisher_user_id", &publisher_user_id);
+                scope.set_tag("yral.video_id", video_id);
+                scope.set_tag("yral.publisher_user_id", publisher_user_id);
             },
             || sentry::capture_message("enqueing for upload to gcs", sentry::Level::Info),
         );
@@ -135,7 +134,7 @@ impl QStashClient {
             .join("qstash/enqueue_video_frames")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -151,11 +150,11 @@ impl QStashClient {
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.video_id", video_id);
                 scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
                 scope.set_extra(
                     "yral.upload_info",
-                    serde_json::to_value(&video_info)
+                    serde_json::to_value(video_info)
                         .expect("upload video info to be serializable as json"),
                 );
             },
@@ -175,7 +174,7 @@ impl QStashClient {
             .join("qstash/enqueue_video_nsfw_detection")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -191,11 +190,11 @@ impl QStashClient {
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.video_id", video_id);
                 scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
                 scope.set_extra(
                     "yral.upload_info",
-                    serde_json::to_value(&video_info)
+                    serde_json::to_value(video_info)
                         .expect("upload video info to be serializable as json"),
                 );
             },
@@ -220,7 +219,7 @@ impl QStashClient {
             .join("qstash/enqueue_video_nsfw_detection_v2")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -243,13 +242,13 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("upstash-delay", format!("{}s", delay_seconds))
+            .header("upstash-delay", format!("{delay_seconds}s"))
             .send()
             .await?;
 
         sentry::with_scope(
             |scope| {
-                scope.set_tag("yral.video_id", &video_id);
+                scope.set_tag("yral.video_id", video_id);
                 scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
                 scope.set_extra("yral.delay_seconds", delay_seconds.into());
                 scope.set_extra(
@@ -271,7 +270,7 @@ impl QStashClient {
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/report_post").unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!(report_request);
 
         self.client
@@ -379,12 +378,12 @@ impl QStashClient {
             .join("qstash/process_video_gen")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
 
         // Get flow control from the model using the VideoGenerator trait
         let flow_control = request.input.flow_control_config().map(|(rate, parallel)| {
             let key = request.input.flow_control_key();
-            let value = format!("Rate={},Parallelism={}", rate, parallel);
+            let value = format!("Rate={rate},Parallelism={parallel}");
             (key, value)
         });
 
