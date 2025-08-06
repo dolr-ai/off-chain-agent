@@ -9,7 +9,7 @@ pub mod signature;
 pub mod token_operations;
 pub mod types;
 
-pub use handlers::generate_video;
+// pub use handlers::generate_video; // Commented out as per user request
 pub use qstash_types::{
     QstashVideoGenCallback, QstashVideoGenRequest, VideoGenCallbackResult, VideoGenRequestKey,
 };

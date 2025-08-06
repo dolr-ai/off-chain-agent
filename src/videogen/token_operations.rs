@@ -4,6 +4,8 @@ use yral_canisters_common::utils::token::{TokenOperations, TokenOperationsProvid
 use yral_canisters_common::utils::token::balance::TokenBalance;
 use num_bigint::BigUint;
 use std::str::FromStr;
+use axum::{http::StatusCode, Json};
+use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequestKey};
 
 /// Get the appropriate token operations based on token type
 pub fn get_token_operations(
@@ -18,6 +20,9 @@ pub fn get_token_operations(
                 VideoGenError::InvalidInput("Agent required for DOLR operations".to_string())
             })?;
             Ok(TokenOperationsProvider::Dolr(DolrOperations::new(agent)))
+        }
+        TokenType::Free => {
+            Err(VideoGenError::InvalidInput("No token operations for Free token type".to_string()))
         }
     }
 }
@@ -48,6 +53,11 @@ pub async fn deduct_token_balance(
     jwt_token: Option<String>,
     agent: Option<ic_agent::Agent>,
 ) -> Result<u64, VideoGenError> {
+    // For Free token type, no deduction needed
+    if matches!(token_type, TokenType::Free) {
+        return Ok(0);
+    }
+    
     let ops = get_token_operations(token_type, jwt_token.clone(), agent.clone())?;
     
     // Check balance first
@@ -71,6 +81,11 @@ pub async fn add_token_balance(
     jwt_token: Option<String>,
     agent: Option<ic_agent::Agent>,
 ) -> Result<(), VideoGenError> {
+    // For Free token type, no operation needed
+    if matches!(token_type, TokenType::Free) {
+        return Ok(());
+    }
+    
     let ops = get_token_operations(token_type, jwt_token, agent)?;
     
     ops.add_balance(user_principal, amount)
@@ -81,4 +96,81 @@ pub async fn add_token_balance(
 /// Get the cost for a specific model and token type
 pub fn get_model_cost(model_name: &str, token_type: &TokenType) -> u64 {
     TOKEN_COST_CONFIG.get_model_cost(model_name, token_type)
+}
+
+/// Handle token balance deduction with automatic rate limit cleanup on failure
+pub async fn deduct_balance_with_cleanup(
+    user_principal: Principal,
+    cost: u64,
+    token_type: &TokenType,
+    jwt_token: String,
+    agent: &ic_agent::Agent,
+    request_key: &crate::videogen::VideoGenRequestKey,
+    property: &str,
+) -> Result<Option<u64>, (StatusCode, Json<VideoGenError>)> {
+    // For free requests, return None immediately
+    if matches!(token_type, TokenType::Free) {
+        return Ok(None);
+    }
+    
+    // Prepare auth based on token type
+    let jwt_opt = match token_type {
+        TokenType::Sats => Some(jwt_token),
+        TokenType::Dolr => None,
+        TokenType::Free => None, // Should not reach here
+    };
+    
+    // Get agent for DOLR operations
+    let agent_opt = if matches!(token_type, TokenType::Dolr) {
+        Some(agent.clone())
+    } else {
+        None
+    };
+    
+    // Attempt to deduct balance
+    match deduct_token_balance(user_principal, cost, token_type, jwt_opt, agent_opt).await {
+        Ok(amount) => {
+            log::info!(
+                "Successfully deducted {} {:?} from user {}",
+                amount,
+                token_type,
+                user_principal
+            );
+            Ok(Some(amount))
+        }
+        Err(e) => {
+            log::error!(
+                "Balance deduction failed for user {}: {:?}. Decrementing rate limit counter.",
+                user_principal,
+                e
+            );
+            
+            // Cleanup: decrement rate limit counter
+            let rate_limits_client = RateLimits(
+                *crate::consts::RATE_LIMITS_CANISTER_ID,
+                agent,
+            );
+            
+            // Convert our key type to the canister's key type
+            let canister_key = VideoGenRequestKey {
+                principal: request_key.principal,
+                counter: request_key.counter,
+            };
+            
+            if let Err(dec_err) = rate_limits_client
+                .decrement_video_generation_counter_v_1(canister_key, property.to_string())
+                .await
+            {
+                log::error!("Failed to decrement rate limit counter after balance deduction failure: {}", dec_err);
+            }
+            
+            // Return appropriate error
+            Err(match e {
+                VideoGenError::InsufficientBalance => {
+                    (StatusCode::PAYMENT_REQUIRED, Json(e))
+                }
+                _ => (StatusCode::SERVICE_UNAVAILABLE, Json(e)),
+            })
+        }
+    }
 }

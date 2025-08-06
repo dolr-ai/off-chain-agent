@@ -7,12 +7,14 @@ use std::sync::Arc;
 use videogen_common::VideoGenerator;
 
 use super::qstash_types::QstashVideoGenRequest;
-use super::rate_limit::verify_rate_limit_and_create_request;
+use super::rate_limit::{verify_rate_limit_and_create_request, verify_rate_limit_and_create_request_v1};
 use super::signature::verify_videogen_request;
-use super::token_operations::{add_token_balance, deduct_token_balance, get_model_cost};
+use super::token_operations::{add_token_balance, deduct_token_balance, deduct_balance_with_cleanup, get_model_cost};
 use crate::app_state::AppState;
 use crate::auth::verify_jwt_from_header;
 use crate::consts::OFF_CHAIN_AGENT_URL;
+use crate::utils::gcs::maybe_upload_image_to_gcs;
+use cloud_storage::Client;
 
 /// Generate a video using the specified provider
 // #[utoipa::path(
@@ -168,27 +170,41 @@ pub async fn generate_video_signed(
 
     log::info!("Signature verified for user {}", user_principal);
 
-    // Verify rate limit and create request atomically
+    // Get token type and model info
     let model_name = signed_request.request.input.model_name();
     let prompt = signed_request.request.input.get_prompt();
+    let token_type = &signed_request.request.token_type;
     let property = if model_name == "INTTEST" {
         "VIDEOGEN_INTTEST"
     } else {
         "VIDEOGEN"
     };
 
-    let request_key = verify_rate_limit_and_create_request(
+    // Get provider before moving input
+    let provider = signed_request.request.input.provider();
+
+    // Get the cost based on model and token type
+    let cost = get_model_cost(&model_name, token_type);
+
+    // Determine the payment amount for rate limit check
+    let payment_amount = if matches!(token_type, videogen_common::TokenType::Free) {
+        None
+    } else {
+        Some(cost)
+    };
+
+    // First verify rate limit with v1 function
+    let request_key = verify_rate_limit_and_create_request_v1(
         user_principal,
         model_name,
         prompt,
         property,
+        token_type,
+        payment_amount,
         &app_state,
     )
     .await
     .map_err(|(status, error)| (status, Json(error)))?;
-
-    // Get provider before moving input
-    let provider = signed_request.request.input.provider();
 
     // Get JWT token from environment variable
     let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").map_err(|_| {
@@ -198,48 +214,30 @@ pub async fn generate_video_signed(
         )
     })?;
 
-    // Get the cost based on model and token type
-    let model_name = signed_request.request.input.model_name();
-    let token_type = &signed_request.request.token_type;
-    let cost = get_model_cost(&model_name, token_type);
-
-    // Prepare auth based on token type
-    let jwt_opt = match token_type {
-        videogen_common::TokenType::Sats => Some(jwt_token.clone()),
-        videogen_common::TokenType::Dolr => None, // DOLR would need agent from app_state
-    };
-
-    // Get agent for DOLR operations
-    let agent = if matches!(token_type, videogen_common::TokenType::Dolr) {
-        Some(app_state.agent.clone())
-    } else {
-        None
-    };
-
-    // Deduct balance after successful rate limit check
-    let deducted_amount = deduct_token_balance(user_principal, cost, token_type, jwt_opt, agent)
-        .await
-        .map_err(|e| match e {
-            videogen_common::VideoGenError::InsufficientBalance => {
-                (StatusCode::PAYMENT_REQUIRED, Json(e))
-            }
-            _ => (StatusCode::SERVICE_UNAVAILABLE, Json(e)),
-        })?;
-
-    log::info!(
-        "Successfully deducted {} {:?} from user {}",
-        deducted_amount,
+    // Handle balance deduction with automatic cleanup on failure
+    let deducted_amount = deduct_balance_with_cleanup(
+        user_principal,
+        cost,
         token_type,
-        user_principal
-    );
+        jwt_token.clone(),
+        &app_state.agent,
+        &request_key,
+        property,
+    )
+    .await?;
 
-    // Queue to Qstash
+    // Process image if present - upload large images to GCS
+    let mut input = signed_request.request.input;
+    process_input_image(&mut input, app_state.gcs_client.clone(), &user_principal.to_string())
+        .await?;
+
+    // Queue to Qstash with potentially updated input (image uploaded to GCS)
     let qstash_request = QstashVideoGenRequest {
         user_principal: signed_request.request.principal,
-        input: signed_request.request.input,
+        input, // Use the potentially modified input
         request_key: request_key.clone(),
         property: property.to_string(),
-        deducted_amount: Some(deducted_amount),
+        deducted_amount, // Now it's Option<u64> - None for free, Some for paid
         token_type: signed_request.request.token_type.clone(),
     };
 
@@ -275,6 +273,7 @@ pub async fn generate_video_signed(
                 let jwt_opt = match &qstash_request.token_type {
                     videogen_common::TokenType::Sats => Some(jwt_token.clone()),
                     videogen_common::TokenType::Dolr => None,
+                    videogen_common::TokenType::Free => None, // Should not reach here
                 };
 
                 let agent =
@@ -322,4 +321,34 @@ pub async fn generate_video_signed(
             counter: request_key.counter,
         },
     }))
+}
+
+/// Helper function to process images in VideoGenInput
+/// Uploads large images to GCS and replaces them with URLs
+async fn process_input_image(
+    input: &mut videogen_common::VideoGenInput,
+    gcs_client: Arc<Client>,
+    user_principal: &str,
+) -> Result<(), (StatusCode, Json<videogen_common::VideoGenError>)> {
+    // Get mutable reference to image if it exists
+    if let Some(image_data) = input.get_image_mut() {
+        // Process the image and update it in place
+        *image_data = maybe_upload_image_to_gcs(
+            gcs_client,
+            image_data.clone(),
+            user_principal,
+        )
+        .await
+        .map_err(|e| {
+            log::error!("Failed to upload image to GCS: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(videogen_common::VideoGenError::NetworkError(
+                    format!("Failed to upload image: {}", e),
+                )),
+            )
+        })?;
+    }
+    
+    Ok(())
 }

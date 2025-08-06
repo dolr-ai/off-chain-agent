@@ -4,7 +4,7 @@ use std::time::Duration;
 use tracing::info;
 use uuid::Uuid;
 use videogen_common::{
-    LumaLabsDuration, LumaLabsResolution, VideoGenError, VideoGenInput, VideoGenResponse,
+    ImageData, LumaLabsDuration, LumaLabsResolution, VideoGenError, VideoGenInput, VideoGenResponse,
 };
 
 use crate::app_state::AppState;
@@ -73,36 +73,46 @@ pub async fn generate(
     };
     
     let prompt = model.prompt;
-    let image = model.image;
+    let image_data = model.image;
     let resolution = model.resolution;
     let duration = model.duration;
     let aspect_ratio = model.aspect_ratio;
     let loop_video = model.loop_video;
+    
+    // Process image data - upload to GCS if it's base64, or use URL directly
+    let image_url = if let Some(ref img_data) = image_data {
+        match img_data {
+            ImageData::Url(url) => Some(url.clone()),
+            ImageData::Base64(image_input) => {
+                #[cfg(not(feature = "local-bin"))]
+                {
+                    Some(upload_image_to_gcs(&app_state.gcs_client, &image_input.data, &image_input.mime_type).await?)
+                }
+                #[cfg(feature = "local-bin")]
+                {
+                    return Err(VideoGenError::InvalidInput(
+                        "Image upload not supported in local mode".to_string(),
+                    ));
+                }
+            }
+        }
+    } else {
+        None
+    };
 
     // Get LumaLabs API key from environment
     let api_key = std::env::var("LUMALABS_API_KEY").map_err(|_| VideoGenError::AuthError)?;
 
     let client = reqwest::Client::new();
 
-    // Upload image to GCS if provided
-    let keyframes = if let Some(img) = image {
-        #[cfg(not(feature = "local-bin"))]
-        {
-            let image_url =
-                upload_image_to_gcs(&app_state.gcs_client, &img.data, &img.mime_type).await?;
-            Some(LumaLabsKeyframes {
-                frame0: LumaLabsFrame {
-                    frame_type: "image".to_string(),
-                    url: image_url,
-                },
-            })
-        }
-        #[cfg(feature = "local-bin")]
-        {
-            return Err(VideoGenError::InvalidInput(
-                "Image upload not supported in local mode".to_string(),
-            ));
-        }
+    // Create keyframes if image URL is available
+    let keyframes = if let Some(url) = image_url {
+        Some(LumaLabsKeyframes {
+            frame0: LumaLabsFrame {
+                frame_type: "image".to_string(),
+                url,
+            },
+        })
     } else {
         None
     };

@@ -28,8 +28,8 @@ pub struct QStashCallbackWrapper {
     pub method: String,
 }
 
-/// Helper function to decrement rate limit counter for failed requests
-async fn decrement_counter_for_failure(
+/// Helper function to decrement rate limit counter for failed requests (v1)
+async fn decrement_counter_for_failure_v1(
     rate_limits_client: &RateLimits<'_>,
     request_key: VideoGenRequestKey,
     property: String,
@@ -42,7 +42,7 @@ async fn decrement_counter_for_failure(
     );
 
     match rate_limits_client
-        .decrement_video_generation_counter(request_key, property)
+        .decrement_video_generation_counter_v_1(request_key, property)
         .await
     {
         Ok(result) => match result {
@@ -55,7 +55,7 @@ async fn decrement_counter_for_failure(
             }
         },
         Err(e) => {
-            log::error!("Failed to call decrement_video_generation_counter: {}", e);
+            log::error!("Failed to call decrement_video_generation_counter_v1: {}", e);
             // Don't fail the callback if decrement fails
         }
     }
@@ -165,8 +165,8 @@ pub async fn handle_video_gen_callback(
 
                 // If the request failed (either QStash or video generation), handle cleanup
                 if should_decrement {
-                    // Decrement the rate limit counter
-                    decrement_counter_for_failure(
+                    // Decrement the rate limit counter using v1
+                    decrement_counter_for_failure_v1(
                         &rate_limits_client,
                         canister_key,
                         callback.property.clone(),
@@ -188,6 +188,7 @@ pub async fn handle_video_gen_callback(
                         let jwt_opt = match &token_type {
                             videogen_common::TokenType::Sats => Some(jwt_token),
                             videogen_common::TokenType::Dolr => None,
+                            videogen_common::TokenType::Free => None, // Should not reach here
                         };
 
                         let agent = if matches!(&token_type, videogen_common::TokenType::Dolr) {
