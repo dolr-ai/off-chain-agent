@@ -4,7 +4,7 @@ allTargets = true
 noDefaultFeatures = true
 
 [checkOnSave]
-command = "check"
+command = "clippy"
 allTargets = true
 noDefaultFeatures = true
 features = []
