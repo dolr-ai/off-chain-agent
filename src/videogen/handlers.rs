@@ -1,17 +1,11 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use std::sync::Arc;
 use videogen_common::VideoGenerator;
 
 use super::qstash_types::QstashVideoGenRequest;
 use super::rate_limit::verify_rate_limit_and_create_request_v1;
 use super::signature::verify_videogen_request;
-use super::token_operations::{
-    add_token_balance, deduct_balance_with_cleanup, get_model_cost,
-};
+use super::token_operations::{add_token_balance, deduct_balance_with_cleanup, get_model_cost};
 use crate::app_state::AppState;
 use crate::consts::OFF_CHAIN_AGENT_URL;
 use crate::utils::gcs::maybe_upload_image_to_gcs;
@@ -269,9 +263,7 @@ pub async fn generate_video_signed(
         }
         Err(e) => {
             // Failed to queue - rollback balance
-            log::error!(
-                "Failed to queue video generation: {e}. Rolling back balance."
-            );
+            log::error!("Failed to queue video generation: {e}. Rolling back balance.");
 
             if let Some(deducted_amount) = qstash_request.deducted_amount {
                 let jwt_opt = match &qstash_request.token_type {

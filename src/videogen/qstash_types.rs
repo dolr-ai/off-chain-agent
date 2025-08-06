@@ -1,6 +1,6 @@
 use candid::Principal;
 use serde::{Deserialize, Serialize};
-use videogen_common::{VideoGenInput, VideoGenResponse, TokenType};
+use videogen_common::{TokenType, VideoGenInput, VideoGenResponse};
 
 /// Request structure for queueing video generation to Qstash
 #[derive(Debug, Clone, Serialize, Deserialize)]

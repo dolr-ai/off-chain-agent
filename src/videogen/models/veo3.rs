@@ -93,15 +93,16 @@ pub async fn generate(
     let aspect_ratio = model.aspect_ratio;
     let duration_seconds = model.duration_seconds;
     let generate_audio = model.generate_audio;
-    
+
     // Convert ImageData to ImageInput if needed
-    let image = if let Some(ref img_data) = image_data {
-        Some(image_data_to_input(img_data).await.map_err(|e| {
-            VideoGenError::InvalidInput(format!("Failed to process image: {e}"))
-        })?)
-    } else {
-        None
-    };
+    let image =
+        if let Some(ref img_data) = image_data {
+            Some(image_data_to_input(img_data).await.map_err(|e| {
+                VideoGenError::InvalidInput(format!("Failed to process image: {e}"))
+            })?)
+        } else {
+            None
+        };
 
     // Get access token using app_state
     let access_token = app_state

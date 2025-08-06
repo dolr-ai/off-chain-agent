@@ -88,9 +88,7 @@ pub async fn upload_image_to_gcs(
         _ => "bin",
     };
 
-    let object_name = format!(
-        "videogen/{user_principal}/{timestamp}-{hash_short}.{extension}"
-    );
+    let object_name = format!("videogen/{user_principal}/{timestamp}-{hash_short}.{extension}");
 
     info!("Uploading image to GCS: {}/{}", config.bucket, object_name);
 

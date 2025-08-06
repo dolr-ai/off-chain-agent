@@ -62,7 +62,7 @@ pub async fn process_video_generation(
             ))),
         )
     })?;
-    
+
     // Add deducted_amount to the response if present
     if let Some(deducted_amount) = request.deducted_amount {
         if let serde_json::Value::Object(ref mut map) = response_value {
