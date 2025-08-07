@@ -5,6 +5,7 @@ use videogen_common::{Veo3AspectRatio, VideoGenError, VideoGenInput, VideoGenRes
 
 use crate::app_state::AppState;
 use crate::consts::{VEO3_LOCATION, VEO3_PROJECT_ID, VEO3_STORAGE_URI};
+use crate::utils::gcs::image_data_to_input;
 
 #[derive(Serialize)]
 struct Veo3Request {
@@ -88,10 +89,20 @@ pub async fn generate(
 
     let prompt = model.prompt;
     let negative_prompt = model.negative_prompt;
-    let image = model.image;
+    let image_data = model.image;
     let aspect_ratio = model.aspect_ratio;
     let duration_seconds = model.duration_seconds;
     let generate_audio = model.generate_audio;
+
+    // Convert ImageData to ImageInput if needed
+    let image =
+        if let Some(ref img_data) = image_data {
+            Some(image_data_to_input(img_data).await.map_err(|e| {
+                VideoGenError::InvalidInput(format!("Failed to process image: {e}"))
+            })?)
+        } else {
+            None
+        };
 
     // Get access token using app_state
     let access_token = app_state

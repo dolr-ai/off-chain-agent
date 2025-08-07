@@ -1,11 +1,7 @@
 use std::{error::Error, sync::Arc};
 
 use axum::{extract::State, Json};
-use ic_agent::{
-    identity::{DelegatedIdentity, Secp256k1Identity},
-    Agent, Identity,
-};
-use k256::SecretKey;
+use ic_agent::{identity::DelegatedIdentity, Agent, Identity};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -47,21 +43,6 @@ impl From<PostDetails> for PostDetailsFromFrontend {
 
 pub struct UploadUserVideoResData;
 
-impl TryFrom<DelegatedIdentityWire> for DelegatedIdentity {
-    fn try_from(value: DelegatedIdentityWire) -> Result<Self, Self::Error> {
-        let secret_key = SecretKey::from_jwk(&value.to_secret).map_err(|e| e.to_string())?;
-        let to_identity = Secp256k1Identity::from_private_key(secret_key);
-        DelegatedIdentity::new(
-            value.from_key,
-            Box::new(to_identity),
-            value.delegation_chain,
-        )
-        .map_err(|err| err.to_string())
-    }
-
-    type Error = String;
-}
-
 pub async fn upload_user_video_handler(
     State(app_state): State<Arc<AppState>>,
     Json(payload): Json<UploadUserVideoRequestBody>,
@@ -76,7 +57,10 @@ pub async fn upload_user_video_impl(
     payload: UploadUserVideoRequestBody,
 ) -> Result<u64, Box<dyn Error + Send + Sync>> {
     let yral_metadata_client = &app_state.yral_metadata_client;
-    let identity: DelegatedIdentity = DelegatedIdentity::try_from(payload.delegated_identity_wire)?;
+    let identity: DelegatedIdentity = payload
+        .delegated_identity_wire
+        .try_into()
+        .map_err(|e: k256::elliptic_curve::Error| e.to_string())?;
     let user_principal = identity.sender()?;
 
     let agent = Agent::builder()

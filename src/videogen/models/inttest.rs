@@ -11,9 +11,14 @@ pub async fn generate(
         ));
     };
 
-    tokio::time::sleep(std::time::Duration::from_secs(15)).await; // Simulate processing delay
+    // tokio::time::sleep(std::time::Duration::from_secs(15)).await; // Simulate processing delay
 
     log::info!("IntTest: Generating video for prompt: {}", model.prompt);
+
+    // Log if image is present (for testing)
+    if model.image.is_some() {
+        log::info!("IntTest: Image provided (ignored for test)");
+    }
 
     // Always return the same URL
     Ok(VideoGenResponse {

@@ -52,6 +52,7 @@ google-cloud-bigquery = { version = "0.13.1", default-features = false, features
     "rustls-tls",
 ] }
 hex = "0.4.3"
+sha2 = "0.10"
 ic-sns-governance = { git = "https://github.com/dfinity/ic", rev = "tags/release-2025-07-11_03-31-base" }
 ic-utils = "0.41.0"
 utoipa = "5.3.1"
@@ -97,6 +98,7 @@ fasthash = { version = "0.4.0", optional = true }
 spacetimedb-sdk = "1.2.0"
 async-channel = "2.3.1"
 num-bigint = "0.4"
+sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
@@ -111,7 +113,9 @@ videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "
     "ic",
 ] }
 yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-sentry-anyhow = "0.42.0"
+yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+
 
 # Local (Path) - uncomment to use local development versions
 # yral-canisters-client = { path = "../yral-common/canisters-client", features = [
@@ -124,6 +128,8 @@ sentry-anyhow = "0.42.0"
 # yral-metrics = { path = "../yral-common/metrics" }
 # videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
 # yral-identity = { path = "../yral-common/identity" }
+# yral-canisters-common = { path = "../yral-common/canisters-common" }
+# yral-types = { path = "../yral-common/types" }
 
 
 [build-dependencies]

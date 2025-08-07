@@ -51,11 +51,13 @@ pub async fn process_video_generation(
         request_key: request.request_key,
         result: callback_result,
         property: request.property,
+        deducted_amount: request.deducted_amount,
+        token_type: request.token_type,
     };
 
     // Return the callback data as the response
     // Qstash will automatically send this to the callback URL
-    Ok(Json(serde_json::to_value(callback).map_err(|e| {
+    Ok(Json(serde_json::to_value(&callback).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(VideoGenError::ProviderError(format!(
