@@ -146,7 +146,7 @@ pub async fn init_agent() -> Agent {
     {
         let pk = env::var("BACKEND_ADMIN_IDENTITY").expect("$BACKEND_ADMIN_IDENTITY is not set");
 
-        let identity = match ic_agent::identity::BasicIdentity::from_pem(
+        let identity = match ic_agent::identity::Secp256k1Identity::from_pem(
             stringreader::StringReader::new(pk.as_str()),
         ) {
             Ok(identity) => identity,
