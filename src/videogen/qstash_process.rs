@@ -51,29 +51,18 @@ pub async fn process_video_generation(
         request_key: request.request_key,
         result: callback_result,
         property: request.property,
+        deducted_amount: request.deducted_amount,
+        token_type: request.token_type,
     };
 
-    // Create a response that includes both callback data and original_balance for rollback
-    let mut response_value = serde_json::to_value(&callback).map_err(|e| {
+    // Return the callback data as the response
+    // Qstash will automatically send this to the callback URL
+    Ok(Json(serde_json::to_value(&callback).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(VideoGenError::ProviderError(format!(
                 "Failed to serialize callback: {e}"
             ))),
         )
-    })?;
-
-    // Add deducted_amount to the response if present
-    if let Some(deducted_amount) = request.deducted_amount {
-        if let serde_json::Value::Object(ref mut map) = response_value {
-            map.insert(
-                "deducted_amount".to_string(),
-                serde_json::Value::Number(serde_json::Number::from(deducted_amount)),
-            );
-        }
-    }
-
-    // Return the callback data as the response
-    // Qstash will automatically send this to the callback URL
-    Ok(Json(response_value))
+    })?))
 }

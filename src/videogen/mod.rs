@@ -8,6 +8,7 @@ pub mod router;
 pub mod signature;
 pub mod token_operations;
 pub mod types;
+pub mod utils;
 
 // pub use handlers::generate_video; // Commented out as per user request
 pub use qstash_types::{

@@ -102,19 +102,19 @@ sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "videogen_payment", features = [
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
     "full",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "videogen_payment" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
-videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment", features = [
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
     "ic",
 ] }
-yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
-yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
-yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "videogen_payment" }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 
 
 # Local (Path) - uncomment to use local development versions

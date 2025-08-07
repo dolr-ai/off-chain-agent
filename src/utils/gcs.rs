@@ -15,7 +15,7 @@ impl Default for GcsImageConfig {
     fn default() -> Self {
         Self {
             bucket: std::env::var("GCS_VIDEOGEN_BUCKET")
-                .unwrap_or_else(|_| "videogen-images".to_string()),
+                .unwrap_or_else(|_| crate::consts::LUMALABS_IMAGE_BUCKET.to_string()),
             size_threshold_bytes: std::env::var("IMAGE_SIZE_THRESHOLD")
                 .ok()
                 .and_then(|v| v.parse().ok())

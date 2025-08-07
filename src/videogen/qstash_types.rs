@@ -35,6 +35,10 @@ pub struct QstashVideoGenCallback {
     pub result: VideoGenCallbackResult,
     /// Property name for rate limiting (needed for decrement on failure)
     pub property: String,
+    /// Amount deducted from balance (for rollback on failure)
+    pub deducted_amount: Option<u64>,
+    /// Token type used for payment
+    pub token_type: TokenType,
 }
 
 /// Result types for callback
