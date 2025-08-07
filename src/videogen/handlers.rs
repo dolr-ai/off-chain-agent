@@ -74,7 +74,7 @@ pub async fn generate_video_with_identity(
     // Verify rate limit
     let request_key = verify_rate_limit_and_create_request_v1(
         user_principal,
-        &metadata.model_name,
+        &metadata.model_id,
         &metadata.prompt,
         &metadata.property,
         &metadata.token_type,

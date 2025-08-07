@@ -14,7 +14,7 @@ use crate::consts::OFF_CHAIN_AGENT_URL;
 
 /// Metadata extracted from a video generation request
 pub struct RequestMetadata {
-    pub model_name: String,
+    pub model_id: String,
     pub prompt: String,
     pub token_type: TokenType,
     pub property: String,
@@ -52,19 +52,19 @@ pub fn validate_delegated_identity(
 
 /// Extracts metadata from the video generation request
 pub fn extract_request_metadata(request: &VideoGenRequest) -> RequestMetadata {
-    let model_name = request.input.model_name();
+    let model_id = request.input.model_id();
     let prompt = request.input.get_prompt();
     let token_type = request.token_type;
-    let property = if model_name == "INTTEST" {
+    let property = if model_id == "inttest" {
         "VIDEOGEN_INTTEST"
     } else {
         "VIDEOGEN"
     };
     let provider = request.input.provider();
-    let cost = super::token_operations::get_model_cost(model_name, &token_type);
+    let cost = super::token_operations::get_model_cost(model_id, &token_type);
 
     RequestMetadata {
-        model_name: model_name.to_string(),
+        model_id: model_id.to_string(),
         prompt: prompt.to_string(),
         token_type,
         property: property.to_string(),

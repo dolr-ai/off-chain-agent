@@ -120,8 +120,8 @@ pub async fn add_token_balance(
 }
 
 /// Get the cost for a specific model and token type
-pub fn get_model_cost(model_name: &str, token_type: &TokenType) -> u64 {
-    TOKEN_COST_CONFIG.get_model_cost(model_name, token_type)
+pub fn get_model_cost(model_id: &str, token_type: &TokenType) -> u64 {
+    TOKEN_COST_CONFIG.get_model_cost(model_id, token_type)
 }
 
 /// Handle token balance deduction with automatic rate limit cleanup on failure
