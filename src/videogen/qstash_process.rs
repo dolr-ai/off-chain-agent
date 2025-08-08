@@ -19,7 +19,7 @@ pub async fn process_video_generation(
     log::info!(
         "Processing video generation for user {} with model {}",
         request.user_principal,
-        request.input.model_name()
+        request.input.model_id()
     );
 
     // Route to appropriate model handler based on the input type
