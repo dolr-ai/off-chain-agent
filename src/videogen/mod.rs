@@ -1,4 +1,5 @@
 pub mod handlers;
+pub mod handlers_v2;
 pub mod models;
 pub mod qstash_callback;
 pub mod qstash_process;
@@ -14,7 +15,7 @@ pub mod utils;
 pub use qstash_types::{
     QstashVideoGenCallback, QstashVideoGenRequest, VideoGenCallbackResult, VideoGenRequestKey,
 };
-pub use router::videogen_router;
+pub use router::{videogen_router, videogen_router_v2};
 pub use types::{
     ImageInput, Veo3AspectRatio, VideoGenError, VideoGenInput, VideoGenRequest, VideoGenResponse,
 };

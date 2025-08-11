@@ -80,6 +80,10 @@ async fn main_impl() -> Result<()> {
             "/api/v1/videogen",
             videogen::videogen_router(shared_state.clone()),
         )
+        .nest(
+            "/api/v2/videogen",
+            videogen::videogen_router_v2(shared_state.clone()),
+        )
         .split_for_parts();
 
     let router =

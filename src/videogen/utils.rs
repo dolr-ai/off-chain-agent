@@ -1,6 +1,9 @@
 use axum::{http::StatusCode, Json};
 use candid::Principal;
-use ic_agent::{identity::DelegatedIdentity, Agent, Identity};
+use ic_agent::{
+    identity::{DelegatedIdentity, Identity as IdentityTrait},
+    Agent,
+};
 use std::sync::Arc;
 use videogen_common::{
     TokenType, VideoGenError, VideoGenProvider, VideoGenQueuedResponse, VideoGenRequest,
@@ -208,4 +211,91 @@ pub fn build_queued_response(
             counter: request_key.counter,
         },
     }
+}
+
+/// Common video generation processing logic used by both v1 and v2 APIs
+/// This function handles everything after input validation and preparation
+pub async fn process_video_generation(
+    app_state: &Arc<AppState>,
+    user_principal: Principal,
+    video_gen_input: videogen_common::VideoGenInput,
+    token_type: TokenType,
+    delegated_identity_wire: yral_types::delegated_identity::DelegatedIdentityWire,
+) -> Result<crate::videogen::VideoGenRequestKey, (StatusCode, Json<VideoGenError>)> {
+    // Extract metadata from the input
+    let model_id = video_gen_input.model_id();
+    let prompt = video_gen_input.get_prompt();
+
+    // Determine property for rate limiting
+    let property = if model_id == "inttest" {
+        "VIDEOGEN_INTTEST"
+    } else {
+        "VIDEOGEN"
+    };
+
+    // Get cost for the model
+    let cost = super::token_operations::get_model_cost(model_id, &token_type);
+
+    // Determine payment amount for rate limit
+    let payment_amount = if matches!(token_type, TokenType::Free) {
+        None
+    } else {
+        Some(cost)
+    };
+
+    // Verify rate limit
+    let request_key = super::rate_limit::verify_rate_limit_and_create_request_v1(
+        user_principal,
+        model_id,
+        prompt,
+        property,
+        &token_type,
+        payment_amount,
+        app_state,
+    )
+    .await
+    .map_err(|(status, error)| (status, Json(error)))?;
+
+    // Create delegated identity for agent creation
+    let identity: DelegatedIdentity =
+        delegated_identity_wire
+            .try_into()
+            .map_err(|e: k256::elliptic_curve::Error| {
+                log::error!("Failed to create delegated identity: {e}");
+                (StatusCode::UNAUTHORIZED, Json(VideoGenError::AuthError))
+            })?;
+
+    // Create user agent if needed for DOLR operations
+    let user_agent = create_user_agent_if_dolr(identity, &token_type)?;
+
+    // Get JWT token
+    let jwt_token = get_hon_worker_jwt_token()?;
+
+    // Deduct balance with automatic cleanup on failure
+    let deducted_amount = super::token_operations::deduct_balance_with_cleanup(
+        user_principal,
+        cost,
+        &token_type,
+        jwt_token.clone(),
+        &app_state.agent,
+        &request_key,
+        property,
+        user_agent.as_ref(),
+    )
+    .await?;
+
+    // Prepare Qstash request
+    let qstash_request = super::qstash_types::QstashVideoGenRequest {
+        user_principal,
+        input: video_gen_input,
+        request_key: request_key.clone(),
+        property: property.to_string(),
+        deducted_amount,
+        token_type,
+    };
+
+    // Queue to Qstash with automatic rollback on failure
+    queue_to_qstash_with_rollback(app_state, qstash_request, jwt_token, user_principal).await?;
+
+    Ok(request_key)
 }

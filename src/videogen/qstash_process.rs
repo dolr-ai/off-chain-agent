@@ -30,9 +30,6 @@ pub async fn process_video_generation(
         VideoGenInput::Veo3Fast(_) => {
             crate::videogen::models::veo3_fast::generate(request.input, &state).await
         }
-        VideoGenInput::FalAi(_) => Err(VideoGenError::InvalidInput(
-            "FalAi provider not implemented yet".to_string(),
-        )),
         VideoGenInput::LumaLabs(_) => {
             crate::videogen::models::lumalabs::generate(request.input, &state).await
         }
