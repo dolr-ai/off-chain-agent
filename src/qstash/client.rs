@@ -13,10 +13,8 @@ use serde_json::json;
 use tracing::instrument;
 
 use crate::{
-    canister::snapshot::snapshot_v2::BackupUserCanisterPayload,
-    consts::OFF_CHAIN_AGENT_URL,
-    events::event::UploadVideoInfoV2,
-    posts::report_post::{ReportPostRequestV2, ReportPostRequestV3},
+    canister::snapshot::snapshot_v2::BackupUserCanisterPayload, consts::OFF_CHAIN_AGENT_URL,
+    events::event::UploadVideoInfoV2, posts::report_post::ReportPostRequestV3,
     videogen::qstash_types::QstashVideoGenRequest,
 };
 use videogen_common::VideoGenerator;

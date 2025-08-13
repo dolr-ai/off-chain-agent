@@ -129,8 +129,8 @@ pub async fn handle_report_post_v2(
 #[instrument(skip(state, verified_request))]
 #[utoipa::path(
     post,
-    path = "/report_v3",
-    request_body = PostRequest<ReportPostRequestV2>,
+    path = "/report",
+    request_body = PostRequest<ReportPostRequestV3>,
     tag = "posts",
     responses(
         (status = 200, description = "Report post success"),
@@ -143,7 +143,7 @@ pub async fn handle_report_post_v3(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let request_body = verified_request.request.request_body;
 
-    repost_post_common_impl(state, request_body.into())
+    repost_post_common_impl(state, request_body)
         .await
         .map_err(|e| {
             log::error!("Failed to report post: {e}");

@@ -43,8 +43,16 @@ pub fn posts_router(state: Arc<AppState>) -> OpenApiRouter {
     let mut router = OpenApiRouter::new();
 
     router = verified_route!(router, handle_delete_post, DeletePostRequest, state);
-    router = verified_route!(router, handle_delete_post_v2, DeletePostRequestV2, state);
     router = verified_route!(router, handle_report_post_v2, ReportPostRequestV2, state);
+
+    router.with_state(state)
+}
+
+#[instrument(skip(state))]
+pub fn posts_router_v2(state: Arc<AppState>) -> OpenApiRouter {
+    let mut router = OpenApiRouter::new();
+
+    router = verified_route!(router, handle_delete_post_v2, DeletePostRequestV2, state);
     router = verified_route!(router, handle_report_post_v3, ReportPostRequestV3, state);
 
     router.with_state(state)

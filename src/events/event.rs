@@ -490,7 +490,7 @@ impl Event {
                             return;
                         }
                         let post_id = params.post_id.unwrap_or_default();
-                        let post_id_str = post_id.to_string();
+                        let _post_id_str = post_id.to_string();
                         let publisher_canister_id = params.publisher_canister_id.unwrap();
 
                         let watch_count = 1u8;

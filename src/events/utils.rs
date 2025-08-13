@@ -86,7 +86,7 @@ pub fn parse_success_history_params_v2(
                 Ok(Some(SuccessHistoryParamsV2 {
                     publisher_user_id: params
                         .publisher_user_id
-                        .unwrap_or_else(|| Principal::anonymous())
+                        .unwrap_or_else(Principal::anonymous)
                         .to_string(),
                     user_id: params.user_id.to_string(),
                     nsfw_probability: params.nsfw_probability.unwrap_or_default(),

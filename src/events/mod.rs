@@ -1,12 +1,10 @@
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::{middleware, Json};
-use candid::Principal;
 use event::Event;
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use std::error::Error;
+use serde_json::Value;
 use std::sync::Arc;
 use types::AnalyticsEvent;
 use utoipa::ToSchema;
@@ -173,14 +171,14 @@ async fn process_event_impl_v2(
 
     #[cfg(not(feature = "local-bin"))]
     {
-        use crate::events::push_notifications::dispatch_notif;
+        use crate::events::push_notifications::dispatch_notif_v2;
 
         let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
             log::error!("Failed to parse params: {e}");
             anyhow::anyhow!("Failed to parse params: {}", e)
         })?;
 
-        let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
+        let res = dispatch_notif_v2(&event.event.event, params, &shared_state.clone()).await;
         if let Err(e) = res {
             log::error!("Failed to dispatch notification: {e:?}");
         }

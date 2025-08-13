@@ -83,6 +83,10 @@ async fn main_impl() -> Result<()> {
             "/api/v2/events",
             events::events_router_v2(shared_state.clone()),
         )
+        .nest(
+            "/api/v2/posts",
+            posts::posts_router_v2(shared_state.clone()),
+        )
         .split_for_parts();
 
     let router =

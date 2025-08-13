@@ -64,7 +64,7 @@ pub async fn dispatch_notif(
                 .add_notification(
                     payload.publisher_user_id,
                     NotificationType::VideoUpload(VideoUploadPayload {
-                        video_uid: payload.post_id,
+                        video_uid: payload.post_id.to_string(),
                     }),
                 )
                 .await?;
@@ -74,7 +74,7 @@ pub async fn dispatch_notif(
                 .add_notification(
                     payload.publisher_user_id,
                     NotificationType::Liked(LikedPayload {
-                        post_id: payload.post_id,
+                        post_id: payload.post_id.to_string(),
                         by_user_principal: payload.user_id,
                     }),
                 )
@@ -100,21 +100,21 @@ pub async fn dispatch_notif_v2(
 
     match event {
         EventPayloadV2::VideoUploadSuccessful(payload) => {
-            let post_id = payload.post_id.parse::<u64>().unwrap_or_default(); // TODO: Handle conversion properly when canister is updated
             notification_store
                 .add_notification(
                     payload.publisher_user_id,
-                    NotificationType::VideoUpload(VideoUploadPayload { video_uid: post_id }),
+                    NotificationType::VideoUpload(VideoUploadPayload {
+                        video_uid: payload.video_id,
+                    }),
                 )
                 .await?;
         }
         EventPayloadV2::LikeVideo(payload) => {
-            let post_id = payload.post_id.parse::<u64>().unwrap_or_default(); // TODO: Handle conversion properly when canister is updated
             notification_store
                 .add_notification(
                     payload.publisher_user_id,
                     NotificationType::Liked(LikedPayload {
-                        post_id: post_id,
+                        post_id: payload.post_id,
                         by_user_principal: payload.user_id,
                     }),
                 )

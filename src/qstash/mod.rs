@@ -1,4 +1,3 @@
-pub mod notification_store_job;
 mod verify;
 
 use std::sync::Arc;
@@ -14,7 +13,6 @@ use verify::verify_qstash_message;
 
 use crate::pipeline::Step;
 use crate::qstash::duplicate::VideoPublisherDataV2;
-use crate::qstash::notification_store_job::prune_notification_store;
 use crate::setup_context;
 use crate::{
     app_state::AppState,
@@ -137,7 +135,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/delete_and_reclaim_canisters",
             post(handle_delete_and_reclaim_canisters),
         )
-        .route("/prune_notification_store", post(prune_notification_store))
         .route(
             "/process_video_gen",
             post(crate::videogen::qstash_process::process_video_generation),

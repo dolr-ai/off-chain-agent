@@ -113,7 +113,7 @@ pub async fn handle_delete_post(
 
 #[utoipa::path(
     delete,
-    path = "/v2",
+    path = "",
     request_body = PostRequest<DeletePostRequestV2>,
     tag = "posts",
     responses(
