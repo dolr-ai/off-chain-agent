@@ -83,6 +83,13 @@ pub static USER_INFO_SERVICE_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
         .expect("User info service canister ID to be valid")
 });
 
+// User Post Service Constants
+pub static USER_POST_SERVICE_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
+    "gxhc3-pqaaa-aaaas-qbh3q-cai"
+        .parse()
+        .expect("User post service canister ID to be valid")
+});
+
 // Video Generation Constants
 pub const VEO3_PROJECT_ID: &str = "hot-or-not-feed-intelligence";
 pub const VEO3_STORAGE_URI: &str = "gs://yral_ai_generated_videos/veo-output/";

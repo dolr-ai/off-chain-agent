@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::types::{UserPost, VideoDeleteRow};
+use super::types::{UserPost, UserPostV2, VideoDeleteRow};
 use anyhow::{anyhow, Context};
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use chrono::Utc;
@@ -20,15 +20,17 @@ use verify::VerifiedPostRequest;
 use yral_canisters_client::{
     dedup_index::DedupIndex,
     individual_user_template::{IndividualUserTemplate, Result_},
+    user_post_service::UserPostService,
 };
 
 use crate::{
-    app_state::AppState, consts::DEDUP_INDEX_CANISTER_ID,
+    app_state::AppState,
+    consts::{DEDUP_INDEX_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID},
     posts::queries::get_duplicate_children_query,
     user::utils::get_agent_from_delegated_identity_wire,
 };
 
-use super::{types, verify, DeletePostRequest};
+use super::{types, verify, DeletePostRequest, DeletePostRequestV2};
 
 // TODO: canister_id still being used
 #[utoipa::path(
@@ -94,6 +96,137 @@ pub async fn handle_delete_post(
                 format!("Failed to insert video to bigquery: {e}"),
             )
         })?;
+
+    // spawn to not block the request since as far as user is concerned, the post is deleted
+    let bigquery_client = state.bigquery_client.clone();
+    let video_id_clone = video_id.clone();
+    tokio::spawn(async move {
+        if let Err(e) =
+            handle_duplicate_post_on_delete(&state.agent, bigquery_client, video_id_clone).await
+        {
+            log::error!("Failed to handle duplicate post on delete: {e}");
+        }
+    });
+
+    Ok((StatusCode::OK, "Post deleted".to_string()))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/v2",
+    request_body = PostRequest<DeletePostRequestV2>,
+    tag = "posts",
+    responses(
+        (status = 200, description = "Delete post success"),
+        (status = 400, description = "Delete post failed"),
+        (status = 500, description = "Internal server error"),
+        (status = 403, description = "Forbidden"),
+    )
+)]
+#[instrument(skip(state, verified_request))]
+pub async fn handle_delete_post_v2(
+    State(state): State<Arc<AppState>>,
+    Json(verified_request): Json<VerifiedPostRequest<DeletePostRequestV2>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let request_body = verified_request.request.request_body;
+    let publisher_user_id = request_body.publisher_user_id;
+    let post_id = request_body.post_id.clone();
+    let video_id = request_body.video_id.clone();
+
+    // Verify that the requesting user is the publisher
+    if verified_request.user_principal != publisher_user_id {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only the publisher can delete their own post".to_string(),
+        ));
+    }
+
+    // Get the publisher's canister
+    let publisher_canister_id = state
+        .get_individual_canister_by_user_principal(publisher_user_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get publisher canister: {e}"),
+            )
+        })?;
+
+    let user_ic_agent =
+        get_agent_from_delegated_identity_wire(&verified_request.request.delegated_identity_wire)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Route based on canister
+    if publisher_canister_id == *USER_POST_SERVICE_CANISTER_ID {
+        // Use UserPostService
+        let user_post_service = UserPostService(publisher_canister_id, &user_ic_agent);
+
+        // UserPostService.delete_post takes a String
+        let delete_res = user_post_service.delete_post(post_id.clone()).await;
+        match delete_res {
+            Ok(yral_canisters_client::user_post_service::Result_::Ok) => (),
+            Ok(yral_canisters_client::user_post_service::Result_::Err(_)) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "Delete post failed - either the post doesn't exist or already deleted"
+                        .to_string(),
+                ))
+            }
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Internal server error: {e}"),
+                ))
+            }
+        }
+    } else {
+        // Use IndividualUserTemplate
+        let individual_user_template =
+            IndividualUserTemplate(publisher_canister_id, &user_ic_agent);
+
+        // IndividualUserTemplate.delete_post still takes u64, so parse the String
+        let post_id_u64 = post_id.parse::<u64>().map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid post_id format: {e}"),
+            )
+        })?;
+        let delete_res = individual_user_template.delete_post(post_id_u64).await;
+        match delete_res {
+            Ok(Result_::Ok) => (),
+            Ok(Result_::Err(_)) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "Delete post failed - either the post doesn't exist or already deleted"
+                        .to_string(),
+                ))
+            }
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Internal server error: {e}"),
+                ))
+            }
+        }
+    }
+
+    // Insert to BigQuery with V2 function (String post_id)
+    insert_video_delete_row_to_bigquery_v2(
+        state.clone(),
+        publisher_canister_id.to_string(),
+        post_id,
+        video_id.clone(),
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Failed to insert video delete row to bigquery: {e}");
+
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to insert video to bigquery: {e}"),
+        )
+    })?;
 
     // spawn to not block the request since as far as user is concerned, the post is deleted
     let bigquery_client = state.bigquery_client.clone();
@@ -332,6 +465,25 @@ pub async fn insert_video_delete_row_to_bigquery(
     Ok(())
 }
 
+pub async fn insert_video_delete_row_to_bigquery_v2(
+    state: Arc<AppState>,
+    canister_id: String,
+    post_id: String, // Changed from u64 to String
+    video_id: String,
+) -> Result<(), anyhow::Error> {
+    bulk_insert_video_delete_rows_v2(
+        &state.bigquery_client,
+        vec![UserPostV2 {
+            canister_id,
+            post_id,
+            video_id,
+        }],
+    )
+    .await?;
+
+    Ok(())
+}
+
 pub async fn bulk_insert_video_delete_rows(
     bq_client: &Client,
     posts: Vec<UserPost>,
@@ -344,6 +496,56 @@ pub async fn bulk_insert_video_delete_rows(
                 let video_delete_row = VideoDeleteRow {
                     canister_id: post.canister_id.clone(),
                     post_id: post.post_id,
+                    video_id: post.video_id.clone(),
+                    gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
+                };
+                Row::<VideoDeleteRow> {
+                    insert_id: None,
+                    json: video_delete_row,
+                }
+            })
+            .collect();
+
+        let request = InsertAllRequest {
+            rows,
+            ..Default::default()
+        };
+
+        let res = bq_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "video_deleted",
+                &request,
+            )
+            .await?;
+
+        if let Some(errors) = res.insert_errors {
+            if !errors.is_empty() {
+                log::error!("video_deleted bulk insert errors: {errors:?}");
+                return Err(anyhow::anyhow!(
+                    "Failed to bulk insert video deleted rows to bigquery"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn bulk_insert_video_delete_rows_v2(
+    bq_client: &Client,
+    posts: Vec<UserPostV2>,
+) -> Result<(), anyhow::Error> {
+    // Process posts in batches of 500
+    for chunk in posts.chunks(500) {
+        let rows: Vec<Row<VideoDeleteRow>> = chunk
+            .iter()
+            .map(|post| {
+                let video_delete_row = VideoDeleteRow {
+                    canister_id: post.canister_id.clone(),
+                    post_id: 0, // Post ID is not used in V2, so set to 0
                     video_id: post.video_id.clone(),
                     gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
                 };

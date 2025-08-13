@@ -94,6 +94,57 @@ impl AnalyticsEvent {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
+#[serde(tag = "event")]
+pub enum AnalyticsEventV3 {
+    VideoWatched(VideoWatchedV3),
+    VideoDurationWatched(VideoDurationWatchedPayloadV3),
+    LikeVideo(LikeVideoPayloadV3),
+}
+
+impl AnalyticsEventV3 {
+    pub fn tag(&self) -> String {
+        match self {
+            AnalyticsEventV3::VideoWatched(_) => "VideoWatched".to_string(),
+            AnalyticsEventV3::VideoDurationWatched(_) => "VideoDurationWatched".to_string(),
+            AnalyticsEventV3::LikeVideo(_) => "LikeVideo".to_string(),
+        }
+    }
+
+    pub fn params(&self) -> Value {
+        match self {
+            AnalyticsEventV3::VideoWatched(event) => serde_json::to_value(event).unwrap(),
+            AnalyticsEventV3::VideoDurationWatched(event) => serde_json::to_value(event).unwrap(),
+            AnalyticsEventV3::LikeVideo(event) => serde_json::to_value(event).unwrap(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
+pub struct VideoWatchedV3 {
+    #[schema(value_type = String)]
+    pub publisher_user_id: Principal,
+    #[schema(value_type = String)]
+    pub user_id: Principal,
+    pub is_logged_in: bool,
+    pub display_name: String,
+    #[schema(value_type = String)]
+    pub canister_id: Principal,
+    pub video_id: String,
+    pub video_category: String,
+    pub creator_category: String,
+    pub hashtag_count: u32,
+    pub is_nsfw: bool,
+    pub is_hot_or_not: bool,
+    pub feed_type: String,
+    pub view_count: u32,
+    pub like_count: u32,
+    pub share_count: u32,
+    pub post_id: String,
+    pub publisher_canister_id: String,
+    pub nsfw_probability: f64,
+}
+
 // --------------------------------------------------
 // VideoWatched
 // --------------------------------------------------
@@ -613,6 +664,146 @@ pub struct SatsWithdrawnPayload {
 }
 
 // ----------------------------------------------------------------------------------
+// V3 Types with String post_id for migration
+// ----------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct VideoDurationWatchedPayloadV3 {
+    #[schema(value_type = String)]
+    pub publisher_user_id: Option<Principal>,
+    #[schema(value_type = String)]
+    pub user_id: Principal,
+    #[serde(rename = "is_loggedIn", skip_serializing_if = "Option::is_none")]
+    pub is_logged_in: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_id: Option<String>,
+    pub video_category: String,
+    pub creator_category: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hashtag_count: Option<usize>,
+    #[serde(rename = "is_NSFW", skip_serializing_if = "Option::is_none")]
+    pub is_nsfw: Option<bool>,
+    #[serde(rename = "is_hotorNot", skip_serializing_if = "Option::is_none")]
+    pub is_hotor_not: Option<bool>,
+    pub feed_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub like_count: Option<u64>,
+    pub share_count: u64,
+    pub percentage_watched: f64,
+    pub absolute_watched: f64,
+    pub video_duration: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub post_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nsfw_probability: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct VideoViewedPayloadV3 {
+    #[schema(value_type = String)]
+    #[serde(rename = "publisher_user_id")]
+    pub publisher_user_id: Option<Principal>,
+    #[schema(value_type = String)]
+    #[serde(rename = "user_id")]
+    pub user_id: Principal,
+    #[serde(rename = "is_loggedIn")]
+    pub is_logged_in: bool,
+    #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[schema(value_type = String)]
+    #[serde(rename = "canister_id")]
+    pub canister_id: Principal,
+    #[serde(rename = "video_id", skip_serializing_if = "Option::is_none")]
+    pub video_id: Option<String>,
+    #[serde(rename = "video_category")]
+    pub video_category: String,
+    #[serde(rename = "creator_category")]
+    pub creator_category: String,
+    #[serde(rename = "hashtag_count", skip_serializing_if = "Option::is_none")]
+    pub hashtag_count: Option<usize>,
+    #[serde(rename = "is_NSFW", skip_serializing_if = "Option::is_none")]
+    pub is_nsfw: Option<bool>,
+    #[serde(rename = "is_hotorNot", skip_serializing_if = "Option::is_none")]
+    pub is_hotor_not: Option<bool>,
+    #[serde(rename = "feed_type")]
+    pub feed_type: String,
+    #[serde(rename = "view_count", skip_serializing_if = "Option::is_none")]
+    pub view_count: Option<u64>,
+    #[serde(rename = "like_count", skip_serializing_if = "Option::is_none")]
+    pub like_count: Option<u64>,
+    #[serde(rename = "share_count")]
+    pub share_count: u64,
+    #[serde(rename = "post_id", skip_serializing_if = "Option::is_none")]
+    pub post_id: Option<String>,
+    #[serde(
+        rename = "publisher_canister_id",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[schema(value_type = String)]
+    pub publisher_canister_id: Option<Principal>,
+    #[serde(rename = "nsfw_probability", skip_serializing_if = "Option::is_none")]
+    pub nsfw_probability: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LikeVideoPayloadV3 {
+    #[schema(value_type = String)]
+    pub publisher_user_id: Principal,
+    #[schema(value_type = String)]
+    pub user_id: Principal,
+    #[serde(rename = "is_loggedIn")]
+    pub is_logged_in: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    pub video_id: String,
+    pub video_category: String,
+    pub creator_category: String,
+    pub hashtag_count: usize,
+    #[serde(rename = "is_NSFW")]
+    pub is_nsfw: bool,
+    #[serde(rename = "is_hotorNot")]
+    pub is_hotor_not: bool,
+    pub feed_type: String,
+    pub view_count: u64,
+    pub like_count: u64,
+    pub share_count: u64,
+    pub post_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nsfw_probability: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoUploadSuccessfulPayloadV3 {
+    #[serde(rename = "user_id")]
+    pub user_id: Principal,
+    #[serde(rename = "publisher_user_id")]
+    pub publisher_user_id: Principal,
+    #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(rename = "canister_id")]
+    pub canister_id: Principal,
+    #[serde(rename = "creator_category")]
+    pub creator_category: String,
+    #[serde(rename = "hashtag_count")]
+    pub hashtag_count: usize,
+    #[serde(rename = "is_NSFW")]
+    pub is_nsfw: bool,
+    #[serde(rename = "is_hotorNot")]
+    pub is_hotor_not: bool,
+    #[serde(rename = "is_filter_used")]
+    pub is_filter_used: bool,
+    #[serde(rename = "video_id")]
+    pub video_id: String,
+    #[serde(rename = "post_id")]
+    pub post_id: String,
+    #[serde(rename = "country", skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+}
+// ----------------------------------------------------------------------------------
 // Unified wrapper enum so callers can work with a single return type
 // ----------------------------------------------------------------------------------
 
@@ -628,6 +819,38 @@ pub enum EventPayload {
     VideoUploadVideoSelected(VideoUploadVideoSelectedPayload),
     VideoUploadUnsuccessful(VideoUploadUnsuccessfulPayload),
     VideoUploadSuccessful(VideoUploadSuccessfulPayload),
+    VideoUploadSuccessfulV3(VideoUploadSuccessfulPayloadV3),
+    Refer(ReferPayload),
+    ReferShareLink(ReferPayload),
+    LoginSuccessful(LoginSuccessfulPayload),
+    LoginMethodSelected(LoginMethodSelectedPayload),
+    LoginJoinOverlayViewed(LoginJoinOverlayViewedPayload),
+    LoginCta(LoginCtaPayload),
+    LogoutClicked(LogoutClickedPayload),
+    LogoutConfirmation(LogoutClickedPayload),
+    ErrorEvent(ErrorEventPayload),
+    ProfileViewVideo(ProfileViewVideoPayload),
+    TokenCreationStarted(TokenCreationStartedPayload),
+    TokensTransferred(TokensTransferredPayload),
+    PageVisit(PageVisitPayload),
+    CentsAdded(CentsAddedPayload),
+    CentsWithdrawn(CentsWithdrawnPayload),
+    SatsWithdrawn(SatsWithdrawnPayload),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum EventPayloadV2 {
+    VideoDurationWatched(VideoDurationWatchedPayloadV3),
+    VideoViewed(VideoViewedPayloadV3),
+    LikeVideo(LikeVideoPayloadV3),
+    ShareVideo(ShareVideoPayload),
+    VideoUploadInitiated(VideoUploadInitiatedPayload),
+    VideoUploadUploadButtonClicked(VideoUploadUploadButtonClickedPayload),
+    VideoUploadVideoSelected(VideoUploadVideoSelectedPayload),
+    VideoUploadUnsuccessful(VideoUploadUnsuccessfulPayload),
+    VideoUploadSuccessful(VideoUploadSuccessfulPayloadV3),
+    VideoUploadSuccessfulV3(VideoUploadSuccessfulPayloadV3),
     Refer(ReferPayload),
     ReferShareLink(ReferPayload),
     LoginSuccessful(LoginSuccessfulPayload),
@@ -852,6 +1075,230 @@ pub fn deserialize_event_payload(
         "cents_added" => Ok(EventPayload::CentsAdded(serde_json::from_value(value)?)),
         "cents_withdrawn" => Ok(EventPayload::CentsWithdrawn(serde_json::from_value(value)?)),
         "sats_withdrawn" => Ok(EventPayload::SatsWithdrawn(serde_json::from_value(value)?)),
+        _ => Err(serde_json::Error::unknown_field(event_name, &[])),
+    }
+}
+
+/// Given the raw `event_name` and a `serde_json::Value` representing the payload,
+/// this function deserializes the value into the strongly-typed wrapper `EventPayload`.
+///
+/// # Errors
+/// * Returns `serde_json::Error` if the event name is unknown OR the payload cannot
+///   be deserialized into the expected structure.
+impl EventPayloadV2 {
+    // TODO: canister_id is used
+
+    pub async fn send_notification(&self, app_state: &AppState) {
+        match self {
+            EventPayloadV2::VideoUploadSuccessful(payload) => {
+                let title = "Video Uploaded";
+                let body = "Your video has been uploaded successfully";
+                let publisher_user_id = payload.publisher_user_id;
+                let canister_id = app_state
+                    .get_individual_canister_by_user_principal(publisher_user_id)
+                    .await
+                    .unwrap();
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "payload": serde_json::to_string(self).unwrap()
+                    })),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(format!(
+                                "https://yral.com/hot-or-not/{}/{}",
+                                payload.canister_id.to_text(),
+                                payload.post_id
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body.to_string(),
+                                },
+                                "sound": "default",
+                            },
+                            "url": format!("https://yral.com/hot-or-not/{}/{}", canister_id.to_text(), payload.post_id)
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, payload.publisher_user_id)
+                    .await;
+            }
+            EventPayloadV2::LikeVideo(payload) => {
+                let title = "Video Liked";
+                let body = format!("{} liked your video", payload.user_id.to_text());
+                let publisher_user_id = payload.publisher_user_id;
+                let canister_id = app_state
+                    .get_individual_canister_by_user_principal(publisher_user_id)
+                    .await
+                    .unwrap();
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "payload": serde_json::to_string(self).unwrap()
+                    })),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(format!(
+                                "https://yral.com/hot-or-not/{}/{}",
+                                canister_id.to_text(),
+                                payload.post_id
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body.to_string(),
+                                },
+                                "sound": "default",
+                            },
+                            "url": format!("https://yral.com/hot-or-not/{}/{}", canister_id.to_text(), payload.post_id)
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, payload.publisher_user_id)
+                    .await;
+            }
+
+            _ => {}
+        }
+    }
+}
+
+pub fn deserialize_event_payload_v2(
+    event_name: &str,
+    value: Value,
+) -> Result<EventPayloadV2, serde_json::Error> {
+    match event_name {
+        "video_duration_watched" => Ok(EventPayloadV2::VideoDurationWatched(
+            serde_json::from_value(value)?,
+        )),
+        "video_viewed" => Ok(EventPayloadV2::VideoViewed(serde_json::from_value(value)?)),
+        "like_video" => Ok(EventPayloadV2::LikeVideo(serde_json::from_value(value)?)),
+        "share_video" => Ok(EventPayloadV2::ShareVideo(serde_json::from_value(value)?)),
+        "video_upload_initiated" => Ok(EventPayloadV2::VideoUploadInitiated(
+            serde_json::from_value(value)?,
+        )),
+        "video_upload_upload_button_clicked" => Ok(EventPayloadV2::VideoUploadUploadButtonClicked(
+            serde_json::from_value(value)?,
+        )),
+        "video_upload_video_selected" => Ok(EventPayloadV2::VideoUploadVideoSelected(
+            serde_json::from_value(value)?,
+        )),
+        "video_upload_unsuccessful" => Ok(EventPayloadV2::VideoUploadUnsuccessful(
+            serde_json::from_value(value)?,
+        )),
+        "video_upload_successful" => Ok(EventPayloadV2::VideoUploadSuccessful(
+            serde_json::from_value(value)?,
+        )),
+        "refer" => Ok(EventPayloadV2::Refer(serde_json::from_value(value)?)),
+        "refer_share_link" => Ok(EventPayloadV2::ReferShareLink(serde_json::from_value(
+            value,
+        )?)),
+        "login_successful" => Ok(EventPayloadV2::LoginSuccessful(serde_json::from_value(
+            value,
+        )?)),
+        "login_method_selected" => Ok(EventPayloadV2::LoginMethodSelected(serde_json::from_value(
+            value,
+        )?)),
+        "login_join_overlay_viewed" => Ok(EventPayloadV2::LoginJoinOverlayViewed(
+            serde_json::from_value(value)?,
+        )),
+        "login_cta" => Ok(EventPayloadV2::LoginCta(serde_json::from_value(value)?)),
+        "logout_clicked" => Ok(EventPayloadV2::LogoutClicked(serde_json::from_value(
+            value,
+        )?)),
+        "logout_confirmation" => Ok(EventPayloadV2::LogoutConfirmation(serde_json::from_value(
+            value,
+        )?)),
+        "error_event" => Ok(EventPayloadV2::ErrorEvent(serde_json::from_value(value)?)),
+        "profile_view_video" => Ok(EventPayloadV2::ProfileViewVideo(serde_json::from_value(
+            value,
+        )?)),
+        "token_creation_started" => Ok(EventPayloadV2::TokenCreationStarted(
+            serde_json::from_value(value)?,
+        )),
+        "tokens_transferred" => Ok(EventPayloadV2::TokensTransferred(serde_json::from_value(
+            value,
+        )?)),
+        "yral_page_visit" => Ok(EventPayloadV2::PageVisit(serde_json::from_value(value)?)),
+        "cents_added" => Ok(EventPayloadV2::CentsAdded(serde_json::from_value(value)?)),
+        "cents_withdrawn" => Ok(EventPayloadV2::CentsWithdrawn(serde_json::from_value(
+            value,
+        )?)),
+        "sats_withdrawn" => Ok(EventPayloadV2::SatsWithdrawn(serde_json::from_value(
+            value,
+        )?)),
         _ => Err(serde_json::Error::unknown_field(event_name, &[])),
     }
 }

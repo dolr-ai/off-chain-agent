@@ -6,11 +6,26 @@ use google_cloud_bigquery::http::job::query::QueryRequest;
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSystemTime};
 
+// #[derive(Debug, Serialize, Deserialize, Clone)]
+// pub struct VideoPublisherData {
+//     pub publisher_principal: String,
+//     pub post_id: u64,
+// }
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct VideoPublisherData {
+pub struct VideoPublisherDataV2 {
     pub publisher_principal: String,
-    pub post_id: u64,
+    pub post_id: String, // Changed from u64 to String
 }
+
+// impl From<VideoPublisherData> for VideoPublisherDataV2 {
+//     fn from(data: VideoPublisherData) -> Self {
+//         Self {
+//             publisher_principal: data.publisher_principal,
+//             post_id: data.post_id.to_string(),
+//         }
+//     }
+// }
 
 /// The VideoHashDuplication struct will contain the deduplication logic
 pub struct VideoHashDuplication;
@@ -22,10 +37,10 @@ impl VideoHashDuplication {
         bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         video_url: &str,
-        publisher_data: VideoPublisherData,
+        publisher_data: VideoPublisherDataV2,
         publish_video_callback: impl FnOnce(
             &str,
-            u64,
+            String, // Changed from u64 to &str
             String,
             &str,
         )
@@ -174,6 +189,65 @@ impl VideoHashDuplication {
             .job()
             .query("hot-or-not-feed-intelligence", &request)
             .await?;
+
+        Ok(())
+    }
+
+    /// V2 version that accepts String post_id
+    pub async fn process_video_deduplication_v2<'a>(
+        &self,
+        agent: &ic_agent::Agent,
+        bigquery_client: &google_cloud_bigquery::client::Client,
+        video_id: &str,
+        video_url: &str,
+        publisher_data: VideoPublisherDataV2,
+        publish_video_callback: impl FnOnce(
+            &str,
+            &str, // Changed from u64 to &str
+            String,
+            &str,
+        )
+            -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
+    ) -> Result<(), anyhow::Error> {
+        log::info!("Calculating videohash for video URL: {video_url}");
+        let video_hash = VideoHash::from_url(video_url)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
+
+        let is_duplicate = DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent)
+            .is_duplicate(video_hash.hash.clone())
+            .await
+            .context("Couldn't check if the video is duplicate")?;
+
+        if is_duplicate {
+            log::info!(
+                "Duplicate video detected: hash: {} | video_id: {video_id}",
+                video_hash.hash
+            );
+        }
+
+        // Store the original hash regardless of duplication status
+        self.store_videohash_to_dedup_index(agent, video_id, &video_hash.hash)
+            .await?;
+        self.store_videohash_original(bigquery_client, video_id, &video_hash.hash)
+            .await?;
+
+        if !is_duplicate {
+            self.store_unique_video(video_id, &video_hash.hash).await?;
+            self.store_unique_video_v2(video_id, &video_hash.hash)
+                .await?;
+            log::info!("Unique video recorded: video_id [{video_id}]");
+        }
+
+        // Always proceed with normal video processing, regardless of duplicate status
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        publish_video_callback(
+            video_id,
+            &publisher_data.post_id,
+            timestamp,
+            &publisher_data.publisher_principal,
+        )
+        .await?;
 
         Ok(())
     }

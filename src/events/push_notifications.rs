@@ -7,7 +7,9 @@ use yral_metadata_types::SendNotificationReq;
 
 use crate::{
     app_state::AppState,
-    events::types::{deserialize_event_payload, EventPayload},
+    events::types::{
+        deserialize_event_payload, deserialize_event_payload_v2, EventPayload, EventPayloadV2,
+    },
 };
 
 const METADATA_SERVER_URL: &str = "https://yral-metadata.fly.dev";
@@ -73,6 +75,46 @@ pub async fn dispatch_notif(
                     payload.publisher_user_id,
                     NotificationType::Liked(LikedPayload {
                         post_id: payload.post_id,
+                        by_user_principal: payload.user_id,
+                    }),
+                )
+                .await?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+pub async fn dispatch_notif_v2(
+    event_type: &str, // todo make this an enum
+    params: Value,
+    app_state: &AppState,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let event = deserialize_event_payload_v2(event_type, params)?;
+
+    event.send_notification(app_state).await;
+    let notification_store = NotificationStore(
+        Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
+        &app_state.agent,
+    );
+
+    match event {
+        EventPayloadV2::VideoUploadSuccessful(payload) => {
+            let post_id = payload.post_id.parse::<u64>().unwrap_or_default(); // TODO: Handle conversion properly when canister is updated
+            notification_store
+                .add_notification(
+                    payload.publisher_user_id,
+                    NotificationType::VideoUpload(VideoUploadPayload { video_uid: post_id }),
+                )
+                .await?;
+        }
+        EventPayloadV2::LikeVideo(payload) => {
+            let post_id = payload.post_id.parse::<u64>().unwrap_or_default(); // TODO: Handle conversion properly when canister is updated
+            notification_store
+                .add_notification(
+                    payload.publisher_user_id,
+                    NotificationType::Liked(LikedPayload {
+                        post_id: post_id,
                         by_user_principal: payload.user_id,
                     }),
                 )

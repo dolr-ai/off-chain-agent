@@ -24,3 +24,20 @@ pub struct UserPost {
     pub post_id: u64,
     pub video_id: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPostV2 {
+    pub canister_id: String,
+    pub post_id: String, // Changed from u64 to String
+    pub video_id: String,
+}
+
+impl From<UserPost> for UserPostV2 {
+    fn from(post: UserPost) -> Self {
+        Self {
+            canister_id: post.canister_id,
+            post_id: post.post_id.to_string(),
+            video_id: post.video_id,
+        }
+    }
+}

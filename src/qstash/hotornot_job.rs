@@ -6,17 +6,18 @@ use http::StatusCode;
 use yral_ml_feed_cache::{
     consts::USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
     types_v2::{MLFeedCacheHistoryItemV2, PlainPostItemV2},
+    types_v3::{MLFeedCacheHistoryItemV3, PlainPostItemV3},
 };
 
 use crate::app_state::AppState;
 
 #[derive(Debug, Clone)]
-pub struct InMemoryBufferItemV2 {
+pub struct InMemoryBufferItemV3 {
     pub video_id: String,
     pub max_percent_watched: f32,
     pub liked_video: bool,
     pub publisher_user_id: String,
-    pub post_id: u64,
+    pub post_id: String, // Changed from u64 to String
 }
 
 #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
@@ -34,14 +35,14 @@ pub async fn start_hotornot_job_v2(
     // create the inmem index
 
     let user_buffer_items = ml_feed_cache
-        .get_user_buffer_items_by_timestamp_v2(timestamps_secs)
+        .get_user_buffer_items_by_timestamp_v3(timestamps_secs)
         .await
         .map_err(|e| {
             log::error!("Error getting user buffer items: {e:?}");
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?;
 
-    let mut inmem_index = HashMap::<String, HashMap<PlainPostItemV2, InMemoryBufferItemV2>>::new();
+    let mut inmem_index = HashMap::<String, HashMap<PlainPostItemV3, InMemoryBufferItemV3>>::new();
 
     for user_buffer_item in user_buffer_items {
         let user_id = user_buffer_item.user_id;
@@ -49,10 +50,10 @@ pub async fn start_hotornot_job_v2(
         let post_id = user_buffer_item.post_id;
         let video_id = user_buffer_item.video_id;
         let res = inmem_index.entry(user_id).or_default();
-        let post_item = PlainPostItemV2 {
+        let post_item = PlainPostItemV3 {
             video_id: video_id.clone(),
         };
-        let existing_inmem_buffer_item = res.entry(post_item).or_insert(InMemoryBufferItemV2 {
+        let existing_inmem_buffer_item = res.entry(post_item).or_insert(InMemoryBufferItemV3 {
             video_id,
             max_percent_watched: 0.0,
             liked_video: false,
@@ -84,7 +85,7 @@ pub async fn start_hotornot_job_v2(
             );
             queries.push(query);
 
-            plain_post_items.push(MLFeedCacheHistoryItemV2 {
+            plain_post_items.push(MLFeedCacheHistoryItemV3 {
                 canister_id: "deprecated".to_string(),
                 post_id: inmem_buffer_item.post_id,
                 video_id: inmem_buffer_item.video_id.clone(),
@@ -96,7 +97,7 @@ pub async fn start_hotornot_job_v2(
         }
 
         if let Err(e) = ml_feed_cache
-            .add_user_history_plain_items_v2(&plain_key, plain_post_items)
+            .add_user_history_plain_items_v3(&plain_key, plain_post_items)
             .await
         {
             log::error!("Error adding user watch history plain items: {e:?}");
@@ -127,7 +128,7 @@ pub async fn start_hotornot_job_v2(
     if errors.len() < results.len() {
         // remove items from redis
         ml_feed_cache
-            .remove_user_buffer_items_by_timestamp_v2(timestamps_secs)
+            .remove_user_buffer_items_by_timestamp_v3(timestamps_secs)
             .await
             .map_err(|e| {
                 log::error!("Error removing user buffer items: {e:?}");

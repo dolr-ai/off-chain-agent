@@ -7,6 +7,7 @@ use std::{
 
 use crate::{
     consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
+    events::event::UploadVideoInfoV2,
     pipeline::Step,
     qstash::client::QStashClient,
     setup_context,
@@ -26,8 +27,6 @@ use tonic::{metadata::MetadataValue, Request};
 use tracing::instrument;
 
 use crate::{app_state::AppState, AppError};
-
-use super::event::UploadVideoInfo;
 
 pub mod nsfw_detector {
     tonic::include_proto!("nsfw_detector");
@@ -121,7 +120,7 @@ pub async fn upload_frames_to_gcs(
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VideoRequest {
     video_id: String,
-    video_info: UploadVideoInfo,
+    video_info: UploadVideoInfoV2,
 }
 
 // extract_frames_and_upload API handler which takes video_id as queryparam in axum
@@ -250,7 +249,7 @@ pub async fn nsfw_job(
 #[instrument(skip(qstash))]
 async fn duplicate_to_storj(
     qstash: &QStashClient,
-    video_info: UploadVideoInfo,
+    video_info: UploadVideoInfoV2,
     is_nsfw: bool,
 ) -> Result<(), AppError> {
     let duplicate_args = storj_interface::duplicate::Args {
