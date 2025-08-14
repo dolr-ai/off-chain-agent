@@ -6,26 +6,11 @@ use google_cloud_bigquery::http::job::query::QueryRequest;
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSystemTime};
 
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// pub struct VideoPublisherData {
-//     pub publisher_principal: String,
-//     pub post_id: u64,
-// }
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VideoPublisherDataV2 {
     pub publisher_principal: String,
     pub post_id: String, // Changed from u64 to String
 }
-
-// impl From<VideoPublisherData> for VideoPublisherDataV2 {
-//     fn from(data: VideoPublisherData) -> Self {
-//         Self {
-//             publisher_principal: data.publisher_principal,
-//             post_id: data.post_id.to_string(),
-//         }
-//     }
-// }
 
 /// The VideoHashDuplication struct will contain the deduplication logic
 pub struct VideoHashDuplication;

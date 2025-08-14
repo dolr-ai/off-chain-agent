@@ -32,6 +32,8 @@ use crate::{
 
 use super::{types, verify, DeletePostRequest, DeletePostRequestV2};
 
+const BULK_INSERT_DELETE_BIGQUERY_BATCH_SIZE: usize = 500;
+
 // TODO: canister_id still being used
 #[utoipa::path(
     delete,
@@ -489,7 +491,7 @@ pub async fn bulk_insert_video_delete_rows(
     posts: Vec<UserPost>,
 ) -> Result<(), anyhow::Error> {
     // Process posts in batches of 500
-    for chunk in posts.chunks(500) {
+    for chunk in posts.chunks(BULK_INSERT_DELETE_BIGQUERY_BATCH_SIZE) {
         let rows: Vec<Row<VideoDeleteRow>> = chunk
             .iter()
             .map(|post| {
@@ -539,7 +541,7 @@ pub async fn bulk_insert_video_delete_rows_v2(
     posts: Vec<UserPostV2>,
 ) -> Result<(), anyhow::Error> {
     // Process posts in batches of 500
-    for chunk in posts.chunks(500) {
+    for chunk in posts.chunks(BULK_INSERT_DELETE_BIGQUERY_BATCH_SIZE) {
         let rows: Vec<Row<VideoDeleteRow>> = chunk
             .iter()
             .map(|post| {

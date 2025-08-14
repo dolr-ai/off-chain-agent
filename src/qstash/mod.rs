@@ -13,6 +13,7 @@ use verify::verify_qstash_message;
 
 use crate::pipeline::Step;
 use crate::qstash::duplicate::VideoPublisherDataV2;
+use crate::qstash::hotornot_job::start_hotornot_job_v3;
 use crate::setup_context;
 use crate::{
     app_state::AppState,
@@ -131,6 +132,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
         .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
+        .route("/start_hotornot_job_v3", post(start_hotornot_job_v3))
         .route(
             "/delete_and_reclaim_canisters",
             post(handle_delete_and_reclaim_canisters),
