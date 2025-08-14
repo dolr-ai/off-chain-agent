@@ -5,7 +5,6 @@ use anyhow::Result;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
-use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use events::event::storj::enqueue_storj_backfill_item;
 use http::header::CONTENT_TYPE;
@@ -80,6 +79,14 @@ async fn main_impl() -> Result<()> {
             "/api/v1/videogen",
             videogen::videogen_router(shared_state.clone()),
         )
+        .nest(
+            "/api/v2/events",
+            events::events_router_v2(shared_state.clone()),
+        )
+        .nest(
+            "/api/v2/posts",
+            posts::posts_router_v2(shared_state.clone()),
+        )
         .split_for_parts();
 
     let router =
@@ -91,7 +98,6 @@ async fn main_impl() -> Result<()> {
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/report-approved", post(report_approved_handler))
-        .route("/import-video", post(upload_user_video_handler))
         .route(
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),

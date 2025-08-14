@@ -17,6 +17,7 @@ pub struct DeleteUserRequest {
     pub delegated_identity_wire: DelegatedIdentityWire,
 }
 
+// TODO: to be handled in a separate PR
 #[utoipa::path(
     delete,
     path = "/",

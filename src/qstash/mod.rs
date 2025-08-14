@@ -1,4 +1,3 @@
-pub mod notification_store_job;
 mod verify;
 
 use std::sync::Arc;
@@ -13,8 +12,8 @@ use tracing::instrument;
 use verify::verify_qstash_message;
 
 use crate::pipeline::Step;
-use crate::qstash::duplicate::VideoPublisherData;
-use crate::qstash::notification_store_job::prune_notification_store;
+use crate::qstash::duplicate::VideoPublisherDataV2;
+use crate::qstash::hotornot_job::start_hotornot_job_v3;
 use crate::setup_context;
 use crate::{
     app_state::AppState,
@@ -60,7 +59,7 @@ impl QStashState {
 struct VideoHashIndexingRequest {
     video_id: String,
     video_url: String,
-    publisher_data: VideoPublisherData,
+    publisher_data: VideoPublisherDataV2,
 }
 
 #[instrument(skip(state))]
@@ -75,10 +74,7 @@ async fn video_deduplication_handler(
         req.video_id
     );
 
-    let publisher_data = VideoPublisherData {
-        publisher_principal: req.publisher_data.publisher_principal.clone(),
-        post_id: req.publisher_data.post_id,
-    };
+    let publisher_data = req.publisher_data.clone();
 
     let qstash_client = state.qstash_client.clone();
 
@@ -127,8 +123,8 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
         .route("/enqueue_video_nsfw_detection_v2", post(nsfw_job_v2))
-        .route("/report_post", post(qstash_report_post))
         .route("/storj_ingest", post(storj_ingest))
+        .route("/report_post", post(qstash_report_post))
         .route(
             "/start_backup_canisters_job_v2",
             post(backup_canisters_job_v2),
@@ -136,11 +132,11 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
         .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
+        .route("/start_hotornot_job_v3", post(start_hotornot_job_v3))
         .route(
             "/delete_and_reclaim_canisters",
             post(handle_delete_and_reclaim_canisters),
         )
-        .route("/prune_notification_store", post(prune_notification_store))
         .route(
             "/process_video_gen",
             post(crate::videogen::qstash_process::process_video_generation),

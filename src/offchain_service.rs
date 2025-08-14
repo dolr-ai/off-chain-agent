@@ -51,13 +51,13 @@ impl OffChain for OffChainService {
         let publisher_principal = Principal::from_text(&request.publisher_id).map_err(|_| {
             tonic::Status::new(tonic::Code::Unknown, "Invalid publisher canister id")
         })?;
-        let post_report_request = crate::posts::report_post::ReportPostRequestV2 {
+        let post_report_request = crate::posts::report_post::ReportPostRequestV3 {
             publisher_principal,
             report_mode: crate::posts::report_post::ReportMode::Web,
             canister_id: publisher_canister_id,
             post_id: request
                 .post_id
-                .parse::<u64>()
+                .parse::<String>()
                 .map_err(|_| tonic::Status::new(tonic::Code::Unknown, "Invalid post id"))?,
             video_id: request.video_id,
             user_canister_id,
