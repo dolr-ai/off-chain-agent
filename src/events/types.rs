@@ -13,7 +13,7 @@ use yral_metrics::metrics::{
 
 use crate::app_state::AppState;
 
-fn string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
+pub fn string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {

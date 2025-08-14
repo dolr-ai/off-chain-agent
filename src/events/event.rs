@@ -1,6 +1,7 @@
 use crate::consts::{OFF_CHAIN_AGENT_URL, USER_POST_SERVICE_CANISTER_ID};
 use crate::events::types::{
-    VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2, VideoUploadSuccessfulPayload,
+    string_or_number, VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2,
+    VideoUploadSuccessfulPayload,
 };
 use crate::events::utils::{parse_success_history_params, parse_success_history_params_v2};
 use crate::pipeline::Step;
@@ -967,6 +968,7 @@ async fn stream_to_bigquery(
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UploadVideoInfoV2 {
     pub video_id: String,
+    #[serde(deserialize_with = "string_or_number")]
     pub post_id: String, // String instead of u64
     pub timestamp: String,
     pub publisher_user_id: String,
