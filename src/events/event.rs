@@ -1,5 +1,7 @@
 use crate::consts::{OFF_CHAIN_AGENT_URL, USER_POST_SERVICE_CANISTER_ID};
-use crate::events::types::{VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2};
+use crate::events::types::{
+    VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2, VideoUploadSuccessfulPayload,
+};
 use crate::events::utils::{parse_success_history_params, parse_success_history_params_v2};
 use crate::pipeline::Step;
 use crate::setup_context;
@@ -71,10 +73,13 @@ impl Event {
 
     pub fn check_video_deduplication(&self, app_state: &AppState) {
         if self.event.event == "video_upload_successful" {
-            let params: Value = match serde_json::from_str(&self.event.params) {
+            let params: Result<VideoUploadSuccessfulPayload, _> =
+                serde_json::from_str(&self.event.params);
+
+            let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_upload_successful event params: {e}");
+                    error!("Failed to parse video_duration_watched params: {e:?}");
                     return;
                 }
             };
@@ -83,30 +88,11 @@ impl Event {
 
             tokio::spawn(async move {
                 // Extract required fields with error handling
-                let video_id = match params.get("video_id").and_then(|v| v.as_str()) {
-                    Some(id) => id,
-                    None => {
-                        error!("Missing video_id in video_upload_successful event");
-                        return;
-                    }
-                };
+                let video_id = params.video_id;
 
-                let post_id = match params.get("post_id").and_then(|v| v.as_str()) {
-                    Some(id) => id,
-                    None => {
-                        error!("Missing post_id in video_upload_successful event");
-                        return;
-                    }
-                };
+                let post_id = params.post_id.clone();
 
-                let publisher_user_id =
-                    match params.get("publisher_user_id").and_then(|v| v.as_str()) {
-                        Some(id) => id,
-                        None => {
-                            error!("Missing publisher_user_id in video_upload_successful event");
-                            return;
-                        }
-                    };
+                let publisher_user_id = params.publisher_user_id.to_text();
 
                 // Construct video URL
                 let video_url = format!(
