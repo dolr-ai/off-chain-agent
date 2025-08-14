@@ -7,9 +7,7 @@ use yral_metadata_types::SendNotificationReq;
 
 use crate::{
     app_state::AppState,
-    events::types::{
-        deserialize_event_payload, deserialize_event_payload_v2, EventPayload, EventPayloadV2,
-    },
+    events::types::{deserialize_event_payload, EventPayload},
 };
 
 const METADATA_SERVER_URL: &str = "https://yral-metadata.fly.dev";
@@ -64,52 +62,12 @@ pub async fn dispatch_notif(
                 .add_notification(
                     payload.publisher_user_id,
                     NotificationType::VideoUpload(VideoUploadPayload {
-                        video_uid: payload.post_id.to_string(),
+                        video_uid: payload.post_id,
                     }),
                 )
                 .await?;
         }
         EventPayload::LikeVideo(payload) => {
-            notification_store
-                .add_notification(
-                    payload.publisher_user_id,
-                    NotificationType::Liked(LikedPayload {
-                        post_id: payload.post_id.to_string(),
-                        by_user_principal: payload.user_id,
-                    }),
-                )
-                .await?;
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-pub async fn dispatch_notif_v2(
-    event_type: &str, // todo make this an enum
-    params: Value,
-    app_state: &AppState,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let event = deserialize_event_payload_v2(event_type, params)?;
-
-    event.send_notification(app_state).await;
-    let notification_store = NotificationStore(
-        Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
-        &app_state.agent,
-    );
-
-    match event {
-        EventPayloadV2::VideoUploadSuccessful(payload) => {
-            notification_store
-                .add_notification(
-                    payload.publisher_user_id,
-                    NotificationType::VideoUpload(VideoUploadPayload {
-                        video_uid: payload.video_id,
-                    }),
-                )
-                .await?;
-        }
-        EventPayloadV2::LikeVideo(payload) => {
             notification_store
                 .add_notification(
                     payload.publisher_user_id,

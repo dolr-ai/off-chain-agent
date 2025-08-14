@@ -1,7 +1,4 @@
-use crate::events::types::{
-    LikeVideoPayloadV2, LikeVideoPayloadV3, VideoDurationWatchedPayloadV2,
-    VideoDurationWatchedPayloadV3,
-};
+use crate::events::types::{LikeVideoPayloadV2, VideoDurationWatchedPayloadV2};
 use candid::Principal;
 use serde_json;
 
@@ -46,7 +43,7 @@ pub fn parse_success_history_params(
                     .unwrap_or_default(),
                 user_id: params.user_id.to_string(),
                 nsfw_probability: params.nsfw_probability.unwrap_or_default(),
-                post_id: params.post_id.unwrap_or_default(),
+                post_id: params.post_id.parse::<u64>().unwrap_or(999999),
                 video_id: params.video_id.unwrap_or_default(),
                 percent_watched,
             }))
@@ -59,7 +56,7 @@ pub fn parse_success_history_params(
                 publisher_user_id: params.publisher_user_id.to_string(),
                 user_id: params.user_id.to_string(),
                 nsfw_probability: params.nsfw_probability.unwrap_or_default(),
-                post_id: params.post_id,
+                post_id: params.post_id.parse::<u64>().unwrap_or(999999),
                 video_id: params.video_id,
                 percent_watched: 0.0, // No percent_watched for likes
             }))
@@ -77,7 +74,7 @@ pub fn parse_success_history_params_v2(
     match event_type {
         "video_duration_watched" => {
             // Try V3 first, fallback to V2
-            if let Ok(params) = serde_json::from_str::<VideoDurationWatchedPayloadV3>(params_str) {
+            if let Ok(params) = serde_json::from_str::<VideoDurationWatchedPayloadV2>(params_str) {
                 let percent_watched = params.percentage_watched;
                 if percent_watched < 30.0 {
                     return Ok(None);
@@ -90,36 +87,19 @@ pub fn parse_success_history_params_v2(
                         .to_string(),
                     user_id: params.user_id.to_string(),
                     nsfw_probability: params.nsfw_probability.unwrap_or_default(),
-                    post_id: params.post_id.unwrap_or_else(|| "0".to_string()),
+                    post_id: params.post_id,
                     video_id: params.video_id.unwrap_or_default(),
                     percent_watched,
                 }))
             } else {
-                // Fallback to V2 and convert
-                let params: VideoDurationWatchedPayloadV2 = serde_json::from_str(params_str)
-                    .map_err(|e| format!("Failed to parse video_duration_watched params: {e:?}"))?;
-
-                let percent_watched = params.percentage_watched;
-                if percent_watched < 30.0 {
-                    return Ok(None);
-                }
-
-                Ok(Some(SuccessHistoryParamsV2 {
-                    publisher_user_id: params
-                        .publisher_user_id
-                        .map(|p| p.to_string())
-                        .unwrap_or_default(),
-                    user_id: params.user_id.to_string(),
-                    nsfw_probability: params.nsfw_probability.unwrap_or_default(),
-                    post_id: params.post_id.unwrap_or_default().to_string(),
-                    video_id: params.video_id.unwrap_or_default(),
-                    percent_watched,
-                }))
+                Err(format!(
+                    "Failed to parse video_duration_watched params as V2: {params_str}"
+                ))
             }
         }
         "like_video" => {
             // Try V3 first, fallback to V2
-            if let Ok(params) = serde_json::from_str::<LikeVideoPayloadV3>(params_str) {
+            if let Ok(params) = serde_json::from_str::<LikeVideoPayloadV2>(params_str) {
                 Ok(Some(SuccessHistoryParamsV2 {
                     publisher_user_id: params.publisher_user_id.to_string(),
                     user_id: params.user_id.to_string(),
@@ -129,18 +109,9 @@ pub fn parse_success_history_params_v2(
                     percent_watched: 0.0, // No percent_watched for likes
                 }))
             } else {
-                // Fallback to V2 and convert
-                let params: LikeVideoPayloadV2 = serde_json::from_str(params_str)
-                    .map_err(|e| format!("Failed to parse like_video params: {e:?}"))?;
-
-                Ok(Some(SuccessHistoryParamsV2 {
-                    publisher_user_id: params.publisher_user_id.to_string(),
-                    user_id: params.user_id.to_string(),
-                    nsfw_probability: params.nsfw_probability.unwrap_or_default(),
-                    post_id: params.post_id.to_string(),
-                    video_id: params.video_id,
-                    percent_watched: 0.0, // No percent_watched for likes
-                }))
+                Err(format!(
+                    "Failed to parse like_video params as V2: {params_str}"
+                ))
             }
         }
         _ => Err(format!(

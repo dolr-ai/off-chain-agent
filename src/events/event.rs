@@ -1,7 +1,5 @@
 use crate::consts::{OFF_CHAIN_AGENT_URL, USER_POST_SERVICE_CANISTER_ID};
-use crate::events::types::{
-    VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2, VideoDurationWatchedPayloadV3,
-};
+use crate::events::types::{VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2};
 use crate::events::utils::{parse_success_history_params, parse_success_history_params_v2};
 use crate::pipeline::Step;
 use crate::setup_context;
@@ -188,7 +186,7 @@ impl Event {
                     .publisher_canister_id
                     .map(|f| f.to_string())
                     .unwrap_or_default();
-                let post_id = params.post_id.unwrap_or_default();
+                let post_id = params.post_id.parse::<u64>().unwrap();
                 let video_id = params.video_id.unwrap_or_default();
                 let item_type = "video_duration_watched".to_string();
                 let timestamp = std::time::SystemTime::now();
@@ -289,7 +287,7 @@ impl Event {
                     .publisher_user_id
                     .map(|f| f.to_string())
                     .unwrap_or_default();
-                let post_id = params.post_id.unwrap_or_default();
+                let post_id = params.post_id.parse::<u64>().unwrap();
                 let video_id = params.video_id.unwrap_or_default();
                 let item_type = "video_duration_watched".to_string();
                 let timestamp = std::time::SystemTime::now();
@@ -367,7 +365,7 @@ impl Event {
 
     pub fn update_watch_history_v3(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
-            let params: Result<VideoDurationWatchedPayloadV3, _> =
+            let params: Result<VideoDurationWatchedPayloadV2, _> =
                 serde_json::from_str(&self.event.params);
 
             let params = match params {
@@ -391,7 +389,7 @@ impl Event {
                     .publisher_user_id
                     .map(|f| f.to_string())
                     .unwrap_or_default();
-                let post_id = params.post_id.unwrap_or_default();
+                let post_id = params.post_id;
                 let video_id = params.video_id.unwrap_or_default();
                 let item_type = "video_duration_watched".to_string();
                 let timestamp = std::time::SystemTime::now();
@@ -489,7 +487,7 @@ impl Event {
                             error!("Invalid percentage_watched: {percentage_watched}");
                             return;
                         }
-                        let post_id = params.post_id.unwrap_or_default();
+                        let post_id = params.post_id.parse::<u64>().unwrap();
                         let _post_id_str = post_id.to_string();
                         let publisher_canister_id = params.publisher_canister_id.unwrap();
 
@@ -520,7 +518,7 @@ impl Event {
                 }
                 Err(_) => {
                     // Try V3 (with String post_id)
-                    let params_v3: Result<VideoDurationWatchedPayloadV3, _> =
+                    let params_v3: Result<VideoDurationWatchedPayloadV2, _> =
                         serde_json::from_str(&self.event.params);
 
                     match params_v3 {
@@ -542,7 +540,7 @@ impl Event {
                                     error!("Invalid percentage_watched: {percentage_watched}");
                                     return;
                                 }
-                                let post_id = params.post_id.unwrap_or_default(); // Already a String
+                                let post_id = params.post_id; // Already a String
                                 let watch_count = 1u8;
 
                                 // Get publisher user ID
