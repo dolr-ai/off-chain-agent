@@ -1,3 +1,4 @@
+use crate::events::types::string_or_number;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -28,6 +29,7 @@ pub struct UserPost {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPostV2 {
     pub canister_id: String,
+    #[serde(deserialize_with = "string_or_number")]
     pub post_id: String, // Changed from u64 to String
     pub video_id: String,
 }

@@ -1,5 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
+use crate::events::types::string_or_number;
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
 use http::StatusCode;
@@ -54,6 +55,7 @@ pub struct ReportPostRequestV3 {
     pub publisher_principal: Principal,
     #[schema(value_type = String)]
     pub canister_id: Principal,
+    #[serde(deserialize_with = "string_or_number")]
     pub post_id: String, // Changed from u64 to String
     pub video_id: String,
     #[schema(value_type = String)]
