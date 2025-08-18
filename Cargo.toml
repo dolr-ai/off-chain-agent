@@ -112,6 +112,7 @@ yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", bran
 yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
     "ic",
+    "server",
 ] }
 yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }

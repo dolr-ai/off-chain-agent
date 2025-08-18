@@ -80,6 +80,10 @@ async fn main_impl() -> Result<()> {
             videogen::videogen_router(shared_state.clone()),
         )
         .nest(
+            "/api/v2/videogen",
+            videogen::videogen_router_v2(shared_state.clone()),
+        )
+        .nest(
             "/api/v2/events",
             events::events_router_v2(shared_state.clone()),
         )
