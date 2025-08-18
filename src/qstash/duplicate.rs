@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::events::types::string_or_number;
 use crate::{app_state, consts::DEDUP_INDEX_CANISTER_ID, duplicate_video::videohash::VideoHash};
 use anyhow::Context;
 use google_cloud_bigquery::http::job::query::QueryRequest;
@@ -7,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSystemTime};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct VideoPublisherData {
+pub struct VideoPublisherDataV2 {
     pub publisher_principal: String,
-    pub post_id: u64,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String, // Changed from u64 to String
 }
 
 /// The VideoHashDuplication struct will contain the deduplication logic
@@ -22,10 +24,10 @@ impl VideoHashDuplication {
         bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         video_url: &str,
-        publisher_data: VideoPublisherData,
+        publisher_data: VideoPublisherDataV2,
         publish_video_callback: impl FnOnce(
             &str,
-            u64,
+            String, // Changed from u64 to &str
             String,
             &str,
         )

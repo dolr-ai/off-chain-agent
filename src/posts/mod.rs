@@ -2,10 +2,8 @@ use std::sync::Arc;
 
 use axum::middleware;
 use candid::Principal;
-use delete_post::handle_delete_post;
-use report_post::{
-    handle_report_post, handle_report_post_v2, ReportPostRequest, ReportPostRequestV2,
-};
+use delete_post::{handle_delete_post, handle_delete_post_v2};
+use report_post::{handle_report_post_v2, ReportPostRequestV2};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use types::PostRequest;
@@ -16,9 +14,12 @@ use utoipa_axum::{
 };
 use verify::verify_post_request;
 
-use crate::app_state::AppState;
-use crate::posts::delete_post::__path_handle_delete_post;
-use crate::posts::report_post::{__path_handle_report_post, __path_handle_report_post_v2};
+use crate::posts::report_post::{__path_handle_report_post_v2, __path_handle_report_post_v3};
+use crate::posts::{
+    delete_post::{__path_handle_delete_post, __path_handle_delete_post_v2},
+    report_post::handle_report_post_v3,
+};
+use crate::{app_state::AppState, posts::report_post::ReportPostRequestV3};
 
 pub mod delete_post;
 mod queries;
@@ -42,8 +43,17 @@ pub fn posts_router(state: Arc<AppState>) -> OpenApiRouter {
     let mut router = OpenApiRouter::new();
 
     router = verified_route!(router, handle_delete_post, DeletePostRequest, state);
-    router = verified_route!(router, handle_report_post, ReportPostRequest, state);
     router = verified_route!(router, handle_report_post_v2, ReportPostRequestV2, state);
+
+    router.with_state(state)
+}
+
+#[instrument(skip(state))]
+pub fn posts_router_v2(state: Arc<AppState>) -> OpenApiRouter {
+    let mut router = OpenApiRouter::new();
+
+    router = verified_route!(router, handle_delete_post_v2, DeletePostRequestV2, state);
+    router = verified_route!(router, handle_report_post_v3, ReportPostRequestV3, state);
 
     router.with_state(state)
 }
@@ -53,5 +63,13 @@ pub struct DeletePostRequest {
     #[schema(value_type = String)]
     canister_id: Principal,
     post_id: u64,
+    video_id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
+pub struct DeletePostRequestV2 {
+    #[schema(value_type = String)]
+    publisher_user_id: Principal,
+    post_id: String, // Changed from u64 to String
     video_id: String,
 }
