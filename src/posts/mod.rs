@@ -22,6 +22,7 @@ use crate::posts::{
 use crate::{app_state::AppState, posts::report_post::ReportPostRequestV3};
 
 pub mod delete_post;
+pub mod nsfw_query;
 mod queries;
 pub mod report_post;
 pub mod types;
@@ -55,7 +56,9 @@ pub fn posts_router_v2(state: Arc<AppState>) -> OpenApiRouter {
     router = verified_route!(router, handle_delete_post_v2, DeletePostRequestV2, state);
     router = verified_route!(router, handle_report_post_v3, ReportPostRequestV3, state);
 
-    router.with_state(state)
+    router
+        .routes(routes!(nsfw_query::get_nsfw_data))
+        .with_state(state)
 }
 
 #[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
