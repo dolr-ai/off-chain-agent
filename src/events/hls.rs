@@ -209,12 +209,22 @@ pub async fn process_hls(
     let metadata = get_video_metadata(&video_url).await?;
     log::info!("Video metadata: {:?}", metadata);
 
-    // Determine target resolution (max 1080p)
-    let target_height = metadata.height.min(1080) as i32;
-    let target_width = if metadata.height > 1080 {
-        (metadata.width as f64 * (1080.0 / metadata.height as f64)) as i32
+    // Calculate scaled dimensions with max 1080p on the longer side
+    let original_width = metadata.width as f64;
+    let original_height = metadata.height as f64;
+    let aspect_ratio = original_width / original_height;
+    
+    // Determine max resolution while maintaining aspect ratio
+    let (max_width, max_height) = if metadata.height > metadata.width {
+        // Portrait: limit height to 1080
+        let height = original_height.min(1080.0);
+        let width = height * aspect_ratio;
+        (width as i32, height as i32)
     } else {
-        metadata.width as i32
+        // Landscape: limit width to 1080  
+        let width = original_width.min(1080.0);
+        let height = width / aspect_ratio;
+        (width as i32, height as i32)
     };
 
     // Download video
@@ -223,23 +233,37 @@ pub async fn process_hls(
 
     // Process video with HLS
     log::info!("Processing video with HLS...");
+    
+    // Helper function to calculate resolution
+    let calc_resolution = |target_size: i32| -> (i32, i32) {
+        if metadata.height > metadata.width {
+            // Portrait: target_size is height
+            let width = (target_size as f64 * aspect_ratio) as i32;
+            (width, target_size)
+        } else {
+            // Landscape: target_size is width
+            let height = (target_size as f64 / aspect_ratio) as i32;
+            (target_size, height)
+        }
+    };
+    
     let profiles = vec![
         HlsVideoProcessingSettings {
-            resolution: (target_width, target_height),
+            resolution: (max_width, max_height),
             constant_rate_factor: 23,
             preset: FfmpegVideoProcessingPreset::Medium,
             audio_bitrate: HlsVideoAudioBitrate::Medium,  // 256k for 1080p
             audio_codec: HlsVideoAudioCodec::Aac,
         },
         HlsVideoProcessingSettings {
-            resolution: (target_width * 720 / target_height, 720),
+            resolution: calc_resolution(720),
             constant_rate_factor: 25,
             preset: FfmpegVideoProcessingPreset::Fast,
             audio_bitrate: HlsVideoAudioBitrate::Low,     // 128k for 720p
             audio_codec: HlsVideoAudioCodec::Aac,
         },
         HlsVideoProcessingSettings {
-            resolution: (target_width * 480 / target_height, 480),
+            resolution: calc_resolution(480),
             constant_rate_factor: 28,
             preset: FfmpegVideoProcessingPreset::Fast,
             audio_bitrate: HlsVideoAudioBitrate::Low,     // 128k for 480p
@@ -286,7 +310,7 @@ pub async fn process_hls(
     // Return the response with all URLs
     let response = HlsProcessingResponse {
         original_resolution: (metadata.width, metadata.height),
-        processed_resolution: (target_width as u32, target_height as u32),
+        processed_resolution: (max_width as u32, max_height as u32),
     };
 
 
