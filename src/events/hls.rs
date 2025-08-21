@@ -47,7 +47,7 @@ async fn get_video_metadata(video_url: &str) -> Result<VideoMetadata, Error> {
         let url = video_url.to_string();
         move || {
             Command::new("ffprobe")
-                .args(&[
+                .args([
                     "-v", "error",
                     "-select_streams", "v:0",
                     "-show_entries", "stream=width,height,duration,bit_rate",

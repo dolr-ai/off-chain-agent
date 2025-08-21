@@ -9,7 +9,6 @@ use crate::{
     consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
     events::event::UploadVideoInfoV2,
     pipeline::Step,
-    qstash::client::QStashClient,
     setup_context,
 };
 use anyhow::Error;
@@ -315,7 +314,6 @@ pub async fn nsfw_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let video_id = payload.video_id.clone();
     let video_info = payload.video_info.clone();
     use sentry_anyhow::capture_anyhow;
 
