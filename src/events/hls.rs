@@ -25,12 +25,12 @@ use super::event::UploadVideoInfo;
 pub struct HlsProcessingRequest {
     pub video_id: String,
     pub video_info: UploadVideoInfo,
+    pub is_nsfw: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HlsProcessingResponse {
     pub hls_url: String,
-    pub video_1080p_url: Option<String>,  // Only present if video was >1080p
     pub original_resolution: (u32, u32),
     pub processed_resolution: (u32, u32),
 }
@@ -323,24 +323,7 @@ pub async fn process_hls(
     let video_bytes = download_video(&video_url).await?;
 
     // Check if we need to re-encode to 1080p
-    let (video_1080p_url, video_bytes_for_hls) = if metadata.height > 1080 {
-        log::info!("Video is higher than 1080p, re-encoding...");
-        let video_1080p_bytes = reencode_video_to_1080p(&video_bytes, target_width, target_height).await?;
-        
-        // Upload 1080p video to Storj
-        log::info!("Uploading 1080p video to Storj...");
-        let video_1080p_url = upload_1080p_video_to_storj(
-            &request.video_id,
-            video_1080p_bytes.clone(),
-            &request.video_info,
-            &state.qstash_client
-        ).await?;
-        
-        (Some(video_1080p_url), video_1080p_bytes)
-    } else {
-        log::info!("Video is 1080p or lower, using original");
-        (None, video_bytes)
-    };
+    let video_bytes_for_hls = video_bytes;
 
     // Process video with HLS
     log::info!("Processing video with HLS...");
@@ -389,10 +372,15 @@ pub async fn process_hls(
     // Return the response with all URLs
     let response = HlsProcessingResponse {
         hls_url,
-        video_1080p_url,
         original_resolution: (metadata.width, metadata.height),
         processed_resolution: (target_width as u32, target_height as u32),
     };
+
+    // Trigger video finalization
+    log::info!("Triggering video finalization for: {}", request.video_id);
+    state.qstash_client
+        .publish_video_finalize_v2(&request.video_id, &request.video_info, request.is_nsfw, &response)
+        .await?;
 
     log::info!("HLS processing complete for video: {}", request.video_id);
 

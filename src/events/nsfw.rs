@@ -328,15 +328,15 @@ pub async fn nsfw_job_v2(
     let bigquery_client = state.bigquery_client.clone();
     push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
 
-    // Trigger HLS processing with a callback to finalize when complete
-    log::info!("Triggering HLS processing with finalization callback for video: {}", video_id);
+    // Trigger HLS processing
+    log::info!("Triggering HLS processing for video: {}", video_id);
     state.qstash_client
-        .publish_hls_with_callback(&video_id, &video_info, is_nsfw)
+        .publish_hls_processing(&video_id, &video_info, is_nsfw)
         .await?;
 
     Ok(Json(
         serde_json::json!({ 
-            "message": "NSFW v2 job completed, HLS processing triggered in parallel"
+            "message": "NSFW v2 job completed, HLS processing triggered"
         }),
     ))
 }
