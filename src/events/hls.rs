@@ -315,9 +315,6 @@ pub async fn process_hls(
     log::info!("Downloading video...");
     let video_bytes = download_video(&video_url).await?;
 
-    // Check if we need to re-encode to 1080p
-    let video_bytes_for_hls = video_bytes;
-
     // Process video with HLS
     log::info!("Processing video with HLS...");
     let profiles = vec![
@@ -344,12 +341,40 @@ pub async fn process_hls(
         },
     ];
 
-    let hls_result = process_video(video_bytes_for_hls, profiles).await
+    let hls_result = process_video(video_bytes.clone(), profiles).await
         .map_err(|e| anyhow!("HLS processing failed: {}", e))?;
 
     // Upload HLS to Storj
     log::info!("Uploading HLS files to Storj...");
     let hls_url = upload_hls_to_storj(&request.video_id, hls_result, &request.video_info, &state.qstash_client, request.is_nsfw).await?;
+
+    // Upload raw video to Storj
+    log::info!("Uploading raw video to Storj...");
+    
+    // Create temp file for raw video
+    let temp_path = format!("/tmp/{}_raw.mp4", request.video_id);
+    fs::write(&temp_path, &video_bytes)?;
+    
+    // Upload raw video via QStash/Storj duplicate mechanism
+    let video_args = storj_interface::duplicate::Args {
+        publisher_user_id: request.video_info.publisher_user_id.clone(),
+        video_id: format!("videos/{}.mp4", request.video_id),
+        is_nsfw: request.is_nsfw,
+        metadata: [
+            ("post_id".into(), request.video_info.post_id.to_string()),
+            ("timestamp".into(), request.video_info.timestamp.clone()),
+            ("file_type".into(), "video_original".into()),
+            ("resolution".into(), format!("{}x{}", metadata.width, metadata.height)),
+        ]
+        .into(),
+    };
+    
+    state.qstash_client.duplicate_to_storj(video_args).await?;
+    
+    // Clean up temp file
+    fs::remove_file(&temp_path).ok();
+    
+    log::info!("Raw video uploaded to Storj");
 
     // Store HLS info
     #[cfg(not(feature = "local-bin"))]
@@ -369,11 +394,6 @@ pub async fn process_hls(
         processed_resolution: (target_width as u32, target_height as u32),
     };
 
-    // Trigger video finalization
-    log::info!("Triggering video finalization for: {}", request.video_id);
-    state.qstash_client
-        .publish_video_finalize_v2(&request.video_id, &request.video_info, request.is_nsfw, &response)
-        .await?;
 
     log::info!("HLS processing complete for video: {}", request.video_id);
 

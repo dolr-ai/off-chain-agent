@@ -147,7 +147,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
         .route("/enqueue_video_nsfw_detection_v2", post(nsfw_job_v2))
         .route("/process_hls", post(process_hls))
-        .route("/finalize_video_v2", post(crate::events::video_finalize_v2::finalize_video_v2))
         .route("/report_post", post(qstash_report_post))
         .route("/storj_ingest", post(storj_ingest))
         .route(

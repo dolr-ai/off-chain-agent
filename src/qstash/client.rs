@@ -293,34 +293,6 @@ impl QStashClient {
         Ok(())
     }
 
-    #[instrument(skip(self))]
-    pub async fn publish_video_finalize_v2(
-        &self,
-        video_id: &str,
-        video_info: &UploadVideoInfo,
-        is_nsfw: bool,
-        hls_response: &crate::events::hls::HlsProcessingResponse,
-    ) -> Result<(), anyhow::Error> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/finalize_video_v2").unwrap();
-
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
-        let req = serde_json::json!({
-            "video_id": video_id,
-            "video_info": video_info,
-            "is_nsfw": is_nsfw,
-            "hls_response": hls_response,
-        });
-
-        self.client
-            .post(url)
-            .json(&req)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .send()
-            .await?;
-
-        Ok(())
-    }
 
     #[instrument(skip(self))]
     pub async fn publish_report_post(
