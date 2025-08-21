@@ -272,7 +272,7 @@ async fn upload_hls_to_storj(
 
     fs::remove_dir_all(&temp_dir).ok();
 
-    Ok(format!("https://link.storjshare.io/raw/{}/master.m3u8", base_path))
+    Ok(format!("https://link.storjshare.io/raw/videos/{}/master.m3u8", base_path))
 }
 
 #[instrument]
