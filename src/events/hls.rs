@@ -116,52 +116,6 @@ async fn download_video(video_url: &str) -> Result<Vec<u8>, Error> {
     Ok(buf)
 }
 
-#[instrument]
-async fn reencode_video_to_1080p(
-    video_bytes: &[u8],
-    target_width: i32,
-    target_height: i32,
-) -> Result<Vec<u8>, Error> {
-    // Create temp files for input and output
-    let temp_dir = tempfile::tempdir()?;
-    let input_path = temp_dir.path().join("input.mp4");
-    let output_path = temp_dir.path().join("output_1080p.mp4");
-
-    // Write input video
-    fs::write(&input_path, video_bytes)?;
-
-    // Re-encode to 1080p using ffmpeg
-    let status = tokio::task::spawn_blocking({
-        let input_path = input_path.clone();
-        let output_path = output_path.clone();
-        move || {
-            Command::new("ffmpeg")
-                .args(&[
-                    "-i", input_path.to_str().unwrap(),
-                    "-vf", &format!("scale={}:{}", target_width, target_height),
-                    "-c:v", "libx264",
-                    "-crf", "23",
-                    "-preset", "medium",
-                    "-c:a", "aac",
-                    "-b:a", "256k",
-                    "-movflags", "+faststart",
-                    output_path.to_str().unwrap(),
-                ])
-                .output()
-        }
-    })
-    .await??;
-
-    if !status.status.success() {
-        return Err(anyhow!("Failed to re-encode video to 1080p: {}", 
-            String::from_utf8_lossy(&status.stderr)));
-    }
-
-    // Read the output file
-    let output_bytes = fs::read(&output_path)?;
-    Ok(output_bytes)
-}
-
 #[instrument(skip(hls_data, qstash_client))]
 async fn upload_hls_to_storj(
     video_id: &str,
@@ -298,7 +252,7 @@ pub async fn process_hls(
 
     // Upload HLS to Storj
     log::info!("Uploading HLS files to Storj...");
-    let hls_url = upload_hls_to_storj(&request.video_id, hls_result, &request.video_info, &state.qstash_client, request.is_nsfw).await?;
+    upload_hls_to_storj(&request.video_id, hls_result, &request.video_info, &state.qstash_client, request.is_nsfw).await?;
 
     // Upload raw video to Storj
     log::info!("Uploading raw video to Storj...");
