@@ -256,7 +256,6 @@ impl QStashClient {
         Ok(())
     }
 
-
     #[instrument(skip(self))]
     pub async fn publish_report_post(
         &self,

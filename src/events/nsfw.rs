@@ -336,15 +336,14 @@ pub async fn nsfw_job_v2(
 
     // Trigger HLS processing
     log::info!("Triggering HLS processing for video: {}", video_id);
-    state.qstash_client
+    state
+        .qstash_client
         .publish_hls_processing(&video_id, &video_info, is_nsfw)
         .await?;
 
-    Ok(Json(
-        serde_json::json!({ 
-            "message": "NSFW v2 job completed, HLS processing triggered"
-        }),
-    ))
+    Ok(Json(serde_json::json!({
+        "message": "NSFW v2 job completed, HLS processing triggered"
+    })))
 }
 
 #[instrument]

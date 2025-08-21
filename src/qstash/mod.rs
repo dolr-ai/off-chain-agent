@@ -56,7 +56,6 @@ impl QStashState {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 struct VideoHashIndexingRequest {
     video_id: String,

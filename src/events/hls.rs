@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use std::process::Command;
 use std::fs;
+use std::process::Command;
+use std::sync::Arc;
 
 use crate::{app_state::AppState, events::event::UploadVideoInfoV2, AppError};
 use anyhow::{anyhow, Error};
@@ -9,8 +9,8 @@ use hlskit::{
     models::{
         hls_video::HlsVideo,
         hls_video_processing_settings::{
-            FfmpegVideoProcessingPreset, HlsVideoProcessingSettings,
-            HlsVideoAudioBitrate, HlsVideoAudioCodec,
+            FfmpegVideoProcessingPreset, HlsVideoAudioBitrate, HlsVideoAudioCodec,
+            HlsVideoProcessingSettings,
         },
     },
     process_video,
@@ -18,7 +18,6 @@ use hlskit::{
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HlsProcessingRequest {
@@ -48,10 +47,14 @@ async fn get_video_metadata(video_url: &str) -> Result<VideoMetadata, Error> {
         move || {
             Command::new("ffprobe")
                 .args([
-                    "-v", "error",
-                    "-select_streams", "v:0",
-                    "-show_entries", "stream=width,height,duration,bit_rate",
-                    "-of", "json",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=width,height,duration,bit_rate",
+                    "-of",
+                    "json",
                     &url,
                 ])
                 .output()
@@ -77,16 +80,21 @@ async fn get_video_metadata(video_url: &str) -> Result<VideoMetadata, Error> {
     }
 
     let json: FfprobeOutput = serde_json::from_slice(&output.stdout)?;
-    let stream = json.streams.into_iter().next()
+    let stream = json
+        .streams
+        .into_iter()
+        .next()
         .ok_or_else(|| anyhow!("No video stream found"))?;
 
     Ok(VideoMetadata {
         width: stream.width,
         height: stream.height,
-        duration: stream.duration
+        duration: stream
+            .duration
             .and_then(|d| d.parse::<f64>().ok())
             .unwrap_or(0.0),
-        bitrate: stream.bit_rate
+        bitrate: stream
+            .bit_rate
             .and_then(|b| b.parse::<u64>().ok())
             .unwrap_or(0),
     })
@@ -95,10 +103,7 @@ async fn get_video_metadata(video_url: &str) -> Result<VideoMetadata, Error> {
 #[instrument]
 async fn download_video(video_url: &str) -> Result<Vec<u8>, Error> {
     let client = Client::new();
-    let response = client
-        .get(video_url)
-        .send()
-        .await?;
+    let response = client.get(video_url).send().await?;
 
     if !response.status().is_success() {
         return Err(anyhow!("Failed to download video: {}", response.status()));
@@ -107,7 +112,7 @@ async fn download_video(video_url: &str) -> Result<Vec<u8>, Error> {
     let mut buf = Vec::new();
     let mut stream = response.bytes_stream();
     use futures::StreamExt;
-    
+
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         buf.extend_from_slice(&chunk);
@@ -122,27 +127,26 @@ async fn upload_hls_to_storj(
     hls_data: HlsVideo,
     video_info: &UploadVideoInfoV2,
     qstash_client: &crate::qstash::client::QStashClient,
-    is_nsfw: bool
+    is_nsfw: bool,
 ) -> Result<(), Error> {
     // Create temporary directory for HLS files
     let temp_dir = format!("/tmp/hls_{}", video_id);
     fs::create_dir_all(&temp_dir)?;
-    
+
     let base_path = format!("{}/hls", video_id);
 
     // Write and upload master playlist
     let master_path = format!("{}/master.m3u8", temp_dir);
     fs::write(&master_path, &hls_data.master_m3u8_data)?;
-    
+
     // Upload master playlist via QStash/Storj duplicate mechanism
     let master_args = storj_interface::duplicate::Args {
         publisher_user_id: video_info.publisher_user_id.clone(),
         video_id: format!("{}/master.m3u8", base_path),
         is_nsfw,
-        metadata: []
-        .into(),
+        metadata: [].into(),
     };
-    
+
     qstash_client.duplicate_to_storj(master_args).await?;
 
     // Process each resolution
@@ -150,7 +154,7 @@ async fn upload_hls_to_storj(
         // Write and upload playlist
         let playlist_path = format!("{}/{}", temp_dir, resolution.playlist_name);
         fs::write(&playlist_path, &resolution.playlist_data)?;
-        
+
         let playlist_args = storj_interface::duplicate::Args {
             publisher_user_id: video_info.publisher_user_id.clone(),
             video_id: format!("{}/{}", base_path, resolution.playlist_name),
@@ -163,14 +167,14 @@ async fn upload_hls_to_storj(
             ]
             .into(),
         };
-        
+
         qstash_client.duplicate_to_storj(playlist_args).await?;
 
         // Process segments
         for segment in resolution.segments {
             let segment_path = format!("{}/{}", temp_dir, segment.segment_name);
             fs::write(&segment_path, &segment.segment_data)?;
-            
+
             let segment_args = storj_interface::duplicate::Args {
                 publisher_user_id: video_info.publisher_user_id.clone(),
                 video_id: format!("{}/{}", base_path, segment.segment_name),
@@ -183,7 +187,7 @@ async fn upload_hls_to_storj(
                 ]
                 .into(),
             };
-            
+
             qstash_client.duplicate_to_storj(segment_args).await?;
         }
     }
@@ -213,7 +217,7 @@ pub async fn process_hls(
     let original_width = metadata.width as f64;
     let original_height = metadata.height as f64;
     let aspect_ratio = original_width / original_height;
-    
+
     // Determine max resolution while maintaining aspect ratio
     let (max_width, max_height) = if metadata.height > metadata.width {
         // Portrait: limit height to 1080
@@ -221,7 +225,7 @@ pub async fn process_hls(
         let width = height * aspect_ratio;
         (width as i32, height as i32)
     } else {
-        // Landscape: limit width to 1080  
+        // Landscape: limit width to 1080
         let width = original_width.min(1080.0);
         let height = width / aspect_ratio;
         (width as i32, height as i32)
@@ -233,7 +237,7 @@ pub async fn process_hls(
 
     // Process video with HLS
     log::info!("Processing video with HLS...");
-    
+
     // Helper function to calculate resolution
     let calc_resolution = |target_size: i32| -> (i32, i32) {
         if metadata.height > metadata.width {
@@ -246,45 +250,53 @@ pub async fn process_hls(
             (target_size, height)
         }
     };
-    
+
     let profiles = vec![
         HlsVideoProcessingSettings {
             resolution: (max_width, max_height),
             constant_rate_factor: 23,
             preset: FfmpegVideoProcessingPreset::Medium,
-            audio_bitrate: HlsVideoAudioBitrate::Medium,  // 256k for 1080p
+            audio_bitrate: HlsVideoAudioBitrate::Medium, // 256k for 1080p
             audio_codec: HlsVideoAudioCodec::Aac,
         },
         HlsVideoProcessingSettings {
             resolution: calc_resolution(720),
             constant_rate_factor: 25,
             preset: FfmpegVideoProcessingPreset::Fast,
-            audio_bitrate: HlsVideoAudioBitrate::Low,     // 128k for 720p
+            audio_bitrate: HlsVideoAudioBitrate::Low, // 128k for 720p
             audio_codec: HlsVideoAudioCodec::Aac,
         },
         HlsVideoProcessingSettings {
             resolution: calc_resolution(480),
             constant_rate_factor: 28,
             preset: FfmpegVideoProcessingPreset::Fast,
-            audio_bitrate: HlsVideoAudioBitrate::Low,     // 128k for 480p
+            audio_bitrate: HlsVideoAudioBitrate::Low, // 128k for 480p
             audio_codec: HlsVideoAudioCodec::Aac,
         },
     ];
 
-    let hls_result = process_video(video_bytes.clone(), profiles).await
+    let hls_result = process_video(video_bytes.clone(), profiles)
+        .await
         .map_err(|e| anyhow!("HLS processing failed: {}", e))?;
 
     // Upload HLS to Storj
     log::info!("Uploading HLS files to Storj...");
-    upload_hls_to_storj(&request.video_id, hls_result, &request.video_info, &state.qstash_client, request.is_nsfw).await?;
+    upload_hls_to_storj(
+        &request.video_id,
+        hls_result,
+        &request.video_info,
+        &state.qstash_client,
+        request.is_nsfw,
+    )
+    .await?;
 
     // Upload raw video to Storj
     log::info!("Uploading raw video to Storj...");
-    
+
     // Create temp file for raw video
     let temp_path = format!("/tmp/{}_raw.mp4", request.video_id);
     fs::write(&temp_path, &video_bytes)?;
-    
+
     // Upload raw video via QStash/Storj duplicate mechanism
     let video_args = storj_interface::duplicate::Args {
         publisher_user_id: request.video_info.publisher_user_id.clone(),
@@ -294,16 +306,18 @@ pub async fn process_hls(
             ("post_id".into(), request.video_info.post_id.to_string()),
             ("timestamp".into(), request.video_info.timestamp.clone()),
             ("file_type".into(), "video_original".into()),
-            ("resolution".into(), format!("{}x{}", metadata.width, metadata.height)),
+            (
+                "resolution".into(),
+                format!("{}x{}", metadata.width, metadata.height),
+            ),
         ]
         .into(),
     };
-    
+
     state.qstash_client.duplicate_to_storj(video_args).await?;
-    
+
     // Clean up temp file
     fs::remove_file(&temp_path).ok();
-    
 
     log::info!("HLS processing completed for video: {}", request.video_id);
 
@@ -312,7 +326,6 @@ pub async fn process_hls(
         original_resolution: (metadata.width, metadata.height),
         processed_resolution: (max_width as u32, max_height as u32),
     };
-
 
     log::info!("HLS processing complete for video: {}", request.video_id);
 
