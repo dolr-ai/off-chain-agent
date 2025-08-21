@@ -61,7 +61,7 @@ struct VideoHashIndexingRequest {
     video_id: String,
     video_url: String,
     #[serde(default)]
-    video_info: Option<crate::events::event::UploadVideoInfo>,
+    video_info: Option<crate::events::event::UploadVideoInfoV2>,
     publisher_data: VideoPublisherDataV2,
 }
 

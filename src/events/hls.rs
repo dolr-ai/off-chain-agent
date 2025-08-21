@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::process::Command;
 use std::fs;
 
-use crate::{app_state::AppState, AppError};
+use crate::{app_state::AppState, events::event::UploadVideoInfoV2, AppError};
 use anyhow::{anyhow, Error};
 use axum::{extract::State, Json};
 use hlskit::{
@@ -19,18 +19,16 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use super::event::UploadVideoInfo;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HlsProcessingRequest {
     pub video_id: String,
-    pub video_info: UploadVideoInfo,
+    pub video_info: UploadVideoInfoV2,
     pub is_nsfw: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HlsProcessingResponse {
-    pub hls_url: String,
     pub original_resolution: (u32, u32),
     pub processed_resolution: (u32, u32),
 }
@@ -164,48 +162,14 @@ async fn reencode_video_to_1080p(
     Ok(output_bytes)
 }
 
-#[instrument(skip(qstash_client))]
-async fn upload_1080p_video_to_storj(
-    video_id: &str,
-    video_bytes: Vec<u8>,
-    video_info: &UploadVideoInfo,
-    qstash_client: &crate::qstash::client::QStashClient,
-) -> Result<String, Error> {
-    // Create temp file for 1080p video
-    let temp_path = format!("/tmp/{}_1080p.mp4", video_id);
-    fs::write(&temp_path, &video_bytes)?;
-
-    // Upload 1080p video via QStash/Storj duplicate mechanism
-    let video_args = storj_interface::duplicate::Args {
-        publisher_user_id: video_info.publisher_user_id.clone(),
-        video_id: format!("videos/{}_1080p.mp4", video_id),
-        is_nsfw: false,
-        metadata: [
-            ("post_id".into(), video_info.post_id.to_string()),
-            ("timestamp".into(), video_info.timestamp.clone()),
-            ("file_type".into(), "video_1080p".into()),
-            ("original_video_id".into(), video_id.to_string()),
-        ]
-        .into(),
-    };
-    
-    qstash_client.duplicate_to_storj(video_args).await?;
-
-    // Clean up temp file
-    fs::remove_file(&temp_path).ok();
-
-    // Return the URL for the 1080p video
-    Ok(format!("https://link.storjshare.io/raw/videos/{}_1080p.mp4", video_id))
-}
-
 #[instrument(skip(hls_data, qstash_client))]
 async fn upload_hls_to_storj(
     video_id: &str,
     hls_data: HlsVideo,
-    video_info: &UploadVideoInfo,
+    video_info: &UploadVideoInfoV2,
     qstash_client: &crate::qstash::client::QStashClient,
     is_nsfw: bool
-) -> Result<String, Error> {
+) -> Result<(), Error> {
     // Create temporary directory for HLS files
     let temp_dir = format!("/tmp/hls_{}", video_id);
     fs::create_dir_all(&temp_dir)?;
@@ -271,18 +235,6 @@ async fn upload_hls_to_storj(
     }
 
     fs::remove_dir_all(&temp_dir).ok();
-
-    Ok(format!("https://link.storjshare.io/raw/videos/{}/master.m3u8", base_path))
-}
-
-#[instrument]
-async fn store_hls_info(
-    video_id: &str,
-    hls_url: &str,
-    original_resolution: (u32, u32),
-    processed_resolution: (u32, u32),
-) -> Result<(), Error> {
-    // upload to canister
 
     Ok(())
 }
@@ -374,22 +326,11 @@ pub async fn process_hls(
     // Clean up temp file
     fs::remove_file(&temp_path).ok();
     
-    log::info!("Raw video uploaded to Storj");
-
-    // Store HLS info
-    #[cfg(not(feature = "local-bin"))]
-    store_hls_info(
-        &request.video_id,
-        &hls_url,
-        (metadata.width, metadata.height),
-        (target_width as u32, target_height as u32),
-    ).await?;
 
     log::info!("HLS processing completed for video: {}", request.video_id);
 
     // Return the response with all URLs
     let response = HlsProcessingResponse {
-        hls_url,
         original_resolution: (metadata.width, metadata.height),
         processed_resolution: (target_width as u32, target_height as u32),
     };

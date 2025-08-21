@@ -231,7 +231,7 @@ impl QStashClient {
     pub async fn publish_hls_processing(
         &self,
         video_id: &str,
-        video_info: &UploadVideoInfo,
+        video_info: &UploadVideoInfoV2,
         is_nsfw: bool,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/process_hls").unwrap();
