@@ -36,7 +36,6 @@ pub mod queries;
 pub mod types;
 pub mod utils;
 pub mod verify;
-pub mod video_finalize_v2;
 
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
