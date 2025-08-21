@@ -7,6 +7,10 @@ use std::{
 
 use crate::{
     consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
+    events::event::UploadVideoInfoV2,
+    pipeline::Step,
+    qstash::client::QStashClient,
+    setup_context,
 };
 use anyhow::Error;
 use axum::{extract::State, Json};
@@ -23,8 +27,6 @@ use tonic::{metadata::MetadataValue, Request};
 use tracing::instrument;
 
 use crate::{app_state::AppState, AppError};
-
-use super::event::UploadVideoInfo;
 
 pub mod nsfw_detector {
     tonic::include_proto!("nsfw_detector");
@@ -93,7 +95,7 @@ pub async fn upload_frames_to_gcs(
 
     // Create a vector of futures for concurrent uploads
     let upload_futures = frames.into_iter().enumerate().map(|(i, frame)| {
-        let frame_path = format!("{}/frame-{}.jpg", video_id, i);
+        let frame_path = format!("{video_id}/frame-{i}.jpg");
         let bucket_name = bucket_name.to_string();
 
         async move {
@@ -118,7 +120,7 @@ pub async fn upload_frames_to_gcs(
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VideoRequest {
     video_id: String,
-    video_info: UploadVideoInfo,
+    video_info: UploadVideoInfoV2,
 }
 
 // extract_frames_and_upload API handler which takes video_id as queryparam in axum
@@ -127,10 +129,13 @@ pub async fn extract_frames_and_upload(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    setup_context!(&payload.video_id, Step::ExtractFrames, {
+        "upload_info": &payload.video_info
+    });
+
     let video_id = payload.video_id;
     let video_path = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        video_id
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
     );
     let output_dir = create_output_directory(&video_id)?;
     let frames = extract_frames(&video_path, output_dir.clone()).await?;
@@ -170,7 +175,7 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
         .expect("Couldn't connect to nsfw agent");
 
     let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
-    let token: MetadataValue<_> = format!("Bearer {}", nsfw_grpc_auth_token).parse()?;
+    let token: MetadataValue<_> = format!("Bearer {nsfw_grpc_auth_token}").parse()?;
 
     let mut client = nsfw_detector::nsfw_detector_client::NsfwDetectorClient::with_interceptor(
         channel,
@@ -212,10 +217,20 @@ pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    use sentry_anyhow::capture_anyhow;
+
+    setup_context!(&payload.video_id, Step::NsfwDetection, {
+        "upload_info": &payload.video_info
+    });
+
     let video_id = payload.video_id;
     let video_info = payload.video_info;
 
-    let nsfw_info = get_video_nsfw_info(video_id.clone()).await?;
+    let nsfw_info = get_video_nsfw_info(video_id.clone())
+        .await
+        .inspect_err(|e| {
+            capture_anyhow(e);
+        })?;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
@@ -231,7 +246,6 @@ pub async fn nsfw_job(
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
 
-
 #[instrument(skip(bigquery_client))]
 pub async fn push_nsfw_data_bigquery(
     bigquery_client: google_cloud_bigquery::client::Client,
@@ -240,7 +254,7 @@ pub async fn push_nsfw_data_bigquery(
 ) -> Result<(), Error> {
     let row_data = VideoNSFWData {
         video_id: video_id.clone(),
-        gcs_video_id: format!("gs://yral-videos/{}.mp4", video_id),
+        gcs_video_id: format!("gs://yral-videos/{video_id}.mp4"),
         is_nsfw: nsfw_info.is_nsfw,
         nsfw_ec: nsfw_info.nsfw_ec,
         nsfw_gore: nsfw_info.nsfw_gore,
@@ -303,25 +317,19 @@ pub async fn nsfw_job_v2(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id.clone();
     let video_info = payload.video_info.clone();
-    sentry::with_scope(
-        |scope| {
-            scope.set_tag("yral.video_id", &payload.video_id);
-            scope.set_tag(
-                "yral.publisher_user_id",
-                &payload.video_info.publisher_user_id,
-            );
-            scope.set_extra(
-                "yral.upload_info",
-                serde_json::to_value(&payload.video_info)
-                    .expect("upload info to be json serializable"),
-            );
-        },
-        || sentry::capture_message("Processing for nsfw detection v2", sentry::Level::Info),
-    );
+    use sentry_anyhow::capture_anyhow;
+
+    setup_context!(&payload.video_id, Step::NsfwDetectionV2, {
+        "upload_info": &payload.video_info
+    });
+
     let video_id = payload.video_id;
 
-    // Start NSFW detection
-    let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;
+    let nsfw_prob = get_video_nsfw_info_v2(video_id.clone())
+        .await
+        .inspect_err(|err| {
+            capture_anyhow(err);
+        })?;
     let is_nsfw = nsfw_prob >= NSFW_THRESHOLD;
 
     // Push NSFW info to BigQuery
@@ -353,7 +361,7 @@ pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
         .expect("Couldn't connect to nsfw agent");
 
     let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
-    let token: MetadataValue<_> = format!("Bearer {}", nsfw_grpc_auth_token).parse()?;
+    let token: MetadataValue<_> = format!("Bearer {nsfw_grpc_auth_token}").parse()?;
 
     let mut client = nsfw_detector::nsfw_detector_client::NsfwDetectorClient::with_interceptor(
         channel,
@@ -418,8 +426,7 @@ pub async fn push_nsfw_data_bigquery_v2(
     let query = format!(
         "SELECT video_id, gcs_video_id, is_nsfw, nsfw_ec, nsfw_gore 
          FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw`
-         WHERE video_id = '{}'",
-        video_id
+         WHERE video_id = '{video_id}'"
     );
 
     let request = QueryRequest {
@@ -495,8 +502,7 @@ pub async fn push_nsfw_data_bigquery_v2(
     // and push to bigquery hot-or-not-feed-intelligence.yral_ds.video_embeddings_agg table
 
     let embedding_query = format!(
-        "SELECT * FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE uri = '{}'",
-        gcs_video_id
+        "SELECT * FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE uri = '{gcs_video_id}'"
     );
 
     let embedding_request = QueryRequest {

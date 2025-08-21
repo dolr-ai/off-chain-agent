@@ -9,13 +9,12 @@ use http::{
     HeaderMap, HeaderValue,
 };
 use reqwest::{Client, Url};
-use sentry::configure_scope;
 use serde_json::json;
 use tracing::instrument;
 
 use crate::{
     canister::snapshot::snapshot_v2::BackupUserCanisterPayload, consts::OFF_CHAIN_AGENT_URL,
-    events::event::UploadVideoInfo, posts::report_post::ReportPostRequestV2,
+    events::event::UploadVideoInfoV2, posts::report_post::ReportPostRequestV3,
     videogen::qstash_types::QstashVideoGenRequest,
 };
 use videogen_common::VideoGenerator;
@@ -28,7 +27,7 @@ pub struct QStashClient {
 
 impl QStashClient {
     pub fn new(auth_token: &str) -> Self {
-        let mut bearer: HeaderValue = format!("Bearer {}", auth_token)
+        let mut bearer: HeaderValue = format!("Bearer {auth_token}")
             .parse()
             .expect("Invalid QStash auth token");
         bearer.set_sensitive(true);
@@ -45,7 +44,7 @@ impl QStashClient {
             env::var("QSTASH_URL").unwrap_or_else(|_| "https://qstash.upstash.io/v2/".to_string());
         let base_url = Url::parse(&base_url_str).expect("Invalid QSTASH_URL");
 
-        log::info!("QStash client initialized with base URL: {}", base_url);
+        log::info!("QStash client initialized with base URL: {base_url}");
 
         Self {
             client,
@@ -59,7 +58,7 @@ impl QStashClient {
         data: storj_interface::duplicate::Args,
     ) -> anyhow::Result<()> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/storj_ingest").unwrap();
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
 
         self.client
             .post(url)
@@ -71,20 +70,6 @@ impl QStashClient {
             .send()
             .await?;
 
-        sentry::with_scope(
-            |scope| {
-                scope.set_tag("yral.video_id", &data.video_id);
-                scope.set_tag("yral.publisher_user_id", &data.publisher_user_id);
-                scope.set_tag("yral.is_nsfw", data.is_nsfw);
-                scope.set_extra(
-                    "yral.metadata",
-                    serde_json::to_value(&data.metadata)
-                        .expect("metadata to be serializable as json"),
-                );
-            },
-            || sentry::capture_message("enqueing for storj duplication", sentry::Level::Info),
-        );
-
         Ok(())
     }
 
@@ -92,13 +77,13 @@ impl QStashClient {
     pub async fn publish_video(
         &self,
         video_id: &str,
-        post_id: u64,
+        post_id: String,
         timestamp_str: String,
         publisher_user_id: &str,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/upload_video_gcs").unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "post_id": post_id,
@@ -114,13 +99,34 @@ impl QStashClient {
             .send()
             .await?;
 
-        sentry::with_scope(
-            |scope| {
-                scope.set_tag("yral.video_id", &video_id);
-                scope.set_tag("yral.publisher_user_id", &publisher_user_id);
-            },
-            || sentry::capture_message("enqueing for upload to gcs", sentry::Level::Info),
-        );
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn publish_video_v2(
+        &self,
+        video_id: &str,
+        post_id: &str, // Changed from u64 to &str
+        timestamp_str: String,
+        publisher_user_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/upload_video_gcs").unwrap();
+
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
+        let req = serde_json::json!({
+            "video_id": video_id,
+            "post_id": post_id, // String instead of u64
+            "timestamp": timestamp_str,
+            "publisher_user_id": publisher_user_id
+        });
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .send()
+            .await?;
 
         Ok(())
     }
@@ -129,13 +135,13 @@ impl QStashClient {
     pub async fn publish_video_frames(
         &self,
         video_id: &str,
-        video_info: &UploadVideoInfo,
+        video_info: &UploadVideoInfoV2,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_frames")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -148,19 +154,6 @@ impl QStashClient {
             .header("upstash-method", "POST")
             .send()
             .await?;
-
-        sentry::with_scope(
-            |scope| {
-                scope.set_tag("yral.video_id", &video_id);
-                scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
-                scope.set_extra(
-                    "yral.upload_info",
-                    serde_json::to_value(&video_info)
-                        .expect("upload video info to be serializable as json"),
-                );
-            },
-            || sentry::capture_message("enqueing for video frames", sentry::Level::Info),
-        );
 
         Ok(())
     }
@@ -169,13 +162,13 @@ impl QStashClient {
     pub async fn publish_video_nsfw_detection(
         &self,
         video_id: &str,
-        video_info: &UploadVideoInfo,
+        video_info: &UploadVideoInfoV2,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -186,26 +179,9 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
+            .header("Upstash-Retries", "5")
             .send()
             .await?;
-
-        sentry::with_scope(
-            |scope| {
-                scope.set_tag("yral.video_id", &video_id);
-                scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
-                scope.set_extra(
-                    "yral.upload_info",
-                    serde_json::to_value(&video_info)
-                        .expect("upload video info to be serializable as json"),
-                );
-            },
-            || {
-                sentry::capture_message(
-                    "enqueing for nsfw detection v1 (shouldn't happen)",
-                    sentry::Level::Info,
-                )
-            },
-        );
 
         Ok(())
     }
@@ -214,13 +190,13 @@ impl QStashClient {
     pub async fn publish_video_nsfw_detection_v2(
         &self,
         video_id: &str,
-        video_info: UploadVideoInfo,
+        video_info: UploadVideoInfoV2,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection_v2")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!({
             "video_id": video_id,
             "video_info": video_info,
@@ -243,23 +219,10 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("upstash-delay", format!("{}s", delay_seconds))
+            .header("upstash-delay", format!("{delay_seconds}s"))
+            .header("Upstash-Retries", "5")
             .send()
             .await?;
-
-        sentry::with_scope(
-            |scope| {
-                scope.set_tag("yral.video_id", &video_id);
-                scope.set_tag("yral.publisher_user_id", &video_info.publisher_user_id);
-                scope.set_extra("yral.delay_seconds", delay_seconds.into());
-                scope.set_extra(
-                    "yral.upload_info",
-                    serde_json::to_value(&video_info)
-                        .expect("upload video info to be serializable as json"),
-                );
-            },
-            || sentry::capture_message("enqueing for nsfw detection v2", sentry::Level::Info),
-        );
 
         Ok(())
     }
@@ -297,11 +260,11 @@ impl QStashClient {
     #[instrument(skip(self))]
     pub async fn publish_report_post(
         &self,
-        report_request: ReportPostRequestV2,
+        report_request: ReportPostRequestV3,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/report_post").unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
         let req = serde_json::json!(report_request);
 
         self.client
@@ -409,12 +372,12 @@ impl QStashClient {
             .join("qstash/process_video_gen")
             .unwrap();
 
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
 
         // Get flow control from the model using the VideoGenerator trait
         let flow_control = request.input.flow_control_config().map(|(rate, parallel)| {
             let key = request.input.flow_control_key();
-            let value = format!("Rate={},Parallelism={}", rate, parallel);
+            let value = format!("Rate={rate},Parallelism={parallel}");
             (key, value)
         });
 

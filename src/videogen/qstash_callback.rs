@@ -9,14 +9,20 @@ use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequestKey, VideoGe
 use crate::{
     app_state::AppState,
     consts::RATE_LIMITS_CANISTER_ID,
-    videogen::qstash_types::{QstashVideoGenCallback, VideoGenCallbackResult},
+    videogen::{
+        qstash_types::{QstashVideoGenCallback, VideoGenCallbackResult},
+        utils::get_hon_worker_jwt_token,
+    },
 };
+
+// Import utility functions for JWT and rollback
+use super::utils::rollback_balance_on_failure;
 
 /// QStash callback wrapper structure
 #[derive(Debug, Deserialize)]
 pub struct QStashCallbackWrapper {
     pub status: u16,
-    pub body: String,  // Base64 encoded response body
+    pub body: String, // Base64 encoded response body
     pub header: HashMap<String, Vec<String>>,
     pub retried: Option<u32>,
     #[serde(rename = "maxRetries")]
@@ -27,36 +33,105 @@ pub struct QStashCallbackWrapper {
     pub method: String,
 }
 
-/// Helper function to decrement rate limit counter for failed requests
+/// Parse and validate QStash callback data
+fn parse_qstash_callback(
+    wrapper: &QStashCallbackWrapper,
+) -> Result<QstashVideoGenCallback, (StatusCode, String)> {
+    // Decode base64 body
+    use base64::Engine;
+    let decoded_body = base64::engine::general_purpose::STANDARD
+        .decode(&wrapper.body)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to decode body: {e}"),
+            )
+        })?;
+
+    // Parse callback directly (includes deducted_amount and token_type now)
+    serde_json::from_slice(&decoded_body).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("Failed to parse callback data: {e}"),
+        )
+    })
+}
+
+/// Determine status based on QStash response and callback result
+fn determine_callback_status(
+    qstash_status: u16,
+    result: &VideoGenCallbackResult,
+) -> (VideoGenRequestStatus, bool) {
+    if qstash_status != 200 {
+        // QStash request failed
+        let error_message = format!("QStash request failed with status: {qstash_status}");
+        (VideoGenRequestStatus::Failed(error_message), true)
+    } else {
+        // QStash request succeeded, check the actual result
+        match result {
+            VideoGenCallbackResult::Success(response) => (
+                VideoGenRequestStatus::Complete(response.video_url.clone()),
+                false,
+            ),
+            VideoGenCallbackResult::Failure(error) => {
+                (VideoGenRequestStatus::Failed(error.clone()), true)
+            }
+        }
+    }
+}
+
+/// Update status in rate limits canister
+async fn update_rate_limit_status(
+    rate_limits_client: &RateLimits<'_>,
+    request_key: VideoGenRequestKey,
+    status: VideoGenRequestStatus,
+) -> Result<(), (StatusCode, String)> {
+    match rate_limits_client
+        .update_video_generation_status(request_key.clone(), status)
+        .await
+    {
+        Ok(result) => match result {
+            yral_canisters_client::rate_limits::Result1::Ok => {
+                log::info!(
+                    "Successfully updated video generation status for principal {} counter {}",
+                    request_key.principal,
+                    request_key.counter
+                );
+                Ok(())
+            }
+            yral_canisters_client::rate_limits::Result1::Err(e) => {
+                log::error!("Failed to update video generation status: {e}");
+                Err((StatusCode::INTERNAL_SERVER_ERROR, e))
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to call update_video_generation_status: {e}");
+            Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("Canister call failed: {e}"),
+            ))
+        }
+    }
+}
+
+/// Decrement rate limit counter for failed requests
 async fn decrement_counter_for_failure(
     rate_limits_client: &RateLimits<'_>,
     request_key: VideoGenRequestKey,
     property: String,
 ) {
     log::info!(
-        "Decrementing rate limit counter for failed request: principal {} counter {} property {}",
+        "Decrementing rate limit counter for failed request: principal {} counter {}",
         request_key.principal,
-        request_key.counter,
-        property
+        request_key.counter
     );
-    
-    match rate_limits_client
-        .decrement_video_generation_counter(request_key, property)
+
+    if let Err(e) = rate_limits_client
+        .decrement_video_generation_counter_v_1(request_key, property)
         .await
     {
-        Ok(result) => match result {
-            yral_canisters_client::rate_limits::Result1::Ok => {
-                log::info!("Successfully decremented rate limit counter");
-            }
-            yral_canisters_client::rate_limits::Result1::Err(e) => {
-                log::error!("Failed to decrement rate limit counter: {}", e);
-                // Don't fail the callback if decrement fails
-            }
-        },
-        Err(e) => {
-            log::error!("Failed to call decrement_video_generation_counter: {}", e);
-            // Don't fail the callback if decrement fails
-        }
+        log::error!("Failed to decrement counter: {e}");
+        // Don't fail the callback if decrement fails
     }
 }
 
@@ -72,88 +147,63 @@ pub async fn handle_video_gen_callback(
         wrapper.status
     );
 
-    // Decode base64 body - we need this even for failed requests to get request details
-    use base64::Engine;
-    let decoded_body = base64::engine::general_purpose::STANDARD
-        .decode(&wrapper.body)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to decode body: {}", e)))?;
-    
-    // Try to parse the callback data
-    let callback: QstashVideoGenCallback = serde_json::from_slice(&decoded_body)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to parse callback: {}", e)))?;
-    
+    // 1. Parse callback (now includes deducted_amount and token_type)
+    let callback = parse_qstash_callback(&wrapper)?;
+
     log::info!(
         "Processing video generation callback for principal {} counter {}",
         callback.request_key.principal,
         callback.request_key.counter
     );
-    
-    // Create rate limits client
+
+    // 2. Determine status based on QStash response and callback result
+    let (status, should_decrement) = determine_callback_status(wrapper.status, &callback.result);
+
+    // 3. Update status in rate limits canister
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &state.agent);
-    
-    // Convert our key type to the canister's key type
-    let canister_key = VideoGenRequestKey {
+    let request_key = VideoGenRequestKey {
         principal: callback.request_key.principal,
         counter: callback.request_key.counter,
     };
-    
-    // Determine the status to update based on QStash response and callback result
-    let (status, should_decrement) = if wrapper.status != 200 {
-        // QStash request failed
-        log::error!("Video generation request failed with QStash status: {}", wrapper.status);
-        let error_message = format!("QStash request failed with status: {}", wrapper.status);
-        (VideoGenRequestStatus::Failed(error_message), true)
-    } else {
-        // QStash request succeeded, check the actual result
-        match &callback.result {
-            VideoGenCallbackResult::Success(response) => (
-                VideoGenRequestStatus::Complete(response.video_url.clone()),
-                false,
-            ),
-            VideoGenCallbackResult::Failure(error) => (
-                VideoGenRequestStatus::Failed(error.clone()),
-                true,
-            ),
-        }
-    };
-    
-    // Update the status in the rate limits canister
 
-    match rate_limits_client
-        .update_video_generation_status(canister_key.clone(), status)
-        .await
-    {
-        Ok(result) => match result {
-            yral_canisters_client::rate_limits::Result1::Ok => {
-                log::info!(
-                    "Successfully updated video generation status for principal {} counter {}",
-                    callback.request_key.principal,
-                    callback.request_key.counter
-                );
+    update_rate_limit_status(&rate_limits_client, request_key.clone(), status).await?;
 
-                // If the request failed (either QStash or video generation), decrement counter
-                if should_decrement {
-                    decrement_counter_for_failure(
-                        &rate_limits_client,
-                        canister_key,
-                        callback.property,
+    // 4. Handle failure cleanup if needed
+    if should_decrement {
+        // Decrement counter
+        decrement_counter_for_failure(&rate_limits_client, request_key, callback.property.clone())
+            .await;
+
+        // Rollback balance using our utils function
+        if callback.deducted_amount.is_some() {
+            match get_hon_worker_jwt_token() {
+                Ok(jwt_token) => {
+                    log::info!(
+                        "Rolling back {} {:?} for failed video generation: principal {}",
+                        callback.deducted_amount.unwrap_or(0),
+                        callback.token_type,
+                        callback.request_key.principal
+                    );
+
+                    if let Err(e) = rollback_balance_on_failure(
+                        callback.request_key.principal,
+                        callback.deducted_amount,
+                        &callback.token_type,
+                        jwt_token,
+                        &state.agent,
                     )
-                    .await;
+                    .await
+                    {
+                        log::error!("Balance rollback failed: {e}");
+                        // Don't fail the callback on rollback errors
+                    }
                 }
-
-                Ok(StatusCode::OK)
+                Err(_) => {
+                    log::error!("Cannot rollback - JWT token not available");
+                }
             }
-            yral_canisters_client::rate_limits::Result1::Err(e) => {
-                log::error!("Failed to update video generation status: {}", e);
-                Err((StatusCode::INTERNAL_SERVER_ERROR, e))
-            }
-        },
-        Err(e) => {
-            log::error!("Failed to call update_video_generation_status: {}", e);
-            Err((
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!("Canister call failed: {}", e),
-            ))
         }
     }
+
+    Ok(StatusCode::OK)
 }

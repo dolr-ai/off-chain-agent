@@ -1,4 +1,3 @@
-pub mod notification_store_job;
 mod verify;
 
 use std::sync::Arc;
@@ -12,8 +11,10 @@ use tower::ServiceBuilder;
 use tracing::instrument;
 use verify::verify_qstash_message;
 
-use crate::qstash::duplicate::VideoPublisherData;
-use crate::qstash::notification_store_job::prune_notification_store;
+use crate::pipeline::Step;
+use crate::qstash::duplicate::VideoPublisherDataV2;
+use crate::qstash::hotornot_job::start_hotornot_job_v3;
+use crate::setup_context;
 use crate::{
     app_state::AppState,
     canister::{
@@ -59,9 +60,9 @@ impl QStashState {
 struct VideoHashIndexingRequest {
     video_id: String,
     video_url: String,
-    publisher_data: VideoPublisherData,
     #[serde(default)]
     video_info: Option<crate::events::event::UploadVideoInfo>,
+    publisher_data: VideoPublisherDataV2,
 }
 
 #[instrument(skip(state))]
@@ -69,34 +70,18 @@ async fn video_deduplication_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VideoHashIndexingRequest>,
 ) -> Result<Response, StatusCode> {
+    setup_context!(&req.video_id, Step::Deduplication);
+
     log::info!(
         "Processing video deduplication for video ID: {}",
         req.video_id
     );
 
-    sentry::configure_scope(|scope| {
-        scope.set_tag("yral.video_id", &req.video_id);
-        scope.set_tag(
-            "yral.publisher_user_id",
-            &req.publisher_data.publisher_principal,
-        );
-    });
-
-    sentry::capture_message("starting to process for duplication", sentry::Level::Info);
-
-    let publisher_data = VideoPublisherData {
-        publisher_principal: req.publisher_data.publisher_principal.clone(),
-        post_id: req.publisher_data.post_id,
-    };
-
-    let duplication_handler = duplicate::VideoHashDuplication::new(
-        &state.qstash_client.client,
-        &state.qstash_client.base_url,
-    );
+    let publisher_data = req.publisher_data.clone();
 
     let qstash_client = state.qstash_client.clone();
 
-    if let Err(e) = duplication_handler
+    if let Err(e) = duplicate::VideoHashDuplication
         .process_video_deduplication(
             &state.agent,
             &state.bigquery_client,
@@ -121,14 +106,10 @@ async fn video_deduplication_handler(
         )
         .await
     {
-        log::error!("Video deduplication failed: {}", e);
+        log::error!("Video deduplication failed: {e}");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    sentry::capture_message(
-        "responding that video deduplication check was completed",
-        sentry::Level::Info,
-    );
     let response = Response::builder()
         .status(StatusCode::OK)
         .body("Video deduplication check completed".into())
@@ -147,8 +128,8 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
         .route("/enqueue_video_nsfw_detection_v2", post(nsfw_job_v2))
         .route("/process_hls", post(process_hls))
-        .route("/report_post", post(qstash_report_post))
         .route("/storj_ingest", post(storj_ingest))
+        .route("/report_post", post(qstash_report_post))
         .route(
             "/start_backup_canisters_job_v2",
             post(backup_canisters_job_v2),
@@ -156,11 +137,11 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
         .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
+        .route("/start_hotornot_job_v3", post(start_hotornot_job_v3))
         .route(
             "/delete_and_reclaim_canisters",
             post(handle_delete_and_reclaim_canisters),
         )
-        .route("/prune_notification_store", post(prune_notification_store))
         .route(
             "/process_video_gen",
             post(crate::videogen::qstash_process::process_video_generation),

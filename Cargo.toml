@@ -52,6 +52,7 @@ google-cloud-bigquery = { version = "0.13.1", default-features = false, features
     "rustls-tls",
 ] }
 hex = "0.4.3"
+sha2 = "0.10"
 ic-sns-governance = { git = "https://github.com/dfinity/ic", rev = "tags/release-2025-07-11_03-31-base" }
 ic-utils = "0.41.0"
 utoipa = "5.3.1"
@@ -99,11 +100,13 @@ async-channel = "2.3.1"
 num-bigint = "0.4"
 hlskit = { git = "https://github.com/like-engels/hlskit-rs" }
 tempfile = "3.8"
+sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
 yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
     "full",
+    "user-post-service",
 ] }
 yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
 yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
@@ -111,13 +114,17 @@ yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", bran
 yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
     "ic",
+    "server",
 ] }
 yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+
 
 # Local (Path) - uncomment to use local development versions
 # yral-canisters-client = { path = "../yral-common/canisters-client", features = [
 #     "full",
-#     "rate-limits",
+#     "user-post-service",
 # ] }
 # yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
 # yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
@@ -125,6 +132,8 @@ yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "ma
 # yral-metrics = { path = "../yral-common/metrics" }
 # videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
 # yral-identity = { path = "../yral-common/identity" }
+# yral-canisters-common = { path = "../yral-common/canisters-common" }
+# yral-types = { path = "../yral-common/types" }
 
 
 [build-dependencies]

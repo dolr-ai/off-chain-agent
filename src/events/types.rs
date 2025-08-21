@@ -1,11 +1,7 @@
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use utoipa::ToSchema;
-use yral_canisters_client::notification_store::{
-    LikedPayload, NotificationStore, NotificationType, VideoUploadPayload,
-};
 use yral_metadata_types::{
     AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
     SendNotificationReq, WebpushConfig, WebpushFcmOptions,
@@ -16,6 +12,23 @@ use yral_metrics::metrics::{
 };
 
 use crate::app_state::AppState;
+
+pub fn string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrNumber {
+        String(String),
+        Number(u64),
+    }
+
+    match StringOrNumber::deserialize(deserializer)? {
+        StringOrNumber::String(s) => Ok(s),
+        StringOrNumber::Number(n) => Ok(n.to_string()),
+    }
+}
 
 #[derive(Serialize, Clone, Debug, ToSchema)]
 #[serde(tag = "event")]
@@ -52,8 +65,7 @@ impl<'de> Deserialize<'de> for AnalyticsEvent {
                 Ok(AnalyticsEvent::LikeVideo(like_video))
             }
             Some(event_type) => Err(serde::de::Error::custom(format!(
-                "Unknown event type: {}",
-                event_type
+                "Unknown event type: {event_type}"
             ))),
             None => Err(serde::de::Error::custom("Missing 'event' field")),
         }
@@ -99,6 +111,58 @@ impl AnalyticsEvent {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
+#[serde(tag = "event")]
+pub enum AnalyticsEventV3 {
+    VideoWatched(VideoWatchedV3),
+    VideoDurationWatched(VideoDurationWatchedPayloadV2),
+    LikeVideo(LikeVideoPayloadV2),
+}
+
+impl AnalyticsEventV3 {
+    pub fn tag(&self) -> String {
+        match self {
+            AnalyticsEventV3::VideoWatched(_) => "video_watched".to_string(),
+            AnalyticsEventV3::VideoDurationWatched(_) => "video_duration_watched".to_string(),
+            AnalyticsEventV3::LikeVideo(_) => "like_video".to_string(),
+        }
+    }
+
+    pub fn params(&self) -> Value {
+        match self {
+            AnalyticsEventV3::VideoWatched(event) => serde_json::to_value(event).unwrap(),
+            AnalyticsEventV3::VideoDurationWatched(event) => serde_json::to_value(event).unwrap(),
+            AnalyticsEventV3::LikeVideo(event) => serde_json::to_value(event).unwrap(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
+pub struct VideoWatchedV3 {
+    #[schema(value_type = String)]
+    pub publisher_user_id: Principal,
+    #[schema(value_type = String)]
+    pub user_id: Principal,
+    pub is_logged_in: bool,
+    pub display_name: String,
+    #[schema(value_type = String)]
+    pub canister_id: Principal,
+    pub video_id: String,
+    pub video_category: String,
+    pub creator_category: String,
+    pub hashtag_count: u32,
+    pub is_nsfw: bool,
+    pub is_hot_or_not: bool,
+    pub feed_type: String,
+    pub view_count: u32,
+    pub like_count: u32,
+    pub share_count: u32,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String,
+    pub publisher_canister_id: String,
+    pub nsfw_probability: f64,
+}
+
 // --------------------------------------------------
 // VideoWatched
 // --------------------------------------------------
@@ -141,8 +205,8 @@ pub struct VideoDurationWatchedPayload {
     pub absolute_watched: f64,
     #[serde(rename = "video_duration")]
     pub video_duration: f64,
-    #[serde(rename = "post_id", skip_serializing_if = "Option::is_none")]
-    pub post_id: Option<u64>,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String,
     #[serde(
         rename = "publisher_canister_id",
         skip_serializing_if = "Option::is_none"
@@ -152,9 +216,11 @@ pub struct VideoDurationWatchedPayload {
     pub nsfw_probability: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct VideoDurationWatchedPayloadV2 {
+    #[schema(value_type = String)]
     pub publisher_user_id: Option<Principal>,
+    #[schema(value_type = String)]
     pub user_id: Principal,
     #[serde(rename = "is_loggedIn", skip_serializing_if = "Option::is_none")]
     pub is_logged_in: Option<bool>,
@@ -179,8 +245,8 @@ pub struct VideoDurationWatchedPayloadV2 {
     pub percentage_watched: f64,
     pub absolute_watched: f64,
     pub video_duration: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub post_id: Option<u64>,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nsfw_probability: Option<f64>,
 }
@@ -217,8 +283,8 @@ pub struct VideoViewedPayload {
     pub like_count: Option<u64>,
     #[serde(rename = "share_count")]
     pub share_count: u64,
-    #[serde(rename = "post_id", skip_serializing_if = "Option::is_none")]
-    pub post_id: Option<u64>,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String,
     #[serde(
         rename = "publisher_canister_id",
         skip_serializing_if = "Option::is_none"
@@ -264,17 +330,19 @@ pub struct LikeVideoPayload {
     pub like_count: u64,
     #[serde(rename = "share_count")]
     pub share_count: u64,
-    #[serde(rename = "post_id")]
-    pub post_id: u64,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String,
     #[serde(rename = "publisher_canister_id")]
     pub publisher_canister_id: Principal,
     #[serde(rename = "nsfw_probability", skip_serializing_if = "Option::is_none")]
     pub nsfw_probability: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct LikeVideoPayloadV2 {
+    #[schema(value_type = String)]
     pub publisher_user_id: Principal,
+    #[schema(value_type = String)]
     pub user_id: Principal,
     #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
@@ -292,7 +360,8 @@ pub struct LikeVideoPayloadV2 {
     pub view_count: u64,
     pub like_count: u64,
     pub share_count: u64,
-    pub post_id: u64,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nsfw_probability: Option<f64>,
 }
@@ -421,8 +490,8 @@ pub struct VideoUploadSuccessfulPayload {
     pub is_filter_used: bool,
     #[serde(rename = "video_id")]
     pub video_id: String,
-    #[serde(rename = "post_id")]
-    pub post_id: u64,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String,
     #[serde(rename = "country", skip_serializing_if = "Option::is_none")]
     pub country: Option<String>,
 }
@@ -445,6 +514,7 @@ pub struct ReferPayload {
     pub refer_location: Option<String>,
 }
 
+#[allow(dead_code)]
 pub type ReferShareLinkPayload = ReferPayload;
 
 // --------------------------------------------------
@@ -501,6 +571,7 @@ pub struct LogoutClickedPayload {
     pub canister_id: Principal,
 }
 
+#[allow(dead_code)]
 pub type LogoutConfirmationPayload = LogoutClickedPayload;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -622,9 +693,9 @@ pub struct SatsWithdrawnPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum EventPayload {
-    VideoDurationWatched(VideoDurationWatchedPayload),
+    VideoDurationWatched(VideoDurationWatchedPayloadV2),
     VideoViewed(VideoViewedPayload),
-    LikeVideo(LikeVideoPayload),
+    LikeVideo(LikeVideoPayloadV2),
     ShareVideo(ShareVideoPayload),
     VideoUploadInitiated(VideoUploadInitiatedPayload),
     VideoUploadUploadButtonClicked(VideoUploadUploadButtonClickedPayload),
@@ -659,16 +730,19 @@ pub enum EventPayload {
 /// # Errors
 /// * Returns `serde_json::Error` if the event name is unknown OR the payload cannot
 ///   be deserialized into the expected structure.
-///
-
-// TODO: canister_id is used
-
 impl EventPayload {
+    // TODO: canister_id is used
+
     pub async fn send_notification(&self, app_state: &AppState) {
         match self {
             EventPayload::VideoUploadSuccessful(payload) => {
                 let title = "Video Uploaded";
                 let body = "Your video has been uploaded successfully";
+                let publisher_user_id = payload.publisher_user_id;
+                let canister_id = app_state
+                    .get_individual_canister_by_user_principal(publisher_user_id)
+                    .await
+                    .unwrap();
                 let notif_payload = SendNotificationReq {
                     notification: Some(NotificationPayload {
                         title: Some(title.to_string()),
@@ -718,7 +792,7 @@ impl EventPayload {
                                 },
                                 "sound": "default",
                             },
-                            "url": format!("https://yral.com/hot-or-not/{}/{}", payload.canister_id.to_text(), payload.post_id)
+                            "url": format!("https://yral.com/hot-or-not/{}/{}", canister_id.to_text(), payload.post_id)
                         })),
                         ..Default::default()
                     }),
@@ -733,7 +807,11 @@ impl EventPayload {
             EventPayload::LikeVideo(payload) => {
                 let title = "Video Liked";
                 let body = format!("{} liked your video", payload.user_id.to_text());
-
+                let publisher_user_id = payload.publisher_user_id;
+                let canister_id = app_state
+                    .get_individual_canister_by_user_principal(publisher_user_id)
+                    .await
+                    .unwrap();
                 let notif_payload = SendNotificationReq {
                     notification: Some(NotificationPayload {
                         title: Some(title.to_string()),
@@ -761,7 +839,7 @@ impl EventPayload {
                         fcm_options: Some(WebpushFcmOptions {
                             link: Some(format!(
                                 "https://yral.com/hot-or-not/{}/{}",
-                                payload.canister_id.to_text(),
+                                canister_id.to_text(),
                                 payload.post_id
                             )),
                             ..Default::default()
@@ -783,7 +861,7 @@ impl EventPayload {
                                 },
                                 "sound": "default",
                             },
-                            "url": format!("https://yral.com/hot-or-not/{}/{}", payload.canister_id.to_text(), payload.post_id)
+                            "url": format!("https://yral.com/hot-or-not/{}/{}", canister_id.to_text(), payload.post_id)
                         })),
                         ..Default::default()
                     }),
@@ -862,10 +940,10 @@ pub fn deserialize_event_payload(
 }
 
 #[test]
-fn test_data_payload_serialization(){
-    let payload = VideoUploadSuccessfulPayload{
+fn test_data_payload_serialization() {
+    let payload = VideoUploadSuccessfulPayload {
         canister_id: Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
-        post_id: 123,
+        post_id: "123".to_string(),
         publisher_user_id: Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
         user_id: Principal::from_text("mlj75-eyaaa-aaaaa-qbn5q-cai").unwrap(),
         display_name: None,
@@ -884,21 +962,15 @@ fn test_data_payload_serialization(){
         notification: Some(NotificationPayload {
             title: Some("test".to_string()),
             body: Some("test".to_string()),
-            image: Some(
-                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
-            ),
+            image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
         }),
         data: Some(json!({
             "payload": serde_json::to_string(&data).unwrap()
         })),
         android: Some(AndroidConfig {
             notification: Some(AndroidNotification {
-                icon: Some(
-                    "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
-                ),
-                image: Some(
-                    "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
-                ),
+                icon: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
+                image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -916,9 +988,7 @@ fn test_data_payload_serialization(){
         }),
         apns: Some(ApnsConfig {
             fcm_options: Some(ApnsFcmOptions {
-                image: Some(
-                    "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
-                ),
+                image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
                 ..Default::default()
             }),
             payload: Some(json!({
@@ -935,10 +1005,11 @@ fn test_data_payload_serialization(){
         }),
         ..Default::default()
     };
-    
+
     let stringed_payload = serde_json::to_string(&notif_payload).unwrap();
 
-    let deserialized_payload: SendNotificationReq = serde_json::from_str(&stringed_payload).unwrap();
+    let deserialized_payload: SendNotificationReq =
+        serde_json::from_str(&stringed_payload).unwrap();
 
     assert!(deserialized_payload.clone().data.unwrap()["payload"].is_string());
 

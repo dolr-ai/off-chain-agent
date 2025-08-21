@@ -1,0 +1,10 @@
+[cargo]
+features = []
+allTargets = true
+noDefaultFeatures = true
+
+[checkOnSave]
+command = "clippy"
+allTargets = true
+noDefaultFeatures = true
+features = []

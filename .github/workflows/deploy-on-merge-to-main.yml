@@ -24,16 +24,6 @@ jobs:
           name: build-glibc
       - name: Setup dfx
         uses: dfinity/setup-dfx@main
-      - name: Test pem file
-        run: |
-          touch actions_identity.pem
-          echo "$RECLAIM_CANISTER_PEM" > actions_identity.pem
-          dfx identity import --storage-mode=plaintext actions actions_identity.pem
-          dfx identity use actions
-          dfx identity list
-        env:
-          RECLAIM_CANISTER_PEM: |
-            ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
       - run: chmod +x target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent
       - uses: superfly/flyctl-actions/setup-flyctl@master
         env:
@@ -47,7 +37,7 @@ jobs:
           flyctl secrets set "CF_R2_ACCESS_KEY_TEMP=$CF_R2_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_R2_SECRET_ACCESS_KEY_TEMP=$CF_R2_SECRET_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY=$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" --app "icp-off-chain-agent" --stage
-          flyctl secrets set "RECLAIM_CANISTER_PEM=$RECLAIM_CANISTER_PEM" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "BACKEND_ADMIN_IDENTITY=$BACKEND_ADMIN_IDENTITY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "GOOGLE_SA_KEY=$GOOGLE_SA_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN=$YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "GRPC_AUTH_TOKEN=$GRPC_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
@@ -75,12 +65,13 @@ jobs:
           flyctl secrets set "YRAL_AUTH_REDIS_URL=$YRAL_AUTH_REDIS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set "ML_FEED_CACHE_MEMORYSTORE_URL=$ML_FEED_CACHE_MEMORYSTORE_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set "LUMALABS_API_KEY=$LUMALABS_API_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_HON_WORKER_JWT=$YRAL_HON_WORKER_JWT" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
           CF_R2_SECRET_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
           CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY: ${{ secrets.CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY }}
-          RECLAIM_CANISTER_PEM: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
+          BACKEND_ADMIN_IDENTITY: ${{ secrets.YRAL_DAPP_BACKEND_APP_ADMIN_AND_PROPOSAL_SUBMITTER_IDENTITY_PRIVATE_KEY }}
           GOOGLE_SA_KEY: ${{ secrets.YRAL_OFF_CHAIN_AGENT_GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON_KEY }}
           YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN: ${{ secrets.YRAL_CLOUDFLARE_WORKERS_TO_OFFCHAIN_AGENT_GRPC_AUTH_TOKEN }}
           GRPC_AUTH_TOKEN: ${{ secrets.OFF_CHAIN_AGENT_GRPC_AUTH_TOKEN }}
@@ -106,6 +97,7 @@ jobs:
           YRAL_AUTH_REDIS_URL: ${{ secrets.YRAL_AUTH_REDIS_URL }}
           ML_FEED_CACHE_MEMORYSTORE_URL: ${{ secrets.ML_FEED_CACHE_MEMORYSTORE_URL }}
           LUMALABS_API_KEY: ${{ secrets.VIDEOGEN_PROVIDER_LUMALABS_API_KEY }}
+          YRAL_HON_WORKER_JWT: ${{ secrets.YRAL_HON_WORKER_JWT }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml
         env:

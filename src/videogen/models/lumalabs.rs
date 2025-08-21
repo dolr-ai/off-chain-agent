@@ -1,14 +1,12 @@
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::info;
-use uuid::Uuid;
 use videogen_common::{
-    LumaLabsDuration, LumaLabsResolution, VideoGenError, VideoGenInput, VideoGenResponse,
+    ImageData, LumaLabsDuration, LumaLabsResolution, VideoGenError, VideoGenInput, VideoGenResponse,
 };
 
 use crate::app_state::AppState;
-use crate::consts::{LUMALABS_API_URL, LUMALABS_IMAGE_BUCKET};
+use crate::consts::LUMALABS_API_URL;
 
 #[derive(Serialize)]
 struct LumaLabsRequest {
@@ -42,13 +40,13 @@ struct LumaLabsFrame {
 #[derive(Deserialize)]
 struct LumaLabsResponse {
     id: String,
-    state: String,
-    created_at: String,
+    // state: String,
+    // created_at: String,
 }
 
 #[derive(Deserialize)]
 struct LumaLabsGenerationStatus {
-    id: String,
+    // id: String,
     state: String,
     assets: Option<LumaLabsAssets>,
     #[serde(rename = "failure_reason")]
@@ -58,8 +56,8 @@ struct LumaLabsGenerationStatus {
 #[derive(Deserialize)]
 struct LumaLabsAssets {
     video: Option<String>,
-    image: Option<String>,
-    progress_video: Option<String>,
+    // image: Option<String>,
+    // progress_video: Option<String>,
 }
 
 pub async fn generate(
@@ -71,41 +69,54 @@ pub async fn generate(
             "Only LumaLabs input is supported".to_string(),
         ));
     };
-    
+
     let prompt = model.prompt;
-    let image = model.image;
+    let image_data = model.image;
     let resolution = model.resolution;
     let duration = model.duration;
     let aspect_ratio = model.aspect_ratio;
     let loop_video = model.loop_video;
+
+    // Process image data - upload to GCS if it's base64, or use URL directly
+    let image_url = if let Some(ref img_data) = image_data {
+        match img_data {
+            ImageData::Url(url) => Some(url.clone()),
+            ImageData::Base64(image_input) => {
+                #[cfg(not(feature = "local-bin"))]
+                {
+                    Some(
+                        upload_image_to_gcs(
+                            &app_state.gcs_client,
+                            &image_input.data,
+                            &image_input.mime_type,
+                        )
+                        .await?,
+                    )
+                }
+                #[cfg(feature = "local-bin")]
+                {
+                    return Err(VideoGenError::InvalidInput(
+                        "Image upload not supported in local mode".to_string(),
+                    ));
+                }
+            }
+        }
+    } else {
+        None
+    };
 
     // Get LumaLabs API key from environment
     let api_key = std::env::var("LUMALABS_API_KEY").map_err(|_| VideoGenError::AuthError)?;
 
     let client = reqwest::Client::new();
 
-    // Upload image to GCS if provided
-    let keyframes = if let Some(img) = image {
-        #[cfg(not(feature = "local-bin"))]
-        {
-            let image_url =
-                upload_image_to_gcs(&app_state.gcs_client, &img.data, &img.mime_type).await?;
-            Some(LumaLabsKeyframes {
-                frame0: LumaLabsFrame {
-                    frame_type: "image".to_string(),
-                    url: image_url,
-                },
-            })
-        }
-        #[cfg(feature = "local-bin")]
-        {
-            return Err(VideoGenError::InvalidInput(
-                "Image upload not supported in local mode".to_string(),
-            ));
-        }
-    } else {
-        None
-    };
+    // Create keyframes if image URL is available
+    let keyframes = image_url.map(|url| LumaLabsKeyframes {
+        frame0: LumaLabsFrame {
+            frame_type: "image".to_string(),
+            url,
+        },
+    });
 
     // Build request
     let request = LumaLabsRequest {
@@ -119,7 +130,7 @@ pub async fn generate(
     };
 
     // Create generation
-    let create_url = format!("{}/generations", LUMALABS_API_URL);
+    let create_url = format!("{LUMALABS_API_URL}/generations");
     let response = client
         .post(&create_url)
         .bearer_auth(&api_key)
@@ -128,7 +139,7 @@ pub async fn generate(
         .json(&request)
         .send()
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to create generation: {}", e)))?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to create generation: {e}")))?;
 
     if !response.status().is_success() {
         let error_text = response
@@ -136,13 +147,12 @@ pub async fn generate(
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
         return Err(VideoGenError::ProviderError(format!(
-            "LumaLabs API error: {}",
-            error_text
+            "LumaLabs API error: {error_text}"
         )));
     }
 
     let generation_response: LumaLabsResponse = response.json().await.map_err(|e| {
-        VideoGenError::ProviderError(format!("Failed to parse generation response: {}", e))
+        VideoGenError::ProviderError(format!("Failed to parse generation response: {e}"))
     })?;
 
     info!(
@@ -162,12 +172,9 @@ pub async fn generate(
 
 async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<String, VideoGenError> {
     let client = reqwest::Client::new();
-    let status_url = format!("{}/generations/{}", LUMALABS_API_URL, generation_id);
+    let status_url = format!("{LUMALABS_API_URL}/generations/{generation_id}");
 
-    log::info!(
-        "Starting to poll for completion of generation: {}",
-        generation_id
-    );
+    log::info!("Starting to poll for completion of generation: {generation_id}");
 
     let max_attempts = 120; // 10 minutes max
     let poll_interval = Duration::from_secs(5);
@@ -175,11 +182,11 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
     for attempt in 0..max_attempts {
         let response = client
             .get(&status_url)
-            .bearer_auth(&api_key)
+            .bearer_auth(api_key)
             .send()
             .await
             .map_err(|e| {
-                VideoGenError::NetworkError(format!("Failed to check generation status: {}", e))
+                VideoGenError::NetworkError(format!("Failed to check generation status: {e}"))
             })?;
 
         if !response.status().is_success() {
@@ -188,22 +195,20 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(VideoGenError::ProviderError(format!(
-                "Failed to check generation status: {}",
-                error_text
+                "Failed to check generation status: {error_text}"
             )));
         }
 
         let response_text = response.text().await.map_err(|e| {
-            VideoGenError::NetworkError(format!("Failed to read response text: {}", e))
+            VideoGenError::NetworkError(format!("Failed to read response text: {e}"))
         })?;
 
-        log::info!("Attempting to parse status response: {}", response_text);
+        log::info!("Attempting to parse status response: {response_text}");
 
         let status: LumaLabsGenerationStatus =
             serde_json::from_str(&response_text).map_err(|e| {
                 VideoGenError::ProviderError(format!(
-                    "Failed to parse status response: {}. Response was: {}",
-                    e, response_text
+                    "Failed to parse status response: {e}. Response was: {response_text}"
                 ))
             })?;
 
@@ -229,8 +234,7 @@ async fn poll_for_completion(generation_id: &str, api_key: &str) -> Result<Strin
                     .failure_reason
                     .unwrap_or_else(|| "Unknown error".to_string());
                 return Err(VideoGenError::ProviderError(format!(
-                    "Video generation failed: {}",
-                    reason
+                    "Video generation failed: {reason}"
                 )));
             }
             "pending" | "processing" | "dreaming" => {
@@ -265,9 +269,13 @@ async fn upload_image_to_gcs(
     mime_type: &str,
 ) -> Result<String, VideoGenError> {
     // Decode base64 image
+
+    use crate::consts::LUMALABS_IMAGE_BUCKET;
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+    use uuid::Uuid;
     let image_bytes = BASE64
         .decode(image_data)
-        .map_err(|e| VideoGenError::InvalidInput(format!("Invalid base64 image data: {}", e)))?;
+        .map_err(|e| VideoGenError::InvalidInput(format!("Invalid base64 image data: {e}")))?;
 
     // Generate unique filename
     let file_extension = match mime_type {
@@ -284,15 +292,10 @@ async fn upload_image_to_gcs(
         .object()
         .create(LUMALABS_IMAGE_BUCKET, image_bytes, &filename, mime_type)
         .await
-        .map_err(|e| {
-            VideoGenError::NetworkError(format!("Failed to upload image to GCS: {}", e))
-        })?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to upload image to GCS: {e}")))?;
 
     // Return public URL
-    let public_url = format!(
-        "https://storage.googleapis.com/{}/{}",
-        LUMALABS_IMAGE_BUCKET, filename
-    );
+    let public_url = format!("https://storage.googleapis.com/{LUMALABS_IMAGE_BUCKET}/{filename}");
 
     info!("Uploaded image to GCS: {}", public_url);
     Ok(public_url)

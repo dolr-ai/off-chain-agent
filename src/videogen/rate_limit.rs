@@ -7,11 +7,9 @@ use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 
 use crate::{
     app_state::AppState,
-    consts::{
-        RATE_LIMITS_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID, VIDEOGEN_RATE_LIMIT_PROPERTY,
-    },
+    consts::{RATE_LIMITS_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID},
 };
-use videogen_common::VideoGenError;
+use videogen_common::{TokenType, VideoGenError};
 
 /// Checks if user is registered via individual canister
 async fn check_individual_canister_registration(
@@ -24,11 +22,7 @@ async fn check_individual_canister_registration(
     {
         Ok(id) => id,
         Err(e) => {
-            log::warn!(
-                "Failed to get individual canister for principal {}: {}",
-                user_principal,
-                e
-            );
+            log::warn!("Failed to get individual canister for principal {user_principal}: {e}");
             return false;
         }
     };
@@ -39,9 +33,7 @@ async fn check_individual_canister_registration(
         Ok(result) => result,
         Err(e) => {
             log::warn!(
-                "Error calling get_session_type on individual canister for {}: {}",
-                user_principal,
-                e
+                "Error calling get_session_type on individual canister for {user_principal}: {e}"
             );
             return false;
         }
@@ -56,9 +48,7 @@ async fn check_individual_canister_registration(
         }
         yral_canisters_client::individual_user_template::Result7::Err(e) => {
             log::warn!(
-                "Failed to get session type from individual canister for {}: {}",
-                user_principal,
-                e
+                "Failed to get session type from individual canister for {user_principal}: {e}"
             );
             false
         }
@@ -75,11 +65,7 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
     {
         Ok(result) => result,
         Err(e) => {
-            log::error!(
-                "Failed to get session type for principal {}: {}",
-                user_principal,
-                e
-            );
+            log::error!("Failed to get session type for principal {user_principal}: {e}");
             return false;
         }
     };
@@ -91,70 +77,79 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
         yral_canisters_client::user_info_service::Result2::Err(e) => {
             if e.contains("User not found") {
                 log::info!(
-                    "User {} not found in user info service, checking individual canister",
-                    user_principal
+                    "User {user_principal} not found in user info service, checking individual canister"
                 );
                 check_individual_canister_registration(user_principal, app_state).await
             } else {
-                log::warn!(
-                    "Failed to get session type for principal {}: {}",
-                    user_principal,
-                    e
-                );
+                log::warn!("Failed to get session type for principal {user_principal}: {e}");
                 false
             }
         }
     }
 }
 
-/// Verifies rate limit and creates video generation request if allowed
+/// Verifies rate limit and creates video generation request if allowed (v1 with payment support)
 ///
 /// # Arguments
 /// * `user_principal` - The user's Principal
 /// * `model` - The video generation model name (e.g., "VEO3", "LUMALABS")
 /// * `prompt` - The generation prompt
 /// * `property` - The rate limit property (e.g., "VIDEOGEN")
+/// * `token_type` - The token type (Free, Sats, or Dolr)
+/// * `payment_amount` - Optional payment amount for paid requests
 /// * `app_state` - The application state containing the IC agent
 ///
 /// # Returns
 /// * `Ok(VideoGenRequestKey)` - The request key if rate limit check passes and request is created
 /// * `Err((StatusCode, VideoGenError))` - Error with appropriate status code
-pub async fn verify_rate_limit_and_create_request(
+pub async fn verify_rate_limit_and_create_request_v1(
     user_principal: Principal,
     model: &str,
     prompt: &str,
     property: &str,
+    token_type: &TokenType,
+    payment_amount: Option<u64>,
     app_state: &Arc<AppState>,
 ) -> Result<crate::videogen::VideoGenRequestKey, (StatusCode, VideoGenError)> {
     // Get user session type to determine if registered
     let is_registered = check_user_registration(user_principal, app_state).await;
 
     log::info!(
-        "User {} is {}registered for model {}",
+        "User {} is {}registered for model {} with token type {:?}",
         user_principal,
         if is_registered { "" } else { "not " },
-        model
+        model,
+        token_type
     );
+
+    // Determine if this is a paid request based on token type
+    let is_paid = !matches!(token_type, TokenType::Free);
+    let payment_amount_str = if is_paid {
+        payment_amount.map(|amt| amt.to_string())
+    } else {
+        None
+    };
 
     // Create rate limits client
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
 
-    // Create video generation request (includes rate limit check)
+    // Use the v1 method that handles both rate limit check and request creation
     let request_key_result = rate_limits_client
-        .create_video_generation_request(
+        .create_video_generation_request_v_1(
             user_principal,
             model.to_string(),
             prompt.to_string(),
             property.to_string(),
             is_registered,
+            is_paid,
+            payment_amount_str,
         )
         .await
         .map_err(|e| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
                 VideoGenError::NetworkError(format!(
-                    "Failed to create video generation request: {}",
-                    e
+                    "Failed to create video generation request: {e}"
                 )),
             )
         })?;
@@ -168,7 +163,7 @@ pub async fn verify_rate_limit_and_create_request(
         }
         yral_canisters_client::rate_limits::Result_::Err(e) => {
             // Check if it's a rate limit error
-            if e.contains("Rate limit exceeded") {
+            if e.contains("Rate limit exceeded") || e.contains("Property rate limit exceeded") {
                 Err((
                     StatusCode::TOO_MANY_REQUESTS,
                     VideoGenError::ProviderError(e),
@@ -176,7 +171,7 @@ pub async fn verify_rate_limit_and_create_request(
             } else {
                 Err((
                     StatusCode::BAD_REQUEST,
-                    VideoGenError::InvalidInput(format!("Failed to create request: {}", e)),
+                    VideoGenError::InvalidInput(format!("Failed to create request: {e}")),
                 ))
             }
         }

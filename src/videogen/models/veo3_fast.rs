@@ -5,6 +5,7 @@ use videogen_common::{Veo3AspectRatio, VideoGenError, VideoGenInput, VideoGenRes
 
 use crate::app_state::AppState;
 use crate::consts::{VEO3_LOCATION, VEO3_PROJECT_ID, VEO3_STORAGE_URI};
+use crate::utils::gcs::image_data_to_input;
 
 #[derive(Serialize)]
 struct Veo3Request {
@@ -85,13 +86,23 @@ pub async fn generate(
             "Only Veo3Fast input is supported".to_string(),
         ));
     };
-    
+
     let prompt = model.prompt;
     let negative_prompt = model.negative_prompt;
-    let image = model.image;
+    let image_data = model.image;
     let aspect_ratio = model.aspect_ratio;
     let duration_seconds = model.duration_seconds;
     let generate_audio = model.generate_audio;
+
+    // Convert ImageData to ImageInput if needed
+    let image =
+        if let Some(ref img_data) = image_data {
+            Some(image_data_to_input(img_data).await.map_err(|e| {
+                VideoGenError::InvalidInput(format!("Failed to process image: {e}"))
+            })?)
+        } else {
+            None
+        };
 
     // Get access token using app_state
     let access_token = app_state
@@ -100,8 +111,7 @@ pub async fn generate(
 
     let model_id = "veo-3.0-fast-generate-preview";
     let url = format!(
-        "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:predictLongRunning",
-        VEO3_LOCATION, VEO3_PROJECT_ID, VEO3_LOCATION, model_id
+        "https://{VEO3_LOCATION}-aiplatform.googleapis.com/v1/projects/{VEO3_PROJECT_ID}/locations/{VEO3_LOCATION}/publishers/google/models/{model_id}:predictLongRunning"
     );
 
     // Build instance
@@ -148,15 +158,14 @@ pub async fn generate(
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
         return Err(VideoGenError::ProviderError(format!(
-            "Veo3 API error: {}",
-            error_text
+            "Veo3 API error: {error_text}"
         )));
     }
 
     let veo_response: Veo3Response = response
         .json()
         .await
-        .map_err(|e| VideoGenError::ProviderError(format!("Failed to parse response: {}", e)))?;
+        .map_err(|e| VideoGenError::ProviderError(format!("Failed to parse response: {e}")))?;
 
     info!(
         "Video generation started with operation: {}",
@@ -179,8 +188,7 @@ async fn poll_for_completion(
 ) -> Result<String, VideoGenError> {
     let model_id = "veo-3.0-fast-generate-preview";
     let poll_url = format!(
-        "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:fetchPredictOperation",
-        VEO3_LOCATION, VEO3_PROJECT_ID, VEO3_LOCATION, model_id
+        "https://{VEO3_LOCATION}-aiplatform.googleapis.com/v1/projects/{VEO3_PROJECT_ID}/locations/{VEO3_LOCATION}/publishers/google/models/{model_id}:fetchPredictOperation"
     );
 
     let client = reqwest::Client::new();
@@ -196,12 +204,12 @@ async fn poll_for_completion(
 
         let response = client
             .post(&poll_url)
-            .bearer_auth(&access_token)
+            .bearer_auth(access_token)
             .header("Content-Type", "application/json; charset=utf-8")
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| VideoGenError::NetworkError(format!("Failed to poll operation: {}", e)))?;
+            .map_err(|e| VideoGenError::NetworkError(format!("Failed to poll operation: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response
@@ -209,20 +217,20 @@ async fn poll_for_completion(
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(VideoGenError::ProviderError(format!(
-                "Failed to check operation status: {}",
-                error_text
+                "Failed to check operation status: {error_text}"
             )));
         }
 
-        let resjson = response.json::<Value>().await.map_err(|e| {
-            VideoGenError::ProviderError(format!("Failed to parse response: {}", e))
-        })?;
+        let resjson = response
+            .json::<Value>()
+            .await
+            .map_err(|e| VideoGenError::ProviderError(format!("Failed to parse response: {e}")))?;
 
-        log::debug!("Operation status response: {:?}", resjson);
+        log::debug!("Operation status response: {resjson:?}");
 
         let operation_status: Veo3OperationResponse = serde_json::from_value(resjson.clone())
             .map_err(|e| {
-                VideoGenError::ProviderError(format!("Failed to parse operation response: {}", e))
+                VideoGenError::ProviderError(format!("Failed to parse operation response: {e}"))
             })?;
 
         if operation_status.done == Some(true) {
@@ -257,8 +265,7 @@ async fn poll_for_completion(
                             if !reasons.is_empty() {
                                 let reason_text = reasons.join("; ");
                                 return Err(VideoGenError::InvalidInput(format!(
-                                    "Content was filtered by Responsible AI practices: {}",
-                                    reason_text
+                                    "Content was filtered by Responsible AI practices: {reason_text}"
                                 )));
                             }
                         }
@@ -289,14 +296,9 @@ async fn poll_for_completion(
                         ));
                     }
                     Err(e) => {
-                        log::error!(
-                            "Failed to parse video response: {:?}, raw: {:?}",
-                            e,
-                            result_value
-                        );
+                        log::error!("Failed to parse video response: {e:?}, raw: {result_value:?}");
                         return Err(VideoGenError::ProviderError(format!(
-                            "Failed to parse video generation response: {}",
-                            e
+                            "Failed to parse video generation response: {e}"
                         )));
                     }
                 }
@@ -330,14 +332,13 @@ fn convert_gcs_to_public_url(gcs_url: &str) -> Result<String, VideoGenError> {
     // Check if it's a GCS URL
     if !gcs_url.starts_with("gs://") {
         return Err(VideoGenError::ProviderError(format!(
-            "Invalid GCS URL format: {}",
-            gcs_url
+            "Invalid GCS URL format: {gcs_url}"
         )));
     }
 
     // Remove the gs:// prefix and convert to public URL
     let path = gcs_url.strip_prefix("gs://").unwrap();
-    let public_url = format!("https://storage.googleapis.com/{}", path);
+    let public_url = format!("https://storage.googleapis.com/{path}");
 
     Ok(public_url)
 }

@@ -1,5 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
+use crate::events::types::string_or_number;
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
 use http::StatusCode;
@@ -28,54 +29,8 @@ pub enum ReportMode {
 
 impl Display for ReportMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
-}
-
-#[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
-pub struct ReportPostRequest {
-    #[schema(value_type = String)]
-    pub canister_id: Principal,
-    pub post_id: u64,
-    pub video_id: String,
-    #[schema(value_type = String)]
-    pub user_canister_id: Principal,
-    #[schema(value_type = String)]
-    pub user_principal: Principal,
-    pub reason: String,
-}
-
-// TODO: canister_id still being used
-#[instrument(skip(state, verified_request))]
-#[utoipa::path(
-    post,
-    path = "/report",
-    request_body = PostRequest<ReportPostRequest>,
-    tag = "posts",
-    responses(
-        (status = 200, description = "Report post success"),
-        (status = 500, description = "Internal server error"),
-    )
-)]
-#[deprecated = "Check /report_v2 instead"]
-pub async fn handle_report_post(
-    State(state): State<Arc<AppState>>,
-    Json(verified_request): Json<VerifiedPostRequest<ReportPostRequest>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let request_body = verified_request.request.request_body;
-
-    repost_post_common_impl(state, request_body.into())
-        .await
-        .map_err(|e| {
-            log::error!("Failed to report post: {}", e);
-
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to report post: {}", e),
-            )
-        })?;
-
-    Ok((StatusCode::OK, "Post reported".to_string()))
 }
 
 #[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
@@ -94,17 +49,49 @@ pub struct ReportPostRequestV2 {
     pub report_mode: ReportMode,
 }
 
-impl From<ReportPostRequest> for ReportPostRequestV2 {
-    fn from(request: ReportPostRequest) -> Self {
+#[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
+pub struct ReportPostRequestV3 {
+    #[schema(value_type = String)]
+    pub publisher_principal: Principal,
+    #[schema(value_type = String)]
+    pub canister_id: Principal,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String, // Changed from u64 to String
+    pub video_id: String,
+    #[schema(value_type = String)]
+    pub user_canister_id: Principal,
+    #[schema(value_type = String)]
+    pub user_principal: Principal,
+    pub reason: String,
+    pub report_mode: ReportMode,
+}
+
+impl From<ReportPostRequestV3> for ReportPostRequestV2 {
+    fn from(request: ReportPostRequestV3) -> Self {
         Self {
-            publisher_principal: Principal::anonymous(),
+            publisher_principal: request.publisher_principal,
             canister_id: request.canister_id,
-            post_id: request.post_id,
+            post_id: request.post_id.parse().unwrap_or(0), // Convert String to u64
             video_id: request.video_id,
             user_canister_id: request.user_canister_id,
             user_principal: request.user_principal,
             reason: request.reason,
-            report_mode: ReportMode::default(),
+            report_mode: request.report_mode,
+        }
+    }
+}
+
+impl From<ReportPostRequestV2> for ReportPostRequestV3 {
+    fn from(request: ReportPostRequestV2) -> Self {
+        Self {
+            publisher_principal: request.publisher_principal,
+            canister_id: request.canister_id,
+            post_id: request.post_id.to_string(), // Convert u64 to String
+            video_id: request.video_id,
+            user_canister_id: request.user_canister_id,
+            user_principal: request.user_principal,
+            reason: request.reason,
+            report_mode: request.report_mode,
         }
     }
 }
@@ -127,14 +114,45 @@ pub async fn handle_report_post_v2(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let request_body = verified_request.request.request_body;
 
-    repost_post_common_impl(state, request_body)
+    repost_post_common_impl(state, request_body.into())
         .await
         .map_err(|e| {
-            log::error!("Failed to report post: {}", e);
+            log::error!("Failed to report post: {e}");
 
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to report post: {}", e),
+                format!("Failed to report post: {e}"),
+            )
+        })?;
+
+    Ok((StatusCode::OK, "Post reported".to_string()))
+}
+
+#[instrument(skip(state, verified_request))]
+#[utoipa::path(
+    post,
+    path = "/report",
+    request_body = PostRequest<ReportPostRequestV3>,
+    tag = "posts",
+    responses(
+        (status = 200, description = "Report post success"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+pub async fn handle_report_post_v3(
+    State(state): State<Arc<AppState>>,
+    Json(verified_request): Json<VerifiedPostRequest<ReportPostRequestV3>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let request_body = verified_request.request.request_body;
+
+    repost_post_common_impl(state, request_body)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to report post: {e}");
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to report post: {e}"),
             )
         })?;
 
@@ -143,7 +161,7 @@ pub async fn handle_report_post_v2(
 
 pub async fn qstash_report_post(
     State(_state): State<Arc<AppState>>,
-    Json(payload): Json<ReportPostRequestV2>,
+    Json(payload): Json<ReportPostRequestV3>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let tls_config = ClientTlsConfig::new().with_webpki_roots();
 
@@ -152,7 +170,7 @@ pub async fn qstash_report_post(
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to create channel: {}", e),
+                format!("Failed to create channel: {e}"),
             )
         })?
         .connect()
@@ -160,7 +178,7 @@ pub async fn qstash_report_post(
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to connect to ML feed server: {}", e),
+                format!("Failed to connect to ML feed server: {e}"),
             )
         })?;
 
@@ -173,11 +191,11 @@ pub async fn qstash_report_post(
     };
 
     client.report_video_v3(request).await.map_err(|e| {
-        log::error!("Failed to report video: {}", e);
+        log::error!("Failed to report video: {e}");
 
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to report video: {}", e),
+            format!("Failed to report video: {e}"),
         )
     })?;
 
@@ -186,7 +204,7 @@ pub async fn qstash_report_post(
 
 pub async fn repost_post_common_impl(
     state: Arc<AppState>,
-    payload: ReportPostRequestV2,
+    payload: ReportPostRequestV3,
 ) -> anyhow::Result<()> {
     let video_url = format!(
         "https://yral.com/hot-or-not/{}/{}",
@@ -250,7 +268,7 @@ pub async fn repost_post_common_impl(
 
     let res = send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, data).await;
     if res.is_err() {
-        log::error!("Error sending data to Google Chat: {:?}", res);
+        log::error!("Error sending data to Google Chat: {res:?}");
     }
 
     #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]

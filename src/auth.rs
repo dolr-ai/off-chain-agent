@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tonic::metadata::MetadataValue;
 use tonic::{Request, Status};
 
+#[allow(clippy::result_large_err)]
 pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
     let mut grpc_token = env::var("GRPC_AUTH_TOKEN").expect("GRPC_AUTH_TOKEN is required");
     let mut yral_cloudflare_workers_grpc_auth_token =
@@ -15,9 +16,9 @@ pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
     grpc_token.retain(|c| !c.is_whitespace());
     yral_cloudflare_workers_grpc_auth_token.retain(|c| !c.is_whitespace());
 
-    let token: MetadataValue<_> = format!("Bearer {}", grpc_token).parse().unwrap();
+    let token: MetadataValue<_> = format!("Bearer {grpc_token}").parse().unwrap();
     let yral_cloudflare_worker_token: MetadataValue<_> =
-        format!("Bearer {}", yral_cloudflare_workers_grpc_auth_token)
+        format!("Bearer {yral_cloudflare_workers_grpc_auth_token}")
             .parse()
             .unwrap();
 
@@ -46,6 +47,7 @@ pub struct Claims {
     pub exp: usize,
 }
 
+#[allow(dead_code)]
 pub fn verify_jwt(
     public_key_pem: &str,
     aud: String,
@@ -64,6 +66,7 @@ pub fn verify_jwt(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn verify_jwt_from_header(
     public_key_pem: &str,
     aud: String,

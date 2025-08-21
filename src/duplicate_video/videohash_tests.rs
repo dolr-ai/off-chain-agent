@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
+#[allow(dead_code)]
 fn create_test_video(
     path: &str,
     duration: u32,
@@ -18,7 +19,7 @@ fn create_test_video(
             "-f",
             "lavfi",
             "-i",
-            &format!("color=c={}:s=320x240:d={}", color, duration),
+            &format!("color=c={color}:s=320x240:d={duration}"),
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -70,12 +71,11 @@ async fn test_identical_videos_have_identical_hashes(
     println!("Hash 2: {}", hash2.hash);
 
     let similarity = hash1.similarity(&hash2);
-    println!("Similarity: {}%", similarity);
+    println!("Similarity: {similarity}%");
 
     assert!(
         similarity > 99.0,
-        "Identical videos should have a similarity > 99% (got {}%)",
-        similarity
+        "Identical videos should have a similarity > 99% (got {similarity}%)"
     );
 
     Ok(())
@@ -100,18 +100,16 @@ async fn test_similar_videos_have_similar_hashes(
     println!("Hash 2: {}", hash2.hash);
 
     let similarity = hash1.similarity(&hash2);
-    println!("Similarity: {}%", similarity);
+    println!("Similarity: {similarity}%");
 
     assert!(
         similarity >= 85.0,
-        "Similar videos should have a similarity >= 85% (got {}%)",
-        similarity
+        "Similar videos should have a similarity >= 85% (got {similarity}%)"
     );
 
     assert!(
         similarity < 99.0,
-        "Similar but not identical videos should have a similarity < 99% (got {}%)",
-        similarity
+        "Similar but not identical videos should have a similarity < 99% (got {similarity}%)"
     );
 
     Ok(())
@@ -177,7 +175,7 @@ async fn test_error_handling_invalid_video() -> Result<(), Box<dyn std::error::E
 {
     let test_dir = "target/test_videos";
     fs::create_dir_all(test_dir)?;
-    let invalid_path = format!("{}/not_a_video.mp4", test_dir);
+    let invalid_path = format!("{test_dir}/not_a_video.mp4");
 
     let mut file = fs::File::create(&invalid_path)?;
     file.write_all(b"This is not a video file")?;
