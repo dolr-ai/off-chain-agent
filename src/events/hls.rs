@@ -204,12 +204,13 @@ async fn upload_hls_to_storj(
     hls_data: HlsVideo,
     video_info: &UploadVideoInfo,
     qstash_client: &crate::qstash::client::QStashClient,
+    is_nsfw: bool
 ) -> Result<String, Error> {
     // Create temporary directory for HLS files
     let temp_dir = format!("/tmp/hls_{}", video_id);
     fs::create_dir_all(&temp_dir)?;
     
-    let base_path = format!("hls/{}", video_id);
+    let base_path = format!("{}/hls", video_id);
 
     // Write and upload master playlist
     let master_path = format!("{}/master.m3u8", temp_dir);
@@ -219,13 +220,8 @@ async fn upload_hls_to_storj(
     let master_args = storj_interface::duplicate::Args {
         publisher_user_id: video_info.publisher_user_id.clone(),
         video_id: format!("{}/master.m3u8", base_path),
-        is_nsfw: false,
-        metadata: [
-            ("post_id".into(), video_info.post_id.to_string()),
-            ("timestamp".into(), video_info.timestamp.clone()),
-            ("file_type".into(), "hls_master".into()),
-            ("original_video_id".into(), video_id.to_string()),
-        ]
+        is_nsfw,
+        metadata: []
         .into(),
     };
     
@@ -274,11 +270,8 @@ async fn upload_hls_to_storj(
         }
     }
 
-    // Clean up temporary directory
     fs::remove_dir_all(&temp_dir).ok();
 
-    // Return the CDN URL for the master playlist
-    // This URL pattern should match how Storj serves files
     Ok(format!("https://link.storjshare.io/raw/{}/master.m3u8", base_path))
 }
 
@@ -356,7 +349,7 @@ pub async fn process_hls(
 
     // Upload HLS to Storj
     log::info!("Uploading HLS files to Storj...");
-    let hls_url = upload_hls_to_storj(&request.video_id, hls_result, &request.video_info, &state.qstash_client).await?;
+    let hls_url = upload_hls_to_storj(&request.video_id, hls_result, &request.video_info, &state.qstash_client, request.is_nsfw).await?;
 
     // Store HLS info
     #[cfg(not(feature = "local-bin"))]
