@@ -28,7 +28,6 @@ pub mod warehouse_events {
         tonic::include_file_descriptor_set!("warehouse_events_descriptor");
 }
 
-pub mod cloudflare;
 pub mod event;
 pub mod hls;
 pub mod nsfw;
