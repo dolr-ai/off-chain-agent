@@ -9451,6 +9451,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
  "windows-sys 0.59.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9944,6 +9945,7 @@ dependencies = [
 name = "yral-metadata-client"
 version = "0.1.0"
 source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#bbf703cb90563f2111a4d26d26cf5de270e62382"
+source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#bbf703cb90563f2111a4d26d26cf5de270e62382"
 dependencies = [
  "ic-agent",
  "reqwest 0.12.22",
@@ -9968,8 +9970,10 @@ dependencies = [
 name = "yral-metadata-types"
 version = "0.1.0"
 source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#bbf703cb90563f2111a4d26d26cf5de270e62382"
+source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#bbf703cb90563f2111a4d26d26cf5de270e62382"
 dependencies = [
  "candid",
+ "chrono",
  "chrono",
  "serde",
  "serde_json",
