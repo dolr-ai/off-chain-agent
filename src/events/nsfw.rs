@@ -9,7 +9,6 @@ use crate::{
     consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
     events::event::UploadVideoInfoV2,
     pipeline::Step,
-    qstash::client::QStashClient,
     setup_context,
 };
 use anyhow::Error;
@@ -246,30 +245,6 @@ pub async fn nsfw_job(
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
 
-#[instrument(skip(qstash))]
-async fn duplicate_to_storj(
-    qstash: &QStashClient,
-    video_info: UploadVideoInfoV2,
-    is_nsfw: bool,
-) -> Result<(), AppError> {
-    let duplicate_args = storj_interface::duplicate::Args {
-        publisher_user_id: video_info.publisher_user_id,
-        video_id: video_info.video_id,
-        is_nsfw,
-        metadata: [
-            ("post_id".into(), video_info.post_id.to_string()),
-            // TODO: confirm with Tushar about this
-            // ("canister_id".into(), video_info.canister_id),
-            ("timestamp".into(), video_info.timestamp),
-        ]
-        .into(),
-    };
-
-    qstash.duplicate_to_storj(duplicate_args).await?;
-
-    Ok(())
-}
-
 #[instrument(skip(bigquery_client))]
 pub async fn push_nsfw_data_bigquery(
     bigquery_client: google_cloud_bigquery::client::Client,
@@ -339,6 +314,7 @@ pub async fn nsfw_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let video_info = payload.video_info.clone();
     use sentry_anyhow::capture_anyhow;
 
     setup_context!(&payload.video_id, Step::NsfwDetectionV2, {
@@ -354,15 +330,20 @@ pub async fn nsfw_job_v2(
         })?;
     let is_nsfw = nsfw_prob >= NSFW_THRESHOLD;
 
-    // push nsfw info to bigquery table using google-cloud-bigquery
+    // Push NSFW info to BigQuery
     let bigquery_client = state.bigquery_client.clone();
     push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
 
-    duplicate_to_storj(&state.qstash_client, payload.video_info, is_nsfw).await?;
+    // Trigger HLS processing
+    log::info!("Triggering HLS processing for video: {}", video_id);
+    state
+        .qstash_client
+        .publish_hls_processing(&video_id, &video_info, is_nsfw)
+        .await?;
 
-    Ok(Json(
-        serde_json::json!({ "message": "NSFW v2 job completed" }),
-    ))
+    Ok(Json(serde_json::json!({
+        "message": "NSFW v2 job completed, HLS processing triggered"
+    })))
 }
 
 #[instrument]

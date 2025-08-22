@@ -28,6 +28,7 @@ pub mod warehouse_events {
 }
 
 pub mod event;
+pub mod hls;
 pub mod nsfw;
 pub mod push_notifications;
 pub mod queries;
