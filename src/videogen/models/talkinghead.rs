@@ -4,7 +4,13 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::io::Cursor;
 use std::time::Duration;
+use symphonia::core::codecs::DecoderOptions;
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
 use tokio::time::sleep;
 use tracing::{error, info};
 use uuid::Uuid;
@@ -15,6 +21,7 @@ const MAX_POLL_ATTEMPTS: u32 = 120; // 10 minutes with 5 second intervals
 const POLL_INTERVAL_SECS: u64 = 5;
 const HEALTH_CHECK_MAX_RETRIES: u32 = 5; // Try up to 5 times
 const HEALTH_CHECK_RETRY_DELAY_SECS: u64 = 20; // Wait 2 seconds between retries
+const MAX_AUDIO_DURATION_SECS: f64 = 60.0; // Maximum audio duration of 60 seconds
 
 #[derive(Serialize)]
 struct GenerateRequest {
@@ -69,6 +76,9 @@ pub async fn generate(
             "Only TalkingHead input is supported".to_string(),
         ));
     };
+
+    // Validate audio duration before uploading
+    validate_audio_duration(&model.audio).await?;
 
     info!("TalkingHead: Starting generation for user");
 
@@ -129,6 +139,123 @@ pub async fn generate(
         video_url,
         provider: "talkinghead".to_string(),
     })
+}
+
+async fn validate_audio_duration(audio_data: &AudioData) -> Result<(), VideoGenError> {
+    let audio_bytes = match audio_data {
+        AudioData::Url(url) => {
+            // Fetch audio from URL
+            info!("TalkingHead: Fetching audio from URL for duration validation");
+            let response = reqwest::get(url).await.map_err(|e| {
+                VideoGenError::NetworkError(format!("Failed to fetch audio: {}", e))
+            })?;
+
+            response
+                .bytes()
+                .await
+                .map_err(|e| {
+                    VideoGenError::NetworkError(format!("Failed to read audio bytes: {}", e))
+                })?
+                .to_vec()
+        }
+        AudioData::Base64(audio_input) => {
+            // Decode base64
+            BASE64.decode(&audio_input.data).map_err(|e| {
+                VideoGenError::InvalidInput(format!("Failed to decode base64 audio: {}", e))
+            })?
+        }
+    };
+
+    // Create a media source stream from the audio bytes
+    let cursor = Cursor::new(audio_bytes);
+    let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
+
+    // Probe the media format
+    let hint = Hint::new();
+    let format_opts = FormatOptions::default();
+    let metadata_opts = MetadataOptions::default();
+
+    let probed = symphonia::default::get_probe()
+        .format(&hint, mss, &format_opts, &metadata_opts)
+        .map_err(|e| VideoGenError::InvalidInput(format!("Failed to probe audio format: {}", e)))?;
+
+    let mut format = probed.format;
+
+    // Try to get duration from metadata first
+    if let Some(track) = format.default_track() {
+        if let Some(timebase) = track.codec_params.time_base {
+            if let Some(n_frames) = track.codec_params.n_frames {
+                let duration_secs =
+                    (n_frames as f64) * (timebase.numer as f64 / timebase.denom as f64);
+
+                if duration_secs > MAX_AUDIO_DURATION_SECS {
+                    return Err(VideoGenError::InvalidInput(format!(
+                        "Audio duration ({:.1} seconds) exceeds maximum of {} seconds",
+                        duration_secs, MAX_AUDIO_DURATION_SECS as u64
+                    )));
+                }
+
+                info!(
+                    "TalkingHead: Audio duration validated: {:.1} seconds",
+                    duration_secs
+                );
+                return Ok(());
+            }
+        }
+    }
+
+    // If we can't get duration from metadata, we need to decode the audio
+    // This is more expensive but ensures we validate the duration
+    let track = format
+        .default_track()
+        .ok_or_else(|| VideoGenError::InvalidInput("No audio track found".to_string()))?;
+
+    let track_id = track.id;
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .map_err(|e| VideoGenError::InvalidInput(format!("Failed to create decoder: {}", e)))?;
+
+    let mut total_duration = 0.0;
+
+    // Read packets and accumulate duration
+    while let Ok(packet) = format.next_packet() {
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        // Decode the packet
+        match decoder.decode(&packet) {
+            Ok(decoded) => {
+                let spec = decoded.spec();
+                let duration = decoded.frames() as f64 / spec.rate as f64;
+                total_duration += duration;
+
+                // Check if we've exceeded the limit
+                if total_duration > MAX_AUDIO_DURATION_SECS {
+                    return Err(VideoGenError::InvalidInput(format!(
+                        "Audio duration ({:.1} seconds) exceeds maximum of {} seconds",
+                        total_duration, MAX_AUDIO_DURATION_SECS as u64
+                    )));
+                }
+            }
+            Err(symphonia::core::errors::Error::DecodeError(_)) => {
+                // Skip decode errors for now
+                continue;
+            }
+            Err(e) => {
+                return Err(VideoGenError::InvalidInput(format!(
+                    "Failed to decode audio: {}",
+                    e
+                )));
+            }
+        }
+    }
+
+    info!(
+        "TalkingHead: Audio duration validated: {:.1} seconds",
+        total_duration
+    );
+    Ok(())
 }
 
 async fn check_health() -> Result<(), VideoGenError> {
