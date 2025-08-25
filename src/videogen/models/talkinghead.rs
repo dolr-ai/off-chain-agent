@@ -44,6 +44,7 @@ struct StatusResponse {
     #[allow(dead_code)]
     completed_at: Option<String>,
     output_path: Option<String>,
+    gcs_path: Option<String>,
     error_message: Option<String>,
     queue_position: Option<u32>,
 }
@@ -96,14 +97,28 @@ pub async fn generate(
     // Poll for completion
     let status = poll_for_completion(&task_id).await?;
 
-    // Convert output path to accessible URL
-    let video_url = if let Some(output_path) = status.output_path {
+    // Convert output path to accessible URL, prioritizing GCS path
+    let video_url = if let Some(gcs_path) = status.gcs_path {
+        // Convert GCS path from gs:// format to public HTTPS URL
+        // gs://bucket/path -> https://storage.googleapis.com/bucket/path
+        if gcs_path.starts_with("gs://") {
+            let public_url = gcs_path.replace("gs://", "https://storage.googleapis.com/");
+            info!("TalkingHead: Using GCS path for video URL");
+            public_url
+        } else {
+            // If it's already an HTTPS URL, use it directly
+            info!("TalkingHead: Using provided GCS URL directly");
+            gcs_path
+        }
+    } else if let Some(output_path) = status.output_path {
+        // Fallback to local output path for backward compatibility
         // The output path is like: /workspace/ai-video-generation/MuseTalk/fastapi_server/storage/videos/{task_id}/generated_{task_id}.mp4
         // Convert to accessible URL
+        info!("TalkingHead: Using local output path (GCS path not available)");
         format!("https://talking-head-api.fly.dev{}", output_path)
     } else {
         return Err(VideoGenError::ProviderError(
-            "No output path in completed response".to_string(),
+            "No output path or GCS path in completed response".to_string(),
         ));
     };
 
