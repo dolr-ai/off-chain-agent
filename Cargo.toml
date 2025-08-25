@@ -103,6 +103,7 @@ spacetimedb-sdk = "1.2.0"
 async-channel = "2.3.1"
 num-bigint = "0.4"
 sentry-anyhow = "0.42.0"
+tempfile = "3.8"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
