@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Result;
+use axum::extract::DefaultBodyLimit;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
@@ -108,6 +109,7 @@ async fn main_impl() -> Result<()> {
         )
         .nest("/qstash", qstash_routes)
         .fallback_service(router)
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB limit
         .layer(CorsLayer::permissive())
         .layer(sentry_tower_layer)
         .with_state(shared_state.clone());
