@@ -36,6 +36,9 @@ pub async fn process_video_generation(
         VideoGenInput::IntTest(_) => {
             crate::videogen::models::inttest::generate(request.input, &state).await
         }
+        VideoGenInput::TalkingHead(_) => {
+            crate::videogen::models::talkinghead::generate(request.input, &state).await
+        }
     };
 
     // Prepare callback data
