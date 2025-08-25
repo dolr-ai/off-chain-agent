@@ -267,6 +267,16 @@ async fn poll_for_completion(task_id: &str) -> Result<StatusResponse, VideoGenEr
             .await
             .map_err(|e| VideoGenError::NetworkError(format!("Status check failed: {}", e)))?;
 
+        // Allow 503 Service Unavailable and continue polling
+        if response.status() == reqwest::StatusCode::SERVICE_UNAVAILABLE {
+            info!(
+                "TalkingHead: Status check returned 503 Service Unavailable for task {}, retrying...",
+                task_id
+            );
+            sleep(Duration::from_secs(POLL_INTERVAL_SECS)).await;
+            continue;
+        }
+
         if !response.status().is_success() {
             return Err(VideoGenError::ProviderError(format!(
                 "Status API returned {}",
