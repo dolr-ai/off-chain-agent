@@ -39,6 +39,7 @@ mod consts;
 mod duplicate_video;
 mod error;
 mod events;
+pub mod leaderboard;
 pub mod metrics;
 mod offchain_service;
 pub mod pipeline;
@@ -79,6 +80,10 @@ async fn main_impl() -> Result<()> {
         .nest(
             "/api/v1/videogen",
             videogen::videogen_router(shared_state.clone()),
+        )
+        .nest(
+            "/api/v1/leaderboard",
+            leaderboard::leaderboard_router(shared_state.clone()),
         )
         .nest(
             "/api/v2/videogen",
