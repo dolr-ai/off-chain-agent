@@ -21,11 +21,5 @@ pub fn leaderboard_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(handlers::get_tournament_history_handler))
         .routes(routes!(handlers::get_tournament_results_handler))
         .routes(routes!(handlers::tournament_lifecycle_check_handler))
-        // Tournament management
-        .routes(routes!(handlers::create_tournament_handler))
-        .routes(routes!(handlers::finalize_tournament_handler))
-        // Tournament lifecycle and notifications
-        .routes(routes!(handlers::start_tournament_handler))
-        .routes(routes!(handlers::end_tournament_handler))
         .with_state(state)
 }

@@ -889,16 +889,6 @@ pub async fn get_tournament_history_handler(
 }
 
 // Admin: Create new tournament
-#[utoipa::path(
-    post,
-    path = "/tournament/create",
-    tag = "leaderboard",
-    request_body = serde_json::Value,
-    responses(
-        (status = 201, description = "Tournament created successfully"),
-        (status = 500, description = "Failed to create tournament")
-    )
-)]
 pub async fn create_tournament_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateTournamentRequest>,
@@ -966,19 +956,35 @@ pub async fn create_tournament_handler(
             log::error!("Failed to send start notifications: {:?}", e);
         }
 
-        // TODO: Schedule finalize for end_time
-        log::info!(
-            "Tournament {} created and started immediately. Should schedule finalize for {}",
-            tournament_id,
-            tournament.end_time
-        );
+        // Schedule finalize for end_time
+        let delay = tournament.end_time - now;
+        if delay > 0 {
+            if let Err(e) = state.qstash_client.schedule_tournament_finalize(&tournament_id, delay).await {
+                log::error!("Failed to schedule tournament finalize: {:?}", e);
+            } else {
+                log::info!(
+                    "Tournament {} created and started immediately. Scheduled finalize for {} (in {} seconds)",
+                    tournament_id,
+                    tournament.end_time,
+                    delay
+                );
+            }
+        }
     } else {
-        // TODO: Schedule start for start_time
-        log::info!(
-            "Tournament {} created with Upcoming status. Should schedule start for {}",
-            tournament_id,
-            tournament.start_time
-        );
+        // Schedule start for start_time
+        let delay = tournament.start_time - now;
+        if delay > 0 {
+            if let Err(e) = state.qstash_client.schedule_tournament_start(&tournament_id, delay).await {
+                log::error!("Failed to schedule tournament start: {:?}", e);
+            } else {
+                log::info!(
+                    "Tournament {} created with Upcoming status. Scheduled start for {} (in {} seconds)",
+                    tournament_id,
+                    tournament.start_time,
+                    delay
+                );
+            }
+        }
     }
 
     (
@@ -997,34 +1003,23 @@ pub async fn create_tournament_handler(
 }
 
 // Admin: Finalize tournament and distribute prizes
-#[utoipa::path(
-    post,
-    path = "/tournament/finalize",
-    tag = "leaderboard",
-    request_body = serde_json::Value,
-    responses(
-        (status = 200, description = "Tournament finalized successfully"),
-        (status = 404, description = "Tournament not found"),
-        (status = 400, description = "Tournament is not active")
-    )
-)]
 pub async fn finalize_tournament_handler(
+    Path(tournament_id): Path<String>,
     State(state): State<Arc<AppState>>,
-    Json(request): Json<FinalizeTournamentRequest>,
 ) -> impl IntoResponse {
     // TODO: Add admin authentication check here
 
-    match super::tournament::finalize_tournament(&request.tournament_id, &state).await {
+    match super::tournament::finalize_tournament(&tournament_id, &state).await {
         Ok(_) => (
             StatusCode::OK,
             Json(serde_json::json!({
                 "success": true,
-                "message": format!("Tournament {} finalized successfully", request.tournament_id),
+                "message": format!("Tournament {} finalized successfully", tournament_id),
             })),
         )
             .into_response(),
         Err(e) => {
-            log::error!("Failed to finalize tournament {}: {:?}", request.tournament_id, e);
+            log::error!("Failed to finalize tournament {}: {:?}", tournament_id, e);
             let (status, message) = if e.to_string().contains("not found") {
                 (StatusCode::NOT_FOUND, "Tournament not found")
             } else if e.to_string().contains("not active") {
@@ -1213,16 +1208,6 @@ pub async fn get_tournament_results_handler(
 }
 
 // Admin: Start tournament and send notifications
-#[utoipa::path(
-    post,
-    path = "/tournament/{id}/start",
-    tag = "leaderboard",
-    responses(
-        (status = 200, description = "Tournament started successfully"),
-        (status = 404, description = "Tournament not found"),
-        (status = 400, description = "Tournament cannot be started")
-    )
-)]
 pub async fn start_tournament_handler(
     Path(tournament_id): Path<String>,
     State(state): State<Arc<AppState>>,
@@ -1252,16 +1237,6 @@ pub async fn start_tournament_handler(
 }
 
 // Admin: End tournament manually (just change status to Ended)
-#[utoipa::path(
-    post,
-    path = "/tournament/{id}/end",
-    tag = "leaderboard",
-    responses(
-        (status = 200, description = "Tournament ended successfully"),
-        (status = 404, description = "Tournament not found"),
-        (status = 400, description = "Tournament cannot be ended")
-    )
-)]
 pub async fn end_tournament_handler(
     Path(tournament_id): Path<String>,
     State(state): State<Arc<AppState>>,

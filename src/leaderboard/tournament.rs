@@ -64,12 +64,26 @@ pub async fn start_tournament(tournament_id: &str, app_state: &Arc<AppState>) ->
     // For now, we'll send a broadcast notification
     send_tournament_start_broadcast(&payload, app_state).await?;
 
-    // TODO: Schedule finalize for end_time
-    log::info!(
-        "Tournament {} started successfully. Should schedule finalize for {}",
-        tournament_id,
-        tournament.end_time
-    );
+    // Schedule finalize for end_time
+    let delay = tournament.end_time - Utc::now().timestamp();
+    if delay > 0 {
+        if let Err(e) = app_state.qstash_client.schedule_tournament_finalize(tournament_id, delay).await {
+            log::error!("Failed to schedule tournament finalize: {:?}", e);
+        } else {
+            log::info!(
+                "Tournament {} started successfully. Scheduled finalize for {} (in {} seconds)",
+                tournament_id,
+                tournament.end_time,
+                delay
+            );
+        }
+    } else {
+        log::warn!(
+            "Tournament {} end_time {} is in the past, not scheduling finalize",
+            tournament_id,
+            tournament.end_time
+        );
+    }
 
     Ok(())
 }
