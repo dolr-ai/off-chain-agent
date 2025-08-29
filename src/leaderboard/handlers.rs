@@ -1,6 +1,6 @@
 use axum::{
     extract::{Json, Path, Query, State},
-    http::StatusCode,
+    http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
 };
 use candid::Principal;
@@ -14,9 +14,9 @@ use yral_username_gen::random_username_from_principal;
 
 use super::redis_ops::LeaderboardRedis;
 use super::types::*;
-use crate::app_state::AppState;
+use crate::{app_state::AppState, auth::check_auth_events};
 
-// Internal API: Update user score on balance change
+// Internal API: Update user score on balance change (requires authentication)
 #[utoipa::path(
     post,
     path = "/score/update",
@@ -24,14 +24,35 @@ use crate::app_state::AppState;
     request_body = serde_json::Value,
     responses(
         (status = 200, description = "Score updated successfully"),
+        (status = 401, description = "Authentication failed"),
         (status = 404, description = "No active tournament"),
         (status = 400, description = "Invalid request")
+    ),
+    security(
+        ("bearer" = [])
     )
 )]
 pub async fn update_score_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(request): Json<UpdateScoreRequest>,
 ) -> impl IntoResponse {
+    // Extract and validate auth token
+    let auth_token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim_start_matches("Bearer ").to_string());
+
+    if let Err(e) = check_auth_events(auth_token) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": format!("Authentication failed: {}", e)
+            })),
+        )
+            .into_response();
+    }
+
     let redis = LeaderboardRedis::new(state.leaderboard_redis_pool.clone());
 
     // Get current tournament
@@ -889,6 +910,16 @@ pub async fn create_tournament_handler(
 
     // Generate tournament ID
     let tournament_id = format!("tournament_{}", Utc::now().timestamp());
+    let now = Utc::now().timestamp();
+
+    // Determine initial status based on start time
+    let status = if request.start_time <= now {
+        // Tournament should start immediately
+        TournamentStatus::Active
+    } else {
+        // Tournament starts in the future
+        TournamentStatus::Upcoming
+    };
 
     // Create tournament
     let tournament = Tournament {
@@ -897,12 +928,12 @@ pub async fn create_tournament_handler(
         end_time: request.end_time,
         prize_pool: request.prize_pool,
         prize_token: request.prize_token,
-        status: TournamentStatus::Upcoming,
+        status: status.clone(),
         metric_type: request.metric_type,
         metric_display_name: request.metric_display_name,
         allowed_sources: request.allowed_sources,
-        created_at: Utc::now().timestamp(),
-        updated_at: Utc::now().timestamp(),
+        created_at: now,
+        updated_at: now,
     };
 
     // Store tournament info
@@ -917,16 +948,37 @@ pub async fn create_tournament_handler(
             .into_response();
     }
 
-    // Set as current tournament
-    if let Err(e) = redis.set_current_tournament(&tournament_id).await {
-        log::error!("Failed to set current tournament: {:?}", e);
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({
-                "error": "Failed to set current tournament"
-            })),
-        )
-            .into_response();
+    // If tournament is active, set as current and schedule finalize
+    if status == TournamentStatus::Active {
+        if let Err(e) = redis.set_current_tournament(&tournament_id).await {
+            log::error!("Failed to set current tournament: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to set current tournament"
+                })),
+            )
+                .into_response();
+        }
+
+        // Send start notifications
+        if let Err(e) = super::tournament::start_tournament(&tournament_id, &state).await {
+            log::error!("Failed to send start notifications: {:?}", e);
+        }
+
+        // TODO: Schedule finalize for end_time
+        log::info!(
+            "Tournament {} created and started immediately. Should schedule finalize for {}",
+            tournament_id,
+            tournament.end_time
+        );
+    } else {
+        // TODO: Schedule start for start_time
+        log::info!(
+            "Tournament {} created with Upcoming status. Should schedule start for {}",
+            tournament_id,
+            tournament.start_time
+        );
     }
 
     (
@@ -934,6 +986,11 @@ pub async fn create_tournament_handler(
         Json(serde_json::json!({
             "success": true,
             "tournament": tournament,
+            "status_message": if status == TournamentStatus::Active {
+                "Tournament created and started immediately"
+            } else {
+                "Tournament created and scheduled to start"
+            }
         })),
     )
         .into_response()
@@ -955,204 +1012,35 @@ pub async fn finalize_tournament_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<FinalizeTournamentRequest>,
 ) -> impl IntoResponse {
-    let redis = LeaderboardRedis::new(state.leaderboard_redis_pool.clone());
-
     // TODO: Add admin authentication check here
 
-    // Get tournament info
-    let mut tournament = match redis.get_tournament_info(&request.tournament_id).await {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({
-                    "error": "Tournament not found"
-                })),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            log::error!("Failed to get tournament info: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "Failed to get tournament info"
-                })),
-            )
-                .into_response();
-        }
-    };
-
-    // Check if tournament can be finalized
-    if tournament.status != TournamentStatus::Active {
-        return (
-            StatusCode::BAD_REQUEST,
+    match super::tournament::finalize_tournament(&request.tournament_id, &state).await {
+        Ok(_) => (
+            StatusCode::OK,
             Json(serde_json::json!({
-                "error": "Tournament is not active"
+                "success": true,
+                "message": format!("Tournament {} finalized successfully", request.tournament_id),
             })),
         )
-            .into_response();
-    }
-
-    // Get final leaderboard (top 10 for prizes)
-    let top_players = match redis.get_leaderboard(&request.tournament_id, 0, 9).await {
-        Ok(data) => data,
+            .into_response(),
         Err(e) => {
-            log::error!("Failed to get final leaderboard: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
+            log::error!("Failed to finalize tournament {}: {:?}", request.tournament_id, e);
+            let (status, message) = if e.to_string().contains("not found") {
+                (StatusCode::NOT_FOUND, "Tournament not found")
+            } else if e.to_string().contains("not active") {
+                (StatusCode::BAD_REQUEST, "Tournament is not active")
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to finalize tournament")
+            };
+            (
+                status,
                 Json(serde_json::json!({
-                    "error": "Failed to get final leaderboard"
+                    "error": format!("{}: {}", message, e)
                 })),
             )
-                .into_response();
-        }
-    };
-
-    // Calculate prize distribution and prepare for token distribution
-    let mut prize_distribution = Vec::new();
-    let mut distribution_tasks = Vec::new();
-    
-    for (rank, (principal_str, score)) in top_players.iter().enumerate() {
-        if let Ok(principal) = Principal::from_text(principal_str) {
-            let rank = (rank + 1) as u32;
-            if let Some(reward) = calculate_reward(rank, tournament.prize_pool as u64) {
-                prize_distribution.push(serde_json::json!({
-                    "rank": rank,
-                    "principal_id": principal.to_string(),
-                    "score": score,
-                    "reward": reward,
-                }));
-                
-                // Also prepare for actual token distribution
-                distribution_tasks.push((principal, reward, rank));
-            }
+                .into_response()
         }
     }
-
-    // Distribute prizes if tournament uses YRAL (which is Sats internally)
-    if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
-        // Get JWT token from environment
-        let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
-        
-        // Create Sats operations provider
-        let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
-        let token_ops = Arc::new(token_ops);
-
-        // Process distributions concurrently, 5 at a time
-        let results: Vec<_> = stream::iter(distribution_tasks.clone())
-            .map(|(principal, reward, rank)| {
-                let token_ops = token_ops.clone();
-                async move {
-                    match token_ops.add_balance(principal, reward).await {
-                        Ok(_) => {
-                            log::info!("Distributed {} SATS to {} (rank {})", reward, principal, rank);
-                            Ok((principal, reward, rank))
-                        }
-                        Err(e) => {
-                            log::error!("Failed to distribute {} SATS to {} (rank {}): {:?}", 
-                                       reward, principal, rank, e);
-                            Err((principal, reward, rank, e))
-                        }
-                    }
-                }
-            })
-            .buffer_unordered(5) // Process 5 concurrent requests at a time
-            .collect()
-            .await;
-
-        // Log summary
-        let successful = results.iter().filter(|r| r.is_ok()).count();
-        let failed = results.iter().filter(|r| r.is_err()).count();
-        log::info!("Prize distribution complete: {} successful, {} failed", successful, failed);
-    }
-
-    // Build and save tournament results for winners
-    let mut winner_entries = Vec::new();
-    let mut total_prize_distributed = 0u64;
-    
-    // Collect winner data from distribution_tasks (these have the actual rewards)
-    for (principal, reward, rank) in &distribution_tasks {
-        // Get username for winner
-        let username = match state.yral_metadata_client.get_user_metadata_v2(principal.to_string()).await {
-            Ok(Some(metadata)) if !metadata.user_name.trim().is_empty() => metadata.user_name,
-            _ => {
-                let generated = random_username_from_principal(*principal, 15);
-                // Cache generated username
-                if let Err(e) = redis.cache_username(*principal, &generated, 3600).await {
-                    log::warn!("Failed to cache generated username: {:?}", e);
-                }
-                generated
-            }
-        };
-        
-        // Find the score for this principal from top_players
-        let score = top_players
-            .iter()
-            .find(|(p_str, _)| Principal::from_text(p_str).ok() == Some(*principal))
-            .map(|(_, s)| *s)
-            .unwrap_or(0.0);
-        
-        winner_entries.push(LeaderboardEntry {
-            principal_id: *principal,
-            username,
-            score,
-            rank: *rank,
-            reward: Some(*reward),
-        });
-        
-        total_prize_distributed += reward;
-    }
-    
-    // Create tournament result
-    let tournament_result = TournamentResult {
-        tournament_id: request.tournament_id.clone(),
-        user_results: winner_entries,
-        total_participants: redis
-            .get_total_participants(&request.tournament_id)
-            .await
-            .unwrap_or(0),
-        total_prize_distributed,
-        finalized_at: Utc::now().timestamp(),
-    };
-    
-    // Save tournament results
-    if let Err(e) = redis.save_tournament_results(&tournament_result).await {
-        log::error!("Failed to save tournament results: {:?}", e);
-    }
-    
-    // Update tournament status
-    tournament.status = TournamentStatus::Completed;
-    tournament.updated_at = Utc::now().timestamp();
-
-    if let Err(e) = redis.set_tournament_info(&tournament).await {
-        log::error!("Failed to update tournament status: {:?}", e);
-    }
-
-    // Add to history
-    if let Err(e) = redis.add_to_history(&request.tournament_id).await {
-        log::error!("Failed to add tournament to history: {:?}", e);
-    }
-
-    // Clear current tournament if this was the current one
-    if let Ok(Some(current)) = redis.get_current_tournament().await {
-        if current == request.tournament_id {
-            // You might want to set a new tournament here or clear it
-            // For now, we'll leave it as is
-        }
-    }
-
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "success": true,
-            "tournament_id": request.tournament_id,
-            "status": "completed",
-            "prize_distribution": prize_distribution,
-            "total_prizes_distributed": tournament.prize_pool,
-        })),
-    )
-        .into_response()
 }
 
 // Get tournament results
@@ -1363,7 +1251,7 @@ pub async fn start_tournament_handler(
     }
 }
 
-// Admin: End tournament and send winner notifications
+// Admin: End tournament manually (just change status to Ended)
 #[utoipa::path(
     post,
     path = "/tournament/{id}/end",
@@ -1385,16 +1273,23 @@ pub async fn end_tournament_handler(
             StatusCode::OK,
             Json(serde_json::json!({
                 "success": true,
-                "message": format!("Tournament {} ended successfully", tournament_id),
+                "message": format!("Tournament {} manually ended (status set to Ended)", tournament_id),
             })),
         )
             .into_response(),
         Err(e) => {
             log::error!("Failed to end tournament {}: {:?}", tournament_id, e);
+            let (status, message) = if e.to_string().contains("not found") {
+                (StatusCode::NOT_FOUND, "Tournament not found")
+            } else if e.to_string().contains("cannot be ended") {
+                (StatusCode::BAD_REQUEST, "Tournament cannot be ended from current status")
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to end tournament")
+            };
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                status,
                 Json(serde_json::json!({
-                    "error": format!("Failed to end tournament: {}", e)
+                    "error": format!("{}: {}", message, e)
                 })),
             )
                 .into_response()

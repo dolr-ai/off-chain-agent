@@ -75,6 +75,8 @@ pub enum TournamentStatus {
     Finalizing,
     #[serde(rename = "completed")]
     Completed,
+    #[serde(rename = "ended")]
+    Ended,
     #[serde(rename = "cancelled")]
     Cancelled,
 }
