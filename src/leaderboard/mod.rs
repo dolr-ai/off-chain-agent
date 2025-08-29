@@ -1,5 +1,6 @@
 pub mod handlers;
 pub mod redis_ops;
+pub mod tournament;
 pub mod types;
 
 pub use types::*;
@@ -24,6 +25,11 @@ pub fn leaderboard_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(handlers::create_tournament_handler))
         .routes(routes!(handlers::finalize_tournament_handler))
         .routes(routes!(handlers::get_tournament_results_handler))
+        
+        // Tournament lifecycle and notifications
+        .routes(routes!(handlers::start_tournament_handler))
+        .routes(routes!(handlers::end_tournament_handler))
+        .routes(routes!(handlers::tournament_lifecycle_check_handler))
         
         .with_state(state)
 }

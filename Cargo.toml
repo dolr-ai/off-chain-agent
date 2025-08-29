@@ -137,6 +137,7 @@ videogen-common = { path = "../yral-common/videogen-common", features = [
 yral-identity = { path = "../yral-common/identity" }
 yral-canisters-common = { path = "../yral-common/canisters-common" }
 yral-types = { path = "../yral-common/types" }
+yral-username-gen = { path = "../yral-common/username-gen" }
 
 
 [build-dependencies]

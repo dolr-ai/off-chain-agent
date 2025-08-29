@@ -686,6 +686,42 @@ pub struct SatsWithdrawnPayload {
     pub amount_withdrawn: f64,
 }
 
+// --------------------------------------------------
+// Tournament / Leaderboard
+// --------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TournamentStartedPayload {
+    #[serde(rename = "tournament_id")]
+    pub tournament_id: String,
+    #[serde(rename = "prize_pool")]
+    pub prize_pool: f64,
+    #[serde(rename = "prize_token")]
+    pub prize_token: String,
+    #[serde(rename = "end_time")]
+    pub end_time: i64,
+    #[serde(rename = "metric_display_name")]
+    pub metric_display_name: String,
+    #[serde(rename = "metric_type")]
+    pub metric_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TournamentEndedWinnerPayload {
+    #[serde(rename = "user_id")]
+    pub user_id: Principal,
+    #[serde(rename = "tournament_id")]
+    pub tournament_id: String,
+    #[serde(rename = "rank")]
+    pub rank: u32,
+    #[serde(rename = "prize_amount")]
+    pub prize_amount: u64,
+    #[serde(rename = "prize_token")]
+    pub prize_token: String,
+    #[serde(rename = "total_participants")]
+    pub total_participants: u32,
+}
+
 // ----------------------------------------------------------------------------------
 // Unified wrapper enum so callers can work with a single return type
 // ----------------------------------------------------------------------------------
@@ -718,6 +754,8 @@ pub enum EventPayload {
     CentsAdded(CentsAddedPayload),
     CentsWithdrawn(CentsWithdrawnPayload),
     SatsWithdrawn(SatsWithdrawnPayload),
+    TournamentStarted(TournamentStartedPayload),
+    TournamentEndedWinner(TournamentEndedWinnerPayload),
 }
 
 // ----------------------------------------------------------------------------------
@@ -874,6 +912,57 @@ impl EventPayload {
                     .await;
             }
 
+            EventPayload::TournamentStarted(payload) => {
+                // Tournament start notifications would be sent to all users
+                // This should be handled by a batch process, not individual notifications
+                // For now, log the event
+                log::info!(
+                    "Tournament started: {} with prize pool {} {}",
+                    payload.tournament_id,
+                    payload.prize_pool,
+                    payload.prize_token
+                );
+            }
+
+            EventPayload::TournamentEndedWinner(payload) => {
+                let title = format!("Congratulations! You won rank #{}!", payload.rank);
+                let body = format!(
+                    "You've won {} {} in the tournament!",
+                    payload.prize_amount, payload.prize_token
+                );
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "payload": serde_json::to_string(self).unwrap()
+                    })),
+                    android: None,
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(format!(
+                                "https://yral.com/leaderboard/results/{}",
+                                payload.tournament_id
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: None,
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, payload.user_id)
+                    .await;
+            }
+
             _ => {}
         }
     }
@@ -935,6 +1024,12 @@ pub fn deserialize_event_payload(
         "cents_added" => Ok(EventPayload::CentsAdded(serde_json::from_value(value)?)),
         "cents_withdrawn" => Ok(EventPayload::CentsWithdrawn(serde_json::from_value(value)?)),
         "sats_withdrawn" => Ok(EventPayload::SatsWithdrawn(serde_json::from_value(value)?)),
+        "tournament_started" => Ok(EventPayload::TournamentStarted(serde_json::from_value(
+            value,
+        )?)),
+        "tournament_ended_winner" => Ok(EventPayload::TournamentEndedWinner(
+            serde_json::from_value(value)?,
+        )),
         _ => Err(serde_json::Error::unknown_field(event_name, &[])),
     }
 }

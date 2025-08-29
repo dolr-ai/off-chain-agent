@@ -1,7 +1,7 @@
 use candid::Principal;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
-use utoipa::{ToSchema, IntoParams};
+use utoipa::{IntoParams, ToSchema};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Display, EnumString, PartialEq, Eq, ToSchema)]
 pub enum TokenType {
@@ -31,19 +31,19 @@ pub enum MetricType {
     #[strum(serialize = "games_played")]
     #[serde(rename = "games_played")]
     GamesPlayed,
-    
+
     #[strum(serialize = "tokens_earned")]
     #[serde(rename = "tokens_earned")]
     TokensEarned,
-    
+
     #[strum(serialize = "videos_watched")]
     #[serde(rename = "videos_watched")]
     VideosWatched,
-    
+
     #[strum(serialize = "referrals_made")]
     #[serde(rename = "referrals_made")]
     ReferralsMade,
-    
+
     #[strum(serialize = "custom")]
     #[serde(rename = "custom")]
     Custom(String),
@@ -98,7 +98,6 @@ pub struct Tournament {
 pub struct LeaderboardEntry {
     pub principal_id: Principal,
     pub username: String,
-    pub user_canister_id: Principal,
     pub score: f64,
     pub rank: u32,
     pub reward: Option<u64>,
@@ -108,7 +107,6 @@ pub struct LeaderboardEntry {
 pub struct UserTournamentData {
     pub principal_id: Principal,
     pub username: String,
-    pub user_canister_id: Principal,
     pub score: f64,
     pub last_updated: i64,
 }
@@ -237,7 +235,7 @@ impl PrizeDistribution {
 
 pub fn calculate_reward(rank: u32, total_prize_pool: u64) -> Option<u64> {
     let distributions = PrizeDistribution::default_distribution();
-    
+
     for dist in distributions.iter() {
         match dist.rank_range {
             RankRange::Single(r) if r == rank => {
@@ -249,15 +247,15 @@ pub fn calculate_reward(rank: u32, total_prize_pool: u64) -> Option<u64> {
             _ => continue,
         }
     }
-    
+
     None
 }
 
 // Pagination types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CursorPaginationParams {
-    pub start: Option<u32>,     // Default: 0
-    pub limit: Option<u32>,     // Default: 50, Max: 100
+    pub start: Option<u32>, // Default: 0
+    pub limit: Option<u32>, // Default: 50, Max: 100
 }
 
 impl Default for CursorPaginationParams {
@@ -273,7 +271,7 @@ impl CursorPaginationParams {
     pub fn get_start(&self) -> u32 {
         self.start.unwrap_or(0)
     }
-    
+
     pub fn get_limit(&self) -> u32 {
         self.limit.unwrap_or(50).min(100) // Max 100
     }
@@ -290,15 +288,25 @@ pub struct CursorInfo {
     pub start: u32,
     pub limit: u32,
     pub total_count: u32,
-    pub next_cursor: Option<u32>,  // None if no more data
+    pub next_cursor: Option<u32>, // None if no more data
     pub has_more: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
 pub struct SearchParams {
     pub q: String,
-    #[serde(flatten)]
-    pub pagination: CursorPaginationParams,
+    pub start: Option<u32>, // Default: 0
+    pub limit: Option<u32>, // Default: 50, Max: 100
+}
+
+impl SearchParams {
+    pub fn get_start(&self) -> u32 {
+        self.start.unwrap_or(0)
+    }
+
+    pub fn get_limit(&self) -> u32 {
+        self.limit.unwrap_or(50).min(100) // Max 100
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -339,15 +347,15 @@ mod tests {
     #[test]
     fn test_calculate_reward() {
         let total_prize = 1000000; // 1 million tokens
-        
+
         assert_eq!(calculate_reward(1, total_prize), Some(300000)); // 30%
         assert_eq!(calculate_reward(2, total_prize), Some(200000)); // 20%
         assert_eq!(calculate_reward(3, total_prize), Some(150000)); // 15%
         assert_eq!(calculate_reward(4, total_prize), Some(100000)); // 10%
-        assert_eq!(calculate_reward(5, total_prize), Some(50000));  // 5%
-        assert_eq!(calculate_reward(6, total_prize), Some(40000));  // 4%
+        assert_eq!(calculate_reward(5, total_prize), Some(50000)); // 5%
+        assert_eq!(calculate_reward(6, total_prize), Some(40000)); // 4%
         assert_eq!(calculate_reward(10, total_prize), Some(40000)); // 4%
-        assert_eq!(calculate_reward(11, total_prize), None);        // No reward
+        assert_eq!(calculate_reward(11, total_prize), None); // No reward
     }
 
     #[test]
@@ -355,18 +363,18 @@ mod tests {
         // Test FromStr (via EnumString)
         assert_eq!(TokenType::from_str("YRAL").unwrap(), TokenType::YRAL);
         assert!(TokenType::from_str("INVALID").is_err());
-        
+
         // Test Display
         assert_eq!(TokenType::YRAL.to_string(), "YRAL");
-        
+
         // Test Default
         assert_eq!(TokenType::default(), TokenType::YRAL);
-        
+
         // Test Serialize/Deserialize
         let token = TokenType::YRAL;
         let json = serde_json::to_string(&token).unwrap();
         assert_eq!(json, "\"YRAL\"");
-        
+
         let parsed: TokenType = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, TokenType::YRAL);
     }

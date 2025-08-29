@@ -292,9 +292,8 @@ pub async fn init_canisters_ctx() -> WrappedContextCanisters {
 }
 
 async fn init_leaderboard_redis_pool() -> RedisPool {
-    let redis_url = std::env::var("LEADERBOARD_REDIS_URL")
-        .unwrap_or_else(|_| std::env::var("CANISTER_BACKUP_CACHE_REDIS_URL")
-            .expect("Either LEADERBOARD_REDIS_URL or CANISTER_BACKUP_CACHE_REDIS_URL must be set"));
+    let redis_url =
+        std::env::var("LEADERBOARD_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
 
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");

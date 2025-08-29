@@ -5758,6 +5758,7 @@ dependencies = [
  "yral-qstash-types",
  "yral-spacetime-bindings",
  "yral-types",
+ "yral-username-gen",
  "yup-oauth2",
 ]
 
