@@ -10,7 +10,9 @@ use candid::Principal;
 use yral_metrics::metrics::sealed_metric::SealedMetric;
 
 use crate::{
-    app_state::AppState, utils::delegated_identity::get_user_info_from_delegated_identity_wire,
+    app_state::AppState,
+    events::{EventBulkRequestV3, VerifiedEventBulkRequestV3},
+    utils::delegated_identity::get_user_info_from_delegated_identity_wire,
 };
 
 use super::{EventBulkRequest, VerifiedEventBulkRequest};
@@ -68,6 +70,65 @@ pub async fn verify_event_bulk_request(
     }
 
     let verified_request = VerifiedEventBulkRequest {
+        events: event_bulk_request.events,
+    };
+
+    let request_body = serde_json::to_string(&verified_request).unwrap();
+    let request = Request::from_parts(parts, axum::body::Body::from(request_body));
+
+    // Pass the request to the next handler
+    Ok(next.run(request).await)
+}
+
+pub async fn verify_event_bulk_request_v3(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    // Extract the JSON body
+    let (parts, body) = request.into_parts();
+    let bytes = match axum::body::to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Failed to parse request body #1: {e}"),
+            ))
+        }
+    };
+
+    // Parse the JSON
+    let event_bulk_request: EventBulkRequestV3 = match serde_json::from_slice(&bytes) {
+        Ok(req) => req,
+        Err(e) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Failed to parse request body to EventBulkRequest: {e}"),
+            ))
+        }
+    };
+
+    let user_info = get_user_info_from_delegated_identity_wire(
+        &state,
+        event_bulk_request.delegated_identity_wire.clone(),
+    )
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            format!("Failed to get user info: {e}"),
+        )
+    })?;
+    let user_principal = user_info.user_principal;
+
+    // verify all events are valid
+    for event in event_bulk_request.events.clone() {
+        if event.user_id().unwrap_or_default() != user_principal.to_string() {
+            return Err((StatusCode::BAD_REQUEST, "Invalid user id".to_string()));
+        }
+    }
+
+    let verified_request = VerifiedEventBulkRequestV3 {
         events: event_bulk_request.events,
     };
 

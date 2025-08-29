@@ -17,6 +17,7 @@ use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::check_auth_events;
 use crate::events::types::AnalyticsEventV3;
+use crate::events::verify::verify_event_bulk_request_v3;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::types::DelegatedIdentityWire;
 use crate::AppState;
@@ -329,7 +330,7 @@ pub fn events_router_v2(state: Arc<AppState>) -> OpenApiRouter {
         .routes(
             routes!(handle_bulk_events_v2).layer(middleware::from_fn_with_state(
                 state.clone(),
-                verify_event_bulk_request,
+                verify_event_bulk_request_v3,
             )),
         )
         .with_state(state)
