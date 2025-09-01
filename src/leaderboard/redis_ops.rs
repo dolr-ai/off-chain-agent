@@ -1,11 +1,24 @@
 use anyhow::{Context, Result};
 use candid::Principal;
+use chrono::Utc;
 use redis::AsyncCommands;
 use serde_json;
 use std::collections::HashMap;
 
 use super::types::*;
 use crate::types::RedisPool;
+
+// Constants for tie-breaking in leaderboard ranking
+const TIEBREAKER_WEIGHT: f64 = 0.0000000001; // 10^-10, negligible impact on actual scores
+const TIMESTAMP_BASE: i64 = 1_700_000_000; // Base timestamp to keep numbers manageable
+
+// Helper function to create composite score for ranking with tie-breaking
+fn create_composite_score(actual_score: f64, timestamp: i64) -> f64 {
+    // Normalize timestamp to keep tiebreaker small
+    let time_component = (timestamp - TIMESTAMP_BASE) as f64;
+    // Earlier timestamps get slightly higher composite scores (rank higher on ties)
+    actual_score - (time_component * TIEBREAKER_WEIGHT)
+}
 
 #[derive(Clone)]
 pub struct LeaderboardRedis {
@@ -103,36 +116,47 @@ impl LeaderboardRedis {
     ) -> Result<f64> {
         let mut conn = self.pool.get().await?;
         let scores_key = self.tournament_scores_key(tournament_id);
+        let users_key = self.tournament_users_key(tournament_id);
+
+        // First, get the current actual score from UserTournamentData if it exists
+        let current_actual_score = if let Some(json_str) = conn
+            .hget::<_, _, Option<String>>(&users_key, principal.to_string())
+            .await?
+        {
+            serde_json::from_str::<UserTournamentData>(&json_str)
+                .map(|data| data.score)
+                .unwrap_or(0.0)
+        } else {
+            0.0
+        };
 
         let new_score = match operation {
             ScoreOperation::Increment => {
-                // Add to existing score (for cumulative metrics like games played)
-                let result: f64 = conn
-                    .zincr(&scores_key, principal.to_string(), metric_value)
-                    .await?;
-                result
+                // Add to existing actual score
+                current_actual_score + metric_value
             }
             ScoreOperation::SetIfHigher => {
-                // Only update if new value is higher (for high scores)
-                let current_score: Option<f64> =
-                    conn.zscore(&scores_key, principal.to_string()).await?;
-                let new_score = match current_score {
-                    Some(current) if current >= metric_value => current,
-                    _ => {
-                        conn.zadd(&scores_key, principal.to_string(), metric_value)
-                            .await?;
-                        metric_value
-                    }
-                };
-                new_score
+                // Only update if new value is higher
+                if current_actual_score >= metric_value {
+                    current_actual_score
+                } else {
+                    metric_value
+                }
             }
             ScoreOperation::Set => {
                 // Direct set (for absolute values)
-                conn.zadd(&scores_key, principal.to_string(), metric_value)
-                    .await?;
                 metric_value
             }
         };
+
+        // Only update if score changed (important for SetIfHigher)
+        if new_score != current_actual_score {
+            // Store composite score in sorted set for ranking with tie-breaking
+            let timestamp = Utc::now().timestamp();
+            let composite_score = create_composite_score(new_score, timestamp);
+            conn.zadd(&scores_key, principal.to_string(), composite_score)
+                .await?;
+        }
 
         Ok(new_score)
     }
@@ -273,10 +297,30 @@ impl LeaderboardRedis {
         stop: isize,
     ) -> Result<Vec<(String, f64)>> {
         let mut conn = self.pool.get().await?;
-        let key = self.tournament_scores_key(tournament_id);
+        let scores_key = self.tournament_scores_key(tournament_id);
+        let users_key = self.tournament_users_key(tournament_id);
 
-        // ZREVRANGE with scores (highest to lowest)
-        let results: Vec<(String, f64)> = conn.zrevrange_withscores(&key, start, stop).await?;
+        // Get ranking from sorted set (contains composite scores for tie-breaking)
+        let ranked_members: Vec<(String, f64)> = conn.zrevrange_withscores(&scores_key, start, stop).await?;
+        
+        // Build result with actual scores from UserTournamentData
+        let mut results = Vec::new();
+        for (principal_str, _composite_score) in ranked_members {
+            // Get UserTournamentData which has the actual score
+            let user_data: Option<String> = conn.hget(&users_key, &principal_str).await?;
+            
+            let actual_score = if let Some(json_str) = user_data {
+                serde_json::from_str::<UserTournamentData>(&json_str)
+                    .map(|data| data.score)
+                    .unwrap_or(_composite_score) // Fallback to composite if parse fails
+            } else {
+                // Fallback: if no user data exists, use the composite score
+                // This handles edge cases where score was set but metadata wasn't stored yet
+                _composite_score
+            };
+            
+            results.push((principal_str, actual_score));
+        }
 
         Ok(results)
     }
@@ -302,11 +346,9 @@ impl LeaderboardRedis {
         tournament_id: &str,
         principal: Principal,
     ) -> Result<Option<f64>> {
-        let mut conn = self.pool.get().await?;
-        let key = self.tournament_scores_key(tournament_id);
-
-        let score: Option<f64> = conn.zscore(&key, principal.to_string()).await?;
-        Ok(score)
+        // Get actual score from UserTournamentData, not the composite score from sorted set
+        let metadata = self.get_user_metadata(tournament_id, principal).await?;
+        Ok(metadata.map(|m| m.score))
     }
 
     // Get total participants

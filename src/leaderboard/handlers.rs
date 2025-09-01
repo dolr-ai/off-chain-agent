@@ -5,15 +5,12 @@ use axum::{
 };
 use candid::Principal;
 use chrono::Utc;
-use futures::stream::{self, StreamExt};
 use std::sync::Arc;
-use yral_canisters_common::utils::token::{
-    SatsOperations, TokenOperations, TokenOperationsProvider,
-};
 use yral_username_gen::random_username_from_principal;
 
 use super::redis_ops::LeaderboardRedis;
 use super::types::*;
+use super::utils::get_usernames_with_fallback;
 use crate::{app_state::AppState, auth::check_auth_events};
 
 // Internal API: Update user score on balance change (requires authentication)
@@ -104,16 +101,19 @@ pub async fn update_score_handler(
     };
 
     // Check if tournament is active
-    // let now = Utc::now().timestamp();
-    // if now < tournament.start_time || now > tournament.end_time {
-    //     return (
-    //         StatusCode::BAD_REQUEST,
-    //         Json(serde_json::json!({
-    //             "error": "Tournament is not active"
-    //         })),
-    //     )
-    //         .into_response();
-    // }
+    let now = Utc::now().timestamp();
+    if tournament.status != TournamentStatus::Active
+        || now < tournament.start_time
+        || now > tournament.end_time
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Tournament is not active"
+            })),
+        )
+            .into_response();
+    }
 
     // Validate metric type matches tournament
     if request.metric_type != tournament.metric_type.to_string() {
@@ -178,101 +178,29 @@ pub async fn update_score_handler(
     let tournament_id_clone = current_tournament.clone();
 
     tokio::spawn(async move {
-        match metadata_client
-            .get_user_metadata_v2(principal.to_string())
+        // Use the utility function to get username with fallback
+        let username_map =
+            get_usernames_with_fallback(&redis_clone, &metadata_client, vec![principal]).await;
+
+        // Get the username (guaranteed to exist)
+        let username = username_map.get(&principal).cloned().unwrap_or_else(|| {
+            log::error!("Missing username for principal {} in map", principal);
+            random_username_from_principal(principal, 15)
+        });
+
+        // Store user metadata with the resolved username
+        let user_data = UserTournamentData {
+            principal_id: principal,
+            username,
+            score: score_for_metadata,
+            last_updated: Utc::now().timestamp(),
+        };
+
+        if let Err(e) = redis_clone
+            .store_user_metadata(&tournament_id_clone, principal, &user_data)
             .await
         {
-            Ok(Some(metadata)) if !metadata.user_name.trim().is_empty() => {
-                // Cache username for 1 hour
-                if let Err(e) = redis_clone
-                    .cache_username(principal, &metadata.user_name, 3600)
-                    .await
-                {
-                    log::warn!("Failed to cache username: {:?}", e);
-                }
-
-                // Store user metadata
-                let user_data = UserTournamentData {
-                    principal_id: principal,
-                    username: metadata.user_name,
-                    score: score_for_metadata,
-                    last_updated: Utc::now().timestamp(),
-                };
-
-                if let Err(e) = redis_clone
-                    .store_user_metadata(&tournament_id_clone, principal, &user_data)
-                    .await
-                {
-                    log::warn!("Failed to store user metadata: {:?}", e);
-                }
-            }
-            Ok(Some(metadata)) if metadata.user_name.trim().is_empty() => {
-                log::info!("Empty username for principal {}, generating one", principal);
-                // Fall through to generation logic below
-                let generated_username = random_username_from_principal(principal, 15);
-
-                log::info!(
-                    "Using generated username for principal {}: {}",
-                    principal,
-                    generated_username
-                );
-
-                // Cache the generated username for consistency
-                if let Err(e) = redis_clone
-                    .cache_username(principal, &generated_username, 3600)
-                    .await
-                {
-                    log::warn!("Failed to cache generated username: {:?}", e);
-                }
-
-                // Store user metadata with generated username
-                let user_data = UserTournamentData {
-                    principal_id: principal,
-                    username: generated_username,
-                    score: score_for_metadata,
-                    last_updated: Utc::now().timestamp(),
-                };
-
-                if let Err(e) = redis_clone
-                    .store_user_metadata(&tournament_id_clone, principal, &user_data)
-                    .await
-                {
-                    log::warn!("Failed to store user metadata: {:?}", e);
-                }
-            }
-            Ok(None) | Err(_) | _ => {
-                // Generate deterministic username from principal
-                let generated_username = random_username_from_principal(principal, 15);
-
-                log::info!(
-                    "Using generated username for principal {}: {}",
-                    principal,
-                    generated_username
-                );
-
-                // Cache the generated username for consistency
-                if let Err(e) = redis_clone
-                    .cache_username(principal, &generated_username, 3600)
-                    .await
-                {
-                    log::warn!("Failed to cache generated username: {:?}", e);
-                }
-
-                // Store user metadata with generated username
-                let user_data = UserTournamentData {
-                    principal_id: principal,
-                    username: generated_username,
-                    score: score_for_metadata,
-                    last_updated: Utc::now().timestamp(),
-                };
-
-                if let Err(e) = redis_clone
-                    .store_user_metadata(&tournament_id_clone, principal, &user_data)
-                    .await
-                {
-                    log::warn!("Failed to store user metadata: {:?}", e);
-                }
-            }
+            log::warn!("Failed to store user metadata: {:?}", e);
         }
     });
 
@@ -300,7 +228,7 @@ pub async fn update_score_handler(
     )
 )]
 pub async fn get_leaderboard_handler(
-    Query(params): Query<CursorPaginationParams>,
+    Query(params): Query<LeaderboardQueryParams>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let redis = LeaderboardRedis::new(state.leaderboard_redis_pool.clone());
@@ -378,24 +306,15 @@ pub async fn get_leaderboard_handler(
         }
     };
 
-    // Collect principals for bulk metadata fetch
+    // Collect principals for bulk username fetch
     let principals: Vec<Principal> = leaderboard_data
         .iter()
         .filter_map(|(principal_str, _)| Principal::from_text(principal_str).ok())
         .collect();
 
-    // Bulk fetch usernames
-    let metadata_map = match state
-        .yral_metadata_client
-        .get_user_metadata_bulk(principals.clone())
-        .await
-    {
-        Ok(map) => map,
-        Err(e) => {
-            log::warn!("Failed to fetch bulk metadata: {:?}", e);
-            std::collections::HashMap::new()
-        }
-    };
+    // Get usernames using the three-tier fallback strategy
+    let username_map =
+        get_usernames_with_fallback(&redis, &state.yral_metadata_client, principals.clone()).await;
 
     // Build leaderboard entries
     let entries: Vec<LeaderboardEntry> = leaderboard_data
@@ -403,13 +322,18 @@ pub async fn get_leaderboard_handler(
         .enumerate()
         .filter_map(|(index, (principal_str, score))| {
             if let Ok(principal) = Principal::from_text(principal_str) {
-                let metadata = metadata_map.get(&principal);
                 let rank = start + index as u32 + 1; // Calculate actual rank
+                                                     // Username is guaranteed to exist for every principal
+                let username = username_map.get(&principal).cloned().unwrap_or_else(|| {
+                    // This should never happen since get_usernames_with_fallback
+                    // always returns a username for every principal
+                    log::error!("Missing username for principal {} in map", principal);
+                    random_username_from_principal(principal, 15)
+                });
+
                 Some(LeaderboardEntry {
                     principal_id: principal,
-                    username: metadata
-                        .and_then(|m| m.as_ref().map(|m| m.user_name.clone()))
-                        .unwrap_or_else(|| "Anonymous".to_string()),
+                    username,
                     score: *score,
                     rank,
                     reward: calculate_reward(rank, tournament.prize_pool as u64),
@@ -438,10 +362,72 @@ pub async fn get_leaderboard_handler(
         has_more,
     };
 
-    let response = CursorPaginatedResponse {
-        data: entries,
-        cursor_info,
+    // Fetch user info if user_id is provided
+    let user_info = if let Some(user_id) = params.user_id {
+        // Parse principal ID
+        if let Ok(user_principal) = Principal::from_text(&user_id) {
+            // Get user's rank
+            let user_rank = match redis
+                .get_user_rank(&current_tournament, user_principal)
+                .await
+            {
+                Ok(Some(rank)) => rank,
+                _ => 0,
+            };
+
+            // Get user's score
+            let user_score = match redis
+                .get_user_score(&current_tournament, user_principal)
+                .await
+            {
+                Ok(Some(score)) => score,
+                _ => 0.0,
+            };
+
+            if user_rank > 0 {
+                // Get username using our fallback utility
+                let username_map = get_usernames_with_fallback(
+                    &redis,
+                    &state.yral_metadata_client,
+                    vec![user_principal],
+                )
+                .await;
+
+                let username = username_map
+                    .get(&user_principal)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        log::error!("Missing username for principal {} in map", user_principal);
+                        random_username_from_principal(user_principal, 15)
+                    });
+
+                Some(serde_json::json!({
+                    "principal_id": user_principal.to_string(),
+                    "username": username,
+                    "rank": user_rank,
+                    "score": user_score,
+                    "percentile": ((total_participants - user_rank + 1) as f32 / total_participants as f32 * 100.0),
+                    "reward": calculate_reward(user_rank, tournament.prize_pool as u64),
+                }))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
     };
+
+    // Build response with optional user info
+    let mut response = serde_json::json!({
+        "data": entries,
+        "cursor_info": cursor_info,
+    });
+
+    if let Some(user_info) = user_info {
+        response["user_info"] = user_info;
+    }
 
     (StatusCode::OK, Json(response)).into_response()
 }
@@ -500,17 +486,18 @@ pub async fn get_user_rank_handler(
         }
     };
 
-    // Get user's rank
-    let user_rank = match redis.get_user_rank(&current_tournament, principal).await {
-        Ok(Some(rank)) => rank,
+    // Get total participants first
+    let total_participants = match redis.get_total_participants(&current_tournament).await {
+        Ok(count) => count,
+        Err(_) => 0,
+    };
+
+    // Get user's rank and determine if they're in the leaderboard
+    let (user_rank, is_in_leaderboard) = match redis.get_user_rank(&current_tournament, principal).await {
+        Ok(Some(rank)) => (rank, true),
         Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({
-                    "error": "User not found in leaderboard"
-                })),
-            )
-                .into_response();
+            // User not in leaderboard - assign last rank
+            (total_participants + 1, false)
         }
         Err(e) => {
             log::error!("Failed to get user rank: {:?}", e);
@@ -525,10 +512,14 @@ pub async fn get_user_rank_handler(
     };
 
     // Get user's score
-    let user_score = match redis.get_user_score(&current_tournament, principal).await {
-        Ok(Some(score)) => score,
-        Ok(None) => 0.0,
-        Err(_) => 0.0,
+    let user_score = if is_in_leaderboard {
+        match redis.get_user_score(&current_tournament, principal).await {
+            Ok(Some(score)) => score,
+            Ok(None) => 0.0,
+            Err(_) => 0.0,
+        }
+    } else {
+        0.0 // No score for users not in leaderboard
     };
 
     // Get tournament info for prize calculation
@@ -543,12 +534,6 @@ pub async fn get_user_rank_handler(
             )
                 .into_response();
         }
-    };
-
-    // Get total participants
-    let total_participants = match redis.get_total_participants(&current_tournament).await {
-        Ok(count) => count,
-        Err(_) => 0,
     };
 
     // Fetch username
@@ -569,45 +554,51 @@ pub async fn get_user_rank_handler(
         }
     };
 
-    // Get surrounding players (2 above, 2 below)
-    let context_start = (user_rank as i32 - 3).max(0) as u32;
-    let context_end = context_start + 4; // 5 total including user
+    // Get surrounding players only if user is in leaderboard
+    let surrounding_entries: Vec<LeaderboardEntry> = if is_in_leaderboard {
+        // Get surrounding players (2 above, 2 below)
+        let context_start = (user_rank as i32 - 3).max(0) as u32;
+        let context_end = context_start + 4; // 5 total including user
 
-    let surrounding_data = match redis
-        .get_leaderboard(
-            &current_tournament,
-            context_start as isize,
-            context_end as isize,
-        )
-        .await
-    {
-        Ok(data) => data,
-        Err(_) => vec![],
+        let surrounding_data = match redis
+            .get_leaderboard(
+                &current_tournament,
+                context_start as isize,
+                context_end as isize,
+            )
+            .await
+        {
+            Ok(data) => data,
+            Err(_) => vec![],
+        };
+
+        // Build surrounding entries
+        surrounding_data
+            .iter()
+            .enumerate()
+            .filter_map(|(index, (principal_str, score))| {
+                if let Ok(p) = Principal::from_text(principal_str) {
+                    let rank = context_start + index as u32 + 1;
+                    Some(LeaderboardEntry {
+                        principal_id: p,
+                        username: if p == principal {
+                            username.clone()
+                        } else {
+                            "Anonymous".to_string() // We could batch fetch these if needed
+                        },
+                        score: *score,
+                        rank,
+                        reward: calculate_reward(rank, tournament.prize_pool as u64),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
+    } else {
+        // Empty list for users not in leaderboard
+        vec![]
     };
-
-    // Build surrounding entries
-    let surrounding_entries: Vec<LeaderboardEntry> = surrounding_data
-        .iter()
-        .enumerate()
-        .filter_map(|(index, (principal_str, score))| {
-            if let Ok(p) = Principal::from_text(principal_str) {
-                let rank = context_start + index as u32 + 1;
-                Some(LeaderboardEntry {
-                    principal_id: p,
-                    username: if p == principal {
-                        username.clone()
-                    } else {
-                        "Anonymous".to_string() // We could batch fetch these if needed
-                    },
-                    score: *score,
-                    rank,
-                    reward: calculate_reward(rank, tournament.prize_pool as u64),
-                })
-            } else {
-                None
-            }
-        })
-        .collect();
 
     let response = serde_json::json!({
         "user": {
@@ -615,8 +606,16 @@ pub async fn get_user_rank_handler(
             "username": username,
             "rank": user_rank,
             "score": user_score,
-            "percentile": ((total_participants - user_rank + 1) as f32 / total_participants as f32 * 100.0),
-            "reward": calculate_reward(user_rank, tournament.prize_pool as u64),
+            "percentile": if is_in_leaderboard && total_participants > 0 {
+                ((total_participants - user_rank + 1) as f32 / total_participants as f32 * 100.0)
+            } else {
+                0.0
+            },
+            "reward": if is_in_leaderboard {
+                calculate_reward(user_rank, tournament.prize_pool as u64)
+            } else {
+                None
+            },
         },
         "surrounding_players": surrounding_entries,
         "tournament": {
@@ -698,20 +697,12 @@ pub async fn search_users_handler(
         .take(limit as usize)
         .collect();
 
-    // Fetch metadata for results
+    // Fetch usernames for results using the fallback strategy
     let principals: Vec<Principal> = paginated_results.iter().map(|(p, _)| *p).collect();
 
-    let metadata_map = match state
-        .yral_metadata_client
-        .get_user_metadata_bulk(principals.clone())
-        .await
-    {
-        Ok(map) => map,
-        Err(e) => {
-            log::warn!("Failed to fetch bulk metadata: {:?}", e);
-            std::collections::HashMap::new()
-        }
-    };
+    // Get usernames using the three-tier fallback strategy
+    let username_map =
+        get_usernames_with_fallback(&redis, &state.yral_metadata_client, principals.clone()).await;
 
     // Get tournament info
     let tournament = match redis.get_tournament_info(&current_tournament).await {
@@ -736,12 +727,15 @@ pub async fn search_users_handler(
             .ok()
             .flatten()
         {
-            let metadata = metadata_map.get(&principal);
+            // Username is guaranteed to exist for every principal
+            let username = username_map.get(principal).cloned().unwrap_or_else(|| {
+                log::error!("Missing username for principal {} in map", principal);
+                random_username_from_principal(*principal, 15)
+            });
+
             entries.push(LeaderboardEntry {
                 principal_id: *principal,
-                username: metadata
-                    .and_then(|m| m.as_ref().map(|m| m.user_name.clone()))
-                    .unwrap_or_else(|| "Anonymous".to_string()),
+                username,
                 score: *score,
                 rank,
                 reward: calculate_reward(rank, tournament.prize_pool as u64),
@@ -959,7 +953,11 @@ pub async fn create_tournament_handler(
         // Schedule finalize for end_time
         let delay = tournament.end_time - now;
         if delay > 0 {
-            if let Err(e) = state.qstash_client.schedule_tournament_finalize(&tournament_id, delay).await {
+            if let Err(e) = state
+                .qstash_client
+                .schedule_tournament_finalize(&tournament_id, delay)
+                .await
+            {
                 log::error!("Failed to schedule tournament finalize: {:?}", e);
             } else {
                 log::info!(
@@ -974,7 +972,11 @@ pub async fn create_tournament_handler(
         // Schedule start for start_time
         let delay = tournament.start_time - now;
         if delay > 0 {
-            if let Err(e) = state.qstash_client.schedule_tournament_start(&tournament_id, delay).await {
+            if let Err(e) = state
+                .qstash_client
+                .schedule_tournament_start(&tournament_id, delay)
+                .await
+            {
                 log::error!("Failed to schedule tournament start: {:?}", e);
             } else {
                 log::info!(
@@ -1025,7 +1027,10 @@ pub async fn finalize_tournament_handler(
             } else if e.to_string().contains("not active") {
                 (StatusCode::BAD_REQUEST, "Tournament is not active")
             } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to finalize tournament")
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to finalize tournament",
+                )
             };
             (
                 status,
@@ -1110,33 +1115,26 @@ pub async fn get_tournament_results_handler(
     };
 
     // If tournament was finalized, create rewards map from saved results
-    let rewards_map: std::collections::HashMap<Principal, u64> = if let Some(ref results) = saved_results {
-        results.user_results
-            .iter()
-            .filter_map(|entry| entry.reward.map(|r| (entry.principal_id, r)))
-            .collect()
-    } else {
-        std::collections::HashMap::new()
-    };
+    let rewards_map: std::collections::HashMap<Principal, u64> =
+        if let Some(ref results) = saved_results {
+            results
+                .user_results
+                .iter()
+                .filter_map(|entry| entry.reward.map(|r| (entry.principal_id, r)))
+                .collect()
+        } else {
+            std::collections::HashMap::new()
+        };
 
-    // Collect principals for bulk metadata fetch
+    // Collect principals for bulk username fetch
     let principals: Vec<Principal> = leaderboard_data
         .iter()
         .filter_map(|(principal_str, _)| Principal::from_text(principal_str).ok())
         .collect();
 
-    // Bulk fetch usernames
-    let metadata_map = match state
-        .yral_metadata_client
-        .get_user_metadata_bulk(principals)
-        .await
-    {
-        Ok(map) => map,
-        Err(e) => {
-            log::warn!("Failed to fetch bulk metadata: {:?}", e);
-            std::collections::HashMap::new()
-        }
-    };
+    // Get usernames using the three-tier fallback strategy
+    let username_map =
+        get_usernames_with_fallback(&redis, &state.yral_metadata_client, principals.clone()).await;
 
     // Build result entries
     let entries: Vec<LeaderboardEntry> = leaderboard_data
@@ -1144,9 +1142,8 @@ pub async fn get_tournament_results_handler(
         .enumerate()
         .filter_map(|(index, (principal_str, score))| {
             if let Ok(principal) = Principal::from_text(principal_str) {
-                let metadata = metadata_map.get(&principal);
                 let rank = start + index as u32 + 1;
-                
+
                 // Determine reward based on tournament status
                 let reward = if tournament.status == TournamentStatus::Completed {
                     // Use saved reward if exists (for winners), None for others
@@ -1155,12 +1152,16 @@ pub async fn get_tournament_results_handler(
                     // Tournament still active - calculate potential reward
                     calculate_reward(rank, tournament.prize_pool as u64)
                 };
-                
+
+                // Username is guaranteed to exist for every principal
+                let username = username_map.get(&principal).cloned().unwrap_or_else(|| {
+                    log::error!("Missing username for principal {} in map", principal);
+                    random_username_from_principal(principal, 15)
+                });
+
                 Some(LeaderboardEntry {
                     principal_id: principal,
-                    username: metadata
-                        .and_then(|m| m.as_ref().map(|m| m.user_name.clone()))
-                        .unwrap_or_else(|| "Anonymous".to_string()),
+                    username,
                     score: *score,
                     rank,
                     reward,

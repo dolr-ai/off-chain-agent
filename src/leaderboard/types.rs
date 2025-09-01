@@ -260,6 +260,14 @@ pub struct CursorPaginationParams {
     pub limit: Option<u32>, // Default: 50, Max: 100
 }
 
+// Extended pagination params for leaderboard with optional user info
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeaderboardQueryParams {
+    pub start: Option<u32>, // Default: 0
+    pub limit: Option<u32>, // Default: 50, Max: 100
+    pub user_id: Option<String>, // Optional principal ID to get user's rank info
+}
+
 impl Default for CursorPaginationParams {
     fn default() -> Self {
         Self {
@@ -270,6 +278,26 @@ impl Default for CursorPaginationParams {
 }
 
 impl CursorPaginationParams {
+    pub fn get_start(&self) -> u32 {
+        self.start.unwrap_or(0)
+    }
+
+    pub fn get_limit(&self) -> u32 {
+        self.limit.unwrap_or(50).min(100) // Max 100
+    }
+}
+
+impl Default for LeaderboardQueryParams {
+    fn default() -> Self {
+        Self {
+            start: Some(0),
+            limit: Some(50),
+            user_id: None,
+        }
+    }
+}
+
+impl LeaderboardQueryParams {
     pub fn get_start(&self) -> u32 {
         self.start.unwrap_or(0)
     }

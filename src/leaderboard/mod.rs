@@ -2,6 +2,7 @@ pub mod handlers;
 pub mod redis_ops;
 pub mod tournament;
 pub mod types;
+pub mod utils;
 
 pub use types::*;
 
