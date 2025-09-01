@@ -1,17 +1,25 @@
 use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
-    app_state::AppState, consts::GOOGLE_CHAT_REPORT_SPACE_URL,
-    posts::report_post::repost_post_common_impl, AppError,
+    app_state::AppState,
+    consts::{GOOGLE_CHAT_REPORT_SPACE_URL, USER_POST_SERVICE_CANISTER_ID},
+    posts::report_post::repost_post_common_impl,
+    AppError,
 };
 use anyhow::{Context, Result};
 use axum::extract::State;
 use candid::Principal;
 use http::HeaderMap;
+use ic_agent::Agent;
 use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
-use yral_canisters_client::individual_user_template::PostStatus;
+use yral_canisters_client::{
+    ic::USER_INFO_SERVICE_ID,
+    individual_user_template::{IndividualUserTemplate, PostStatus},
+    user_post_service::{PostStatus as PostServicePostStatus, UserPostService},
+};
+
 use yup_oauth2::ServiceAccountAuthenticator;
 
 use crate::offchain_service::off_chain::{Empty, ReportPostRequest};
@@ -152,6 +160,29 @@ struct GChatPayloadActionParameter {
     value: String,
 }
 
+async fn mark_post_as_banned(
+    agent: &Agent,
+    post_id: String,
+    user_canister_id: Principal,
+) -> Result<(), AppError> {
+    match user_canister_id {
+        USER_INFO_SERVICE_ID => {
+            let post_service_canister = UserPostService(*USER_POST_SERVICE_CANISTER_ID, agent);
+            post_service_canister
+                .update_post_status(post_id, PostServicePostStatus::BannedDueToUserReporting)
+                .await?;
+            Ok(())
+        }
+        _ => {
+            let individual_user = IndividualUserTemplate(user_canister_id, agent);
+            individual_user
+                .update_post_status(post_id.parse()?, PostStatus::BannedDueToUserReporting)
+                .await?;
+            Ok(())
+        }
+    }
+}
+
 pub async fn report_approved_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -215,19 +246,10 @@ pub async fn report_approved_handler(
     // view_type format : "canister_id post_id(int)"
     let view_type: Vec<&str> = view_type.split(" ").collect();
     let canister_id = view_type[0];
-    let canister_principal = Principal::from_text(canister_id)?;
-    let post_id = view_type[1].parse::<u64>()?;
+    let user_canister_id = Principal::from_text(canister_id)?;
+    let post_id = view_type[1].to_string();
 
-    let user = state.individual_user(canister_principal);
-
-    user.update_post_status(post_id, PostStatus::BannedDueToUserReporting)
-        .await?;
-
-    // send confirmation to Google Chat
-    let confirmation_msg = json!({
-        "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
-    });
-    send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+    mark_post_as_banned(&state.agent, post_id, user_canister_id).await?;
 
     Ok(())
 }
