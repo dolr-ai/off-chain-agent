@@ -105,6 +105,8 @@ sentry-anyhow = "0.42.0"
 yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
     "full",
     "user-post-service",
+    "user-info-service",
+    "user-post-service"
 ] }
 yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
 yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
