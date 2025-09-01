@@ -2,7 +2,13 @@ mod verify;
 
 use std::sync::Arc;
 
-use axum::{extract::{Path, State}, middleware, response::{IntoResponse, Response}, routing::post, Json, Router};
+use axum::{
+    extract::{Path, State},
+    middleware,
+    response::{IntoResponse, Response},
+    routing::post,
+    Json, Router,
+};
 use hotornot_job::start_hotornot_job_v2;
 use http::StatusCode;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
@@ -150,20 +156,20 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(crate::leaderboard::handlers::create_tournament_handler),
         )
         .route(
-            "/tournament/start/:id",
+            "/tournament/start/{id}",
             post(crate::leaderboard::handlers::start_tournament_handler),
         )
         .route(
-            "/tournament/finalize/:id",
+            "/tournament/finalize/{id}",
             post(crate::leaderboard::handlers::finalize_tournament_handler),
         )
         .route(
-            "/tournament/end/:id",
+            "/tournament/end/{id}",
             post(crate::leaderboard::handlers::end_tournament_handler),
         )
-        .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
-            app_state.qstash.clone(),
-            verify_qstash_message,
-        )))
+        // .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
+        //     app_state.qstash.clone(),
+        //     verify_qstash_message,
+        // )))
         .with_state(app_state)
 }
