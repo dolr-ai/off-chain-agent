@@ -302,32 +302,38 @@ pub async fn get_leaderboard_handler(
     let limit = params.get_limit();
     let sort_order = params.get_sort_order();
 
-    // Get current tournament
-    let current_tournament = match redis.get_current_tournament().await {
-        Ok(Some(id)) => id,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({
-                    "error": "No active tournament"
-                })),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            log::error!("Failed to get current tournament: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "Failed to get current tournament"
-                })),
-            )
-                .into_response();
+    // Determine which tournament to use
+    let tournament_id = if let Some(id) = params.tournament_id {
+        // Use specified tournament for historical data
+        id
+    } else {
+        // Get current tournament
+        match redis.get_current_tournament().await {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({
+                        "error": "No active tournament"
+                    })),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                log::error!("Failed to get current tournament: {:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": "Failed to get current tournament"
+                    })),
+                )
+                    .into_response();
+            }
         }
     };
 
     // Get tournament info
-    let tournament = match redis.get_tournament_info(&current_tournament).await {
+    let tournament = match redis.get_tournament_info(&tournament_id).await {
         Ok(Some(t)) => t,
         Ok(None) => {
             return (
@@ -351,7 +357,7 @@ pub async fn get_leaderboard_handler(
     };
 
     // Get total participants first (needed for rank calculation in ascending order)
-    let total_participants = match redis.get_total_participants(&current_tournament).await {
+    let total_participants = match redis.get_total_participants(&tournament_id).await {
         Ok(count) => count,
         Err(_) => 0,
     };
@@ -359,7 +365,7 @@ pub async fn get_leaderboard_handler(
     // Get paginated players
     let leaderboard_data = match redis
         .get_leaderboard(
-            &current_tournament,
+            &tournament_id,
             start as isize,
             (start + limit - 1) as isize,
             sort_order.clone(),
@@ -454,7 +460,7 @@ pub async fn get_leaderboard_handler(
         if let Ok(user_principal) = Principal::from_text(&user_id) {
             // Get user's rank
             let user_rank = match redis
-                .get_user_rank(&current_tournament, user_principal)
+                .get_user_rank(&tournament_id, user_principal)
                 .await
             {
                 Ok(Some(rank)) => rank,
@@ -463,7 +469,7 @@ pub async fn get_leaderboard_handler(
 
             // Get user's score
             let user_score = match redis
-                .get_user_score(&current_tournament, user_principal)
+                .get_user_score(&tournament_id, user_principal)
                 .await
             {
                 Ok(Some(score)) => score,

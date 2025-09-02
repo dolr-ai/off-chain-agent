@@ -282,6 +282,7 @@ pub struct LeaderboardQueryParams {
     pub limit: Option<u32>,            // Default: 50, Max: 100
     pub user_id: Option<String>,       // Optional principal ID to get user's rank info
     pub sort_order: Option<SortOrder>, // Default: Desc
+    pub tournament_id: Option<String>, // Optional tournament ID for historical data
 }
 
 impl Default for CursorPaginationParams {
@@ -310,6 +311,7 @@ impl Default for LeaderboardQueryParams {
             limit: Some(50),
             user_id: None,
             sort_order: None,
+            tournament_id: None,
         }
     }
 }

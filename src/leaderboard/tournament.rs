@@ -34,8 +34,13 @@ pub async fn start_tournament(tournament_id: &str, app_state: &Arc<AppState>) ->
         .context("Tournament not found")?;
 
     // Check if tournament is in the right state (can be Upcoming or already Active for immediate start)
-    if tournament.status != TournamentStatus::Upcoming && tournament.status != TournamentStatus::Active {
-        return Err(anyhow::anyhow!("Tournament cannot be started from status: {:?}", tournament.status));
+    if tournament.status != TournamentStatus::Upcoming
+        && tournament.status != TournamentStatus::Active
+    {
+        return Err(anyhow::anyhow!(
+            "Tournament cannot be started from status: {:?}",
+            tournament.status
+        ));
     }
 
     // Only update status if it's not already Active
@@ -67,7 +72,11 @@ pub async fn start_tournament(tournament_id: &str, app_state: &Arc<AppState>) ->
     // Schedule finalize for end_time
     let delay = tournament.end_time - Utc::now().timestamp();
     if delay > 0 {
-        if let Err(e) = app_state.qstash_client.schedule_tournament_finalize(tournament_id, delay).await {
+        if let Err(e) = app_state
+            .qstash_client
+            .schedule_tournament_finalize(tournament_id, delay)
+            .await
+        {
             log::error!("Failed to schedule tournament finalize: {:?}", e);
         } else {
             log::info!(
@@ -109,11 +118,13 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     redis.set_tournament_info(&tournament).await?;
 
     // Get top 10 winners for prize distribution
-    let top_players = redis.get_leaderboard(tournament_id, 0, 9, super::types::SortOrder::Desc).await?;
+    let top_players = redis
+        .get_leaderboard(tournament_id, 0, 9, super::types::SortOrder::Desc)
+        .await?;
 
     // Calculate prize distribution and prepare for token distribution
     let mut distribution_tasks = Vec::new();
-    
+
     for (rank, (principal_str, score)) in top_players.iter().enumerate() {
         if let Ok(principal) = Principal::from_text(principal_str) {
             let rank = (rank + 1) as u32;
@@ -123,51 +134,56 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
         }
     }
 
+    // TODO: uncomment
     // Distribute prizes if tournament uses YRAL (which is Sats internally)
-    if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
-        // Get JWT token from environment
-        let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
-        
-        // Create Sats operations provider
-        let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
-        let token_ops = Arc::new(token_ops);
+    // if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
+    //     // Get JWT token from environment
+    //     let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
 
-        // Process distributions concurrently, 5 at a time
-        let results: Vec<_> = stream::iter(distribution_tasks.clone())
-            .map(|(principal, reward, rank, _)| {
-                let token_ops = token_ops.clone();
-                async move {
-                    match token_ops.add_balance(principal, reward).await {
-                        Ok(_) => {
-                            log::info!("Distributed {} SATS to {} (rank {})", reward, principal, rank);
-                            Ok((principal, reward, rank))
-                        }
-                        Err(e) => {
-                            log::error!("Failed to distribute {} SATS to {} (rank {}): {:?}", 
-                                       reward, principal, rank, e);
-                            Err((principal, reward, rank, e))
-                        }
-                    }
-                }
-            })
-            .buffer_unordered(5) // Process 5 concurrent requests at a time
-            .collect()
-            .await;
+    //     // Create Sats operations provider
+    //     let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
+    //     let token_ops = Arc::new(token_ops);
 
-        // Log summary
-        let successful = results.iter().filter(|r| r.is_ok()).count();
-        let failed = results.iter().filter(|r| r.is_err()).count();
-        log::info!("Prize distribution complete: {} successful, {} failed", successful, failed);
-    }
+    //     // Process distributions concurrently, 5 at a time
+    //     let results: Vec<_> = stream::iter(distribution_tasks.clone())
+    //         .map(|(principal, reward, rank, _)| {
+    //             let token_ops = token_ops.clone();
+    //             async move {
+    //                 match token_ops.add_balance(principal, reward).await {
+    //                     Ok(_) => {
+    //                         log::info!("Distributed {} SATS to {} (rank {})", reward, principal, rank);
+    //                         Ok((principal, reward, rank))
+    //                     }
+    //                     Err(e) => {
+    //                         log::error!("Failed to distribute {} SATS to {} (rank {}): {:?}",
+    //                                    reward, principal, rank, e);
+    //                         Err((principal, reward, rank, e))
+    //                     }
+    //                 }
+    //             }
+    //         })
+    //         .buffer_unordered(5) // Process 5 concurrent requests at a time
+    //         .collect()
+    //         .await;
+
+    //     // Log summary
+    //     let successful = results.iter().filter(|r| r.is_ok()).count();
+    //     let failed = results.iter().filter(|r| r.is_err()).count();
+    //     log::info!("Prize distribution complete: {} successful, {} failed", successful, failed);
+    // }
 
     // Build and save tournament results for winners
     let mut winner_entries = Vec::new();
     let mut total_prize_distributed = 0u64;
-    
+
     // Collect winner data from distribution_tasks (these have the actual rewards)
     for (principal, reward, rank, score) in &distribution_tasks {
         // Get username for winner
-        let username = match app_state.yral_metadata_client.get_user_metadata_v2(principal.to_string()).await {
+        let username = match app_state
+            .yral_metadata_client
+            .get_user_metadata_v2(principal.to_string())
+            .await
+        {
             Ok(Some(metadata)) if !metadata.user_name.trim().is_empty() => metadata.user_name,
             _ => {
                 let generated = random_username_from_principal(*principal, 15);
@@ -178,7 +194,7 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
                 generated
             }
         };
-        
+
         winner_entries.push(LeaderboardEntry {
             principal_id: *principal,
             username,
@@ -186,7 +202,7 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
             rank: *rank,
             reward: Some(*reward),
         });
-        
+
         total_prize_distributed += reward;
 
         // Send winner notification
@@ -208,10 +224,12 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
 
         log::info!(
             "Sent winner notification to {} for rank {} with prize {}",
-            principal, rank, reward
+            principal,
+            rank,
+            reward
         );
     }
-    
+
     // Create tournament result
     let tournament_result = TournamentResult {
         tournament_id: tournament_id.to_string(),
@@ -223,12 +241,12 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
         total_prize_distributed,
         finalized_at: Utc::now().timestamp(),
     };
-    
+
     // Save tournament results
     if let Err(e) = redis.save_tournament_results(&tournament_result).await {
         log::error!("Failed to save tournament results: {:?}", e);
     }
-    
+
     // Update tournament status to Completed
     tournament.status = TournamentStatus::Completed;
     tournament.updated_at = Utc::now().timestamp();
@@ -265,8 +283,13 @@ pub async fn end_tournament(tournament_id: &str, app_state: &Arc<AppState>) -> R
         .context("Tournament not found")?;
 
     // Check if tournament can be ended (Active or Finalizing)
-    if tournament.status != TournamentStatus::Active && tournament.status != TournamentStatus::Finalizing {
-        return Err(anyhow::anyhow!("Tournament cannot be ended from status: {:?}", tournament.status));
+    if tournament.status != TournamentStatus::Active
+        && tournament.status != TournamentStatus::Finalizing
+    {
+        return Err(anyhow::anyhow!(
+            "Tournament cannot be ended from status: {:?}",
+            tournament.status
+        ));
     }
 
     // Update tournament status to Ended
@@ -286,7 +309,10 @@ pub async fn end_tournament(tournament_id: &str, app_state: &Arc<AppState>) -> R
         }
     }
 
-    log::info!("Tournament {} manually ended (status set to Ended)", tournament_id);
+    log::info!(
+        "Tournament {} manually ended (status set to Ended)",
+        tournament_id
+    );
 
     Ok(())
 }
