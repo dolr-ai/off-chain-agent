@@ -295,13 +295,17 @@ impl LeaderboardRedis {
         tournament_id: &str,
         start: isize,
         stop: isize,
+        sort_order: SortOrder,
     ) -> Result<Vec<(String, f64)>> {
         let mut conn = self.pool.get().await?;
         let scores_key = self.tournament_scores_key(tournament_id);
         let users_key = self.tournament_users_key(tournament_id);
 
         // Get ranking from sorted set (contains composite scores for tie-breaking)
-        let ranked_members: Vec<(String, f64)> = conn.zrevrange_withscores(&scores_key, start, stop).await?;
+        let ranked_members: Vec<(String, f64)> = match sort_order {
+            SortOrder::Asc => conn.zrange_withscores(&scores_key, start, stop).await?,
+            SortOrder::Desc => conn.zrevrange_withscores(&scores_key, start, stop).await?,
+        };
         
         // Build result with actual scores from UserTournamentData
         let mut results = Vec::new();
@@ -366,12 +370,16 @@ impl LeaderboardRedis {
         tournament_id: &str,
         query: &str,
         limit: u32,
+        sort_order: SortOrder,
     ) -> Result<Vec<(Principal, f64)>> {
         let mut conn = self.pool.get().await?;
 
-        // Get all participants with scores (already sorted by score descending)
+        // Get all participants with scores (sorted by composite score)
         let key = self.tournament_scores_key(tournament_id);
-        let participants: Vec<(String, f64)> = conn.zrevrange_withscores(&key, 0, -1).await?;
+        let participants: Vec<(String, f64)> = match sort_order {
+            SortOrder::Asc => conn.zrange_withscores(&key, 0, -1).await?,
+            SortOrder::Desc => conn.zrevrange_withscores(&key, 0, -1).await?,
+        };
 
         if participants.is_empty() {
             return Ok(vec![]);
@@ -851,7 +859,7 @@ mod tests {
 
         // Search for "alice"
         let results = redis
-            .search_users(&tournament_id, "alice", 10)
+            .search_users(&tournament_id, "alice", 10, SortOrder::Desc)
             .await
             .expect("Failed to search users");
 

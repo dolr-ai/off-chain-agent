@@ -109,7 +109,7 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     redis.set_tournament_info(&tournament).await?;
 
     // Get top 10 winners for prize distribution
-    let top_players = redis.get_leaderboard(tournament_id, 0, 9).await?;
+    let top_players = redis.get_leaderboard(tournament_id, 0, 9, super::types::SortOrder::Desc).await?;
 
     // Calculate prize distribution and prepare for token distribution
     let mut distribution_tasks = Vec::new();

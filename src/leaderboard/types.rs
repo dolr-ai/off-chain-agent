@@ -65,7 +65,7 @@ pub enum ScoreOperation {
     Set,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub enum TournamentStatus {
     #[serde(rename = "upcoming")]
     Upcoming,
@@ -79,6 +79,20 @@ pub enum TournamentStatus {
     Ended,
     #[serde(rename = "cancelled")]
     Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum SortOrder {
+    #[serde(rename = "asc")]
+    Asc,
+    #[serde(rename = "desc")]
+    Desc,
+}
+
+impl Default for SortOrder {
+    fn default() -> Self {
+        SortOrder::Desc // Keep current behavior as default
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,8 +110,9 @@ pub struct Tournament {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct LeaderboardEntry {
+    #[schema(value_type = String)]
     pub principal_id: Principal,
     pub username: String,
     pub score: f64,
@@ -263,9 +278,10 @@ pub struct CursorPaginationParams {
 // Extended pagination params for leaderboard with optional user info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaderboardQueryParams {
-    pub start: Option<u32>, // Default: 0
-    pub limit: Option<u32>, // Default: 50, Max: 100
-    pub user_id: Option<String>, // Optional principal ID to get user's rank info
+    pub start: Option<u32>,            // Default: 0
+    pub limit: Option<u32>,            // Default: 50, Max: 100
+    pub user_id: Option<String>,       // Optional principal ID to get user's rank info
+    pub sort_order: Option<SortOrder>, // Default: Desc
 }
 
 impl Default for CursorPaginationParams {
@@ -293,6 +309,7 @@ impl Default for LeaderboardQueryParams {
             start: Some(0),
             limit: Some(50),
             user_id: None,
+            sort_order: None,
         }
     }
 }
@@ -305,6 +322,10 @@ impl LeaderboardQueryParams {
     pub fn get_limit(&self) -> u32 {
         self.limit.unwrap_or(50).min(100) // Max 100
     }
+
+    pub fn get_sort_order(&self) -> SortOrder {
+        self.sort_order.clone().unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,7 +334,7 @@ pub struct CursorPaginatedResponse<T> {
     pub cursor_info: CursorInfo,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CursorInfo {
     pub start: u32,
     pub limit: u32,
@@ -322,11 +343,32 @@ pub struct CursorInfo {
     pub has_more: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TournamentInfo {
+    pub id: String,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub status: TournamentStatus,
+    pub prize_pool: f64,
+    pub prize_token: TokenType,
+    pub metric_type: MetricType,
+    pub metric_display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LeaderboardWithTournamentResponse {
+    pub data: Vec<LeaderboardEntry>,
+    pub cursor_info: CursorInfo,
+    pub tournament_info: TournamentInfo,
+    pub user_info: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
 pub struct SearchParams {
     pub q: String,
-    pub start: Option<u32>, // Default: 0
-    pub limit: Option<u32>, // Default: 50, Max: 100
+    pub start: Option<u32>,            // Default: 0
+    pub limit: Option<u32>,            // Default: 50, Max: 100
+    pub sort_order: Option<SortOrder>, // Default: Desc
 }
 
 impl SearchParams {
@@ -336,6 +378,10 @@ impl SearchParams {
 
     pub fn get_limit(&self) -> u32 {
         self.limit.unwrap_or(50).min(100) // Max 100
+    }
+
+    pub fn get_sort_order(&self) -> SortOrder {
+        self.sort_order.clone().unwrap_or_default()
     }
 }
 

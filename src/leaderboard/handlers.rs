@@ -223,7 +223,7 @@ pub async fn update_score_handler(
     path = "/current",
     tag = "leaderboard",
     responses(
-        (status = 200, description = "Leaderboard data retrieved"),
+        (status = 200, description = "Leaderboard data retrieved", body = LeaderboardWithTournamentResponse),
         (status = 404, description = "No active tournament")
     )
 )]
@@ -235,6 +235,7 @@ pub async fn get_leaderboard_handler(
 
     let start = params.get_start();
     let limit = params.get_limit();
+    let sort_order = params.get_sort_order();
 
     // Get current tournament
     let current_tournament = match redis.get_current_tournament().await {
@@ -284,12 +285,19 @@ pub async fn get_leaderboard_handler(
         }
     };
 
+    // Get total participants first (needed for rank calculation in ascending order)
+    let total_participants = match redis.get_total_participants(&current_tournament).await {
+        Ok(count) => count,
+        Err(_) => 0,
+    };
+
     // Get paginated players
     let leaderboard_data = match redis
         .get_leaderboard(
             &current_tournament,
             start as isize,
             (start + limit - 1) as isize,
+            sort_order.clone(),
         )
         .await
     {
@@ -322,8 +330,19 @@ pub async fn get_leaderboard_handler(
         .enumerate()
         .filter_map(|(index, (principal_str, score))| {
             if let Ok(principal) = Principal::from_text(principal_str) {
-                let rank = start + index as u32 + 1; // Calculate actual rank
-                                                     // Username is guaranteed to exist for every principal
+                // Calculate rank based on sort order
+                let rank = match sort_order {
+                    SortOrder::Desc => start + index as u32 + 1, // Normal: 1, 2, 3...
+                    SortOrder::Asc => {
+                        // Reversed: N, N-1, N-2...
+                        if total_participants > 0 {
+                            total_participants - start - index as u32
+                        } else {
+                            1 // Fallback if no participants
+                        }
+                    }
+                };
+                // Username is guaranteed to exist for every principal
                 let username = username_map.get(&principal).cloned().unwrap_or_else(|| {
                     // This should never happen since get_usernames_with_fallback
                     // always returns a username for every principal
@@ -331,12 +350,18 @@ pub async fn get_leaderboard_handler(
                     random_username_from_principal(principal, 15)
                 });
 
+                // For rewards, always use the "real" rank (1 = top prize)
+                let reward_rank = match sort_order {
+                    SortOrder::Desc => rank,                         // Same as display rank
+                    SortOrder::Asc => total_participants - rank + 1, // Convert back to real rank
+                };
+
                 Some(LeaderboardEntry {
                     principal_id: principal,
                     username,
                     score: *score,
-                    rank,
-                    reward: calculate_reward(rank, tournament.prize_pool as u64),
+                    rank, // Display rank (reversed for ascending)
+                    reward: calculate_reward(reward_rank, tournament.prize_pool as u64), // Use real rank for rewards
                 })
             } else {
                 None
@@ -344,11 +369,7 @@ pub async fn get_leaderboard_handler(
         })
         .collect();
 
-    // Get total participants
-    let total_participants = match redis.get_total_participants(&current_tournament).await {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+    // Total participants already fetched above
 
     // Calculate cursor info
     let has_more = (start + limit) < total_participants;
@@ -419,15 +440,25 @@ pub async fn get_leaderboard_handler(
         None
     };
 
-    // Build response with optional user info
-    let mut response = serde_json::json!({
-        "data": entries,
-        "cursor_info": cursor_info,
-    });
+    // Build tournament info for response
+    let tournament_info = TournamentInfo {
+        id: tournament.id.clone(),
+        start_time: tournament.start_time,
+        end_time: tournament.end_time,
+        status: tournament.status,
+        prize_pool: tournament.prize_pool,
+        prize_token: tournament.prize_token,
+        metric_type: tournament.metric_type,
+        metric_display_name: tournament.metric_display_name,
+    };
 
-    if let Some(user_info) = user_info {
-        response["user_info"] = user_info;
-    }
+    // Build response with tournament info and optional user info
+    let response = LeaderboardWithTournamentResponse {
+        data: entries,
+        cursor_info,
+        tournament_info,
+        user_info,
+    };
 
     (StatusCode::OK, Json(response)).into_response()
 }
@@ -493,23 +524,24 @@ pub async fn get_user_rank_handler(
     };
 
     // Get user's rank and determine if they're in the leaderboard
-    let (user_rank, is_in_leaderboard) = match redis.get_user_rank(&current_tournament, principal).await {
-        Ok(Some(rank)) => (rank, true),
-        Ok(None) => {
-            // User not in leaderboard - assign last rank
-            (total_participants + 1, false)
-        }
-        Err(e) => {
-            log::error!("Failed to get user rank: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "Failed to get user rank"
-                })),
-            )
-                .into_response();
-        }
-    };
+    let (user_rank, is_in_leaderboard) =
+        match redis.get_user_rank(&current_tournament, principal).await {
+            Ok(Some(rank)) => (rank, true),
+            Ok(None) => {
+                // User not in leaderboard - assign last rank
+                (total_participants + 1, false)
+            }
+            Err(e) => {
+                log::error!("Failed to get user rank: {:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": "Failed to get user rank"
+                    })),
+                )
+                    .into_response();
+            }
+        };
 
     // Get user's score
     let user_score = if is_in_leaderboard {
@@ -565,6 +597,7 @@ pub async fn get_user_rank_handler(
                 &current_tournament,
                 context_start as isize,
                 context_end as isize,
+                SortOrder::Desc, // Always desc for rank context
             )
             .await
         {
@@ -647,6 +680,7 @@ pub async fn search_users_handler(
 
     let start = params.get_start();
     let limit = params.get_limit();
+    let sort_order = params.get_sort_order();
 
     // Get current tournament
     let current_tournament = match redis.get_current_tournament().await {
@@ -674,7 +708,12 @@ pub async fn search_users_handler(
 
     // Search users (this is a simplified version - could be optimized)
     let search_results = match redis
-        .search_users(&current_tournament, &params.q, limit * 10)
+        .search_users(
+            &current_tournament,
+            &params.q,
+            limit * 10,
+            sort_order.clone(),
+        )
         .await
     {
         Ok(results) => results,
@@ -718,6 +757,12 @@ pub async fn search_users_handler(
         }
     };
 
+    // Get total participants for rank calculation in ascending order
+    let total_participants = match redis.get_total_participants(&current_tournament).await {
+        Ok(count) => count,
+        Err(_) => 0,
+    };
+
     // Build search result entries with ranks
     let mut entries = Vec::new();
     for (principal, score) in &paginated_results {
@@ -733,12 +778,31 @@ pub async fn search_users_handler(
                 random_username_from_principal(*principal, 15)
             });
 
+            // Adjust rank for ascending order
+            let display_rank = match sort_order {
+                SortOrder::Desc => rank, // Normal: use rank as-is
+                SortOrder::Asc => {
+                    // Reversed: convert to descending rank
+                    if total_participants > 0 {
+                        total_participants - rank + 1
+                    } else {
+                        rank // Fallback
+                    }
+                }
+            };
+
+            // For rewards, always use the real rank (1 = top prize)
+            let reward_rank = match sort_order {
+                SortOrder::Desc => rank, // Already correct
+                SortOrder::Asc => rank, // get_user_rank always returns desc rank, so it's correct for rewards
+            };
+
             entries.push(LeaderboardEntry {
                 principal_id: *principal,
                 username,
                 score: *score,
-                rank,
-                reward: calculate_reward(rank, tournament.prize_pool as u64),
+                rank: display_rank,
+                reward: calculate_reward(reward_rank, tournament.prize_pool as u64),
             });
         }
     }
@@ -808,8 +872,9 @@ pub async fn get_tournament_history_handler(
     for tournament_id in &paginated_ids {
         if let Ok(Some(tournament)) = redis.get_tournament_info(tournament_id).await {
             // Get winner (rank 1)
-            let winner_info = if let Ok(top_players) =
-                redis.get_leaderboard(tournament_id, 0, 0).await
+            let winner_info = if let Ok(top_players) = redis
+                .get_leaderboard(tournament_id, 0, 0, SortOrder::Desc)
+                .await
             {
                 if let Some((principal_str, score)) = top_players.first() {
                     if let Ok(principal) = Principal::from_text(principal_str) {
@@ -1098,7 +1163,12 @@ pub async fn get_tournament_results_handler(
 
     // Get leaderboard data
     let leaderboard_data = match redis
-        .get_leaderboard(&tournament_id, start as isize, (start + limit - 1) as isize)
+        .get_leaderboard(
+            &tournament_id,
+            start as isize,
+            (start + limit - 1) as isize,
+            SortOrder::Desc,
+        )
         .await
     {
         Ok(data) => data,
