@@ -1,9 +1,8 @@
 use axum::{
-    extract::{ConnectInfo, Json, Path, Query, State},
+    extract::{Json, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
 };
-use std::net::SocketAddr;
 use candid::Principal;
 use chrono::Utc;
 use std::sync::Arc;
@@ -24,23 +23,26 @@ struct TimezoneApiResponse {
     // Add other fields if needed
 }
 
-// Helper function to extract client IP from headers or socket
-fn extract_client_ip(headers: &HeaderMap, addr: SocketAddr) -> String {
+// Helper function to extract client IP from headers
+fn extract_client_ip(headers: &HeaderMap) -> String {
     headers
         .get("x-forwarded-for")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.split(',').next()) // take first if multiple
         .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| addr.ip().to_string())
+        .unwrap_or_else(|| "127.0.0.1".to_string()) // Default fallback for local/unknown
 }
 
 // Helper function to get timezone from IP using the API
 async fn get_timezone_from_ip(ip: &str) -> Option<(String, Tz)> {
     // Get the bearer token from environment or config
     let token = std::env::var("TIMEZONE_API_TOKEN").ok()?;
-    
-    let url = format!("https://marketing-analytics-server.fly.dev/api/ip_v2/{}", ip);
-    
+
+    let url = format!(
+        "https://marketing-analytics-server.fly.dev/api/ip_v2/{}",
+        ip
+    );
+
     let client = reqwest::Client::new();
     let response = client
         .get(&url)
@@ -49,25 +51,28 @@ async fn get_timezone_from_ip(ip: &str) -> Option<(String, Tz)> {
         .send()
         .await
         .ok()?;
-    
+
     if !response.status().is_success() {
-        log::warn!("Timezone API returned non-success status for IP {}: {}", ip, response.status());
+        log::warn!(
+            "Timezone API returned non-success status for IP {}: {}",
+            ip,
+            response.status()
+        );
         return None;
     }
-    
+
     let data: TimezoneApiResponse = response.json().await.ok()?;
     let timezone_str = data.timezone?;
-    
+
     // Parse the timezone string to Tz
     let tz: Tz = timezone_str.parse().ok()?;
-    
+
     Some((timezone_str, tz))
 }
 
 // Helper function to convert Unix timestamp to ISO 8601 string in given timezone
 fn convert_timestamp_to_timezone(timestamp: i64, tz: &Tz) -> String {
-    let utc_dt = DateTime::from_timestamp(timestamp, 0)
-        .unwrap_or_else(|| Utc::now());
+    let utc_dt = DateTime::from_timestamp(timestamp, 0).unwrap_or_else(|| Utc::now());
     let local_dt = tz.from_utc_datetime(&utc_dt.naive_utc());
     local_dt.to_rfc3339()
 }
@@ -288,7 +293,6 @@ pub async fn update_score_handler(
 )]
 pub async fn get_leaderboard_handler(
     headers: HeaderMap,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Query(params): Query<LeaderboardQueryParams>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
@@ -502,12 +506,12 @@ pub async fn get_leaderboard_handler(
     };
 
     // Get client IP and timezone
-    let client_ip = extract_client_ip(&headers, addr);
+    let client_ip = extract_client_ip(&headers);
     log::debug!("Client IP: {}", client_ip);
-    
+
     // Get timezone info from IP
     let timezone_info = get_timezone_from_ip(&client_ip).await;
-    
+
     // Build tournament info for response with timezone-adjusted times
     let tournament_info = if let Some((timezone_str, tz)) = timezone_info {
         TournamentInfo {
@@ -866,31 +870,12 @@ pub async fn search_users_handler(
                 random_username_from_principal(*principal, 15)
             });
 
-            // Adjust rank for ascending order
-            let display_rank = match sort_order {
-                SortOrder::Desc => rank, // Normal: use rank as-is
-                SortOrder::Asc => {
-                    // Reversed: convert to descending rank
-                    if total_participants > 0 {
-                        total_participants - rank + 1
-                    } else {
-                        rank // Fallback
-                    }
-                }
-            };
-
-            // For rewards, always use the real rank (1 = top prize)
-            let reward_rank = match sort_order {
-                SortOrder::Desc => rank, // Already correct
-                SortOrder::Asc => rank, // get_user_rank always returns desc rank, so it's correct for rewards
-            };
-
             entries.push(LeaderboardEntry {
                 principal_id: *principal,
                 username,
                 score: *score,
-                rank: display_rank,
-                reward: calculate_reward(reward_rank, tournament.prize_pool as u64),
+                rank: rank,
+                reward: calculate_reward(rank, tournament.prize_pool as u64),
             });
         }
     }

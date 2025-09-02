@@ -289,6 +289,49 @@ impl LeaderboardRedis {
         }
     }
 
+    // Get user metadata in bulk
+    pub async fn get_user_metadata_bulk(
+        &self,
+        tournament_id: &str,
+        principals: &[String],
+    ) -> Result<HashMap<String, UserTournamentData>> {
+        if principals.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut conn = self.pool.get().await?;
+        let key = self.tournament_users_key(tournament_id);
+        let mut metadata_map = HashMap::with_capacity(principals.len());
+
+        // Use HMGET to fetch all user data in one call
+        let results: Vec<Option<String>> = redis::cmd("HMGET")
+            .arg(&key)
+            .arg(principals)
+            .query_async(&mut *conn)
+            .await
+            .context("Failed to fetch user metadata in bulk")?;
+
+        // Process results and build map
+        for (principal_str, data_opt) in principals.iter().zip(results.iter()) {
+            if let Some(json_str) = data_opt {
+                match serde_json::from_str::<UserTournamentData>(json_str) {
+                    Ok(metadata) => {
+                        metadata_map.insert(principal_str.clone(), metadata);
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to deserialize user metadata for {}: {:?}",
+                            principal_str,
+                            e
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(metadata_map)
+    }
+
     // Get leaderboard with pagination
     pub async fn get_leaderboard(
         &self,
@@ -299,7 +342,6 @@ impl LeaderboardRedis {
     ) -> Result<Vec<(String, f64)>> {
         let mut conn = self.pool.get().await?;
         let scores_key = self.tournament_scores_key(tournament_id);
-        let users_key = self.tournament_users_key(tournament_id);
 
         // Get ranking from sorted set (contains composite scores for tie-breaking)
         let ranked_members: Vec<(String, f64)> = match sort_order {
@@ -307,21 +349,26 @@ impl LeaderboardRedis {
             SortOrder::Desc => conn.zrevrange_withscores(&scores_key, start, stop).await?,
         };
         
+        if ranked_members.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Collect all principal strings for batch fetching
+        let principal_strings: Vec<String> = ranked_members
+            .iter()
+            .map(|(principal_str, _)| principal_str.clone())
+            .collect();
+
+        // Batch fetch all user metadata
+        let metadata_map = self.get_user_metadata_bulk(tournament_id, &principal_strings).await?;
+        
         // Build result with actual scores from UserTournamentData
-        let mut results = Vec::new();
-        for (principal_str, _composite_score) in ranked_members {
-            // Get UserTournamentData which has the actual score
-            let user_data: Option<String> = conn.hget(&users_key, &principal_str).await?;
-            
-            let actual_score = if let Some(json_str) = user_data {
-                serde_json::from_str::<UserTournamentData>(&json_str)
-                    .map(|data| data.score)
-                    .unwrap_or(_composite_score) // Fallback to composite if parse fails
-            } else {
-                // Fallback: if no user data exists, use the composite score
-                // This handles edge cases where score was set but metadata wasn't stored yet
-                _composite_score
-            };
+        let mut results = Vec::with_capacity(ranked_members.len());
+        for (principal_str, composite_score) in ranked_members {
+            let actual_score = metadata_map
+                .get(&principal_str)
+                .map(|metadata| metadata.score)
+                .unwrap_or(composite_score); // Fallback to composite if no metadata
             
             results.push((principal_str, actual_score));
         }
@@ -375,15 +422,21 @@ impl LeaderboardRedis {
         let mut conn = self.pool.get().await?;
 
         // Get all participants with scores (sorted by composite score)
-        let key = self.tournament_scores_key(tournament_id);
+        let scores_key = self.tournament_scores_key(tournament_id);
         let participants: Vec<(String, f64)> = match sort_order {
-            SortOrder::Asc => conn.zrange_withscores(&key, 0, -1).await?,
-            SortOrder::Desc => conn.zrevrange_withscores(&key, 0, -1).await?,
+            SortOrder::Asc => conn.zrange_withscores(&scores_key, 0, -1).await?,
+            SortOrder::Desc => conn.zrevrange_withscores(&scores_key, 0, -1).await?,
         };
 
         if participants.is_empty() {
             return Ok(vec![]);
         }
+
+        // Collect all principal strings for bulk operations
+        let principal_strings: Vec<String> = participants
+            .iter()
+            .map(|(principal_str, _)| principal_str.clone())
+            .collect();
 
         // Parse all valid principals
         let principals: Vec<Principal> = participants
@@ -391,19 +444,26 @@ impl LeaderboardRedis {
             .filter_map(|(principal_str, _)| Principal::from_text(principal_str).ok())
             .collect();
 
-        // Batch retrieve all usernames
+        // Batch retrieve all usernames and all user metadata in parallel
         let username_map = self.get_cached_usernames_bulk(&principals).await?;
+        let metadata_map = self.get_user_metadata_bulk(tournament_id, &principal_strings).await?;
 
-        // Filter and build results
-        let mut matches = Vec::new();
+        // Filter and build results with actual scores
+        let mut results = Vec::new();
         let query_lower = query.to_lowercase();
 
-        for (principal_str, score) in participants.iter() {
+        for (principal_str, composite_score) in participants.iter() {
             if let Ok(principal) = Principal::from_text(principal_str) {
                 if let Some(username) = username_map.get(&principal) {
                     if username.to_lowercase().contains(&query_lower) {
-                        matches.push((principal, *score));
-                        if matches.len() >= limit as usize {
+                        // Get actual score from pre-fetched metadata
+                        let actual_score = metadata_map
+                            .get(principal_str)
+                            .map(|metadata| metadata.score)
+                            .unwrap_or(*composite_score); // Fallback to composite if no metadata
+                        
+                        results.push((principal, actual_score));
+                        if results.len() >= limit as usize {
                             break;
                         }
                     }
@@ -411,7 +471,7 @@ impl LeaderboardRedis {
             }
         }
 
-        Ok(matches)
+        Ok(results)
     }
 
     // Add tournament to history
