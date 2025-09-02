@@ -353,6 +353,9 @@ pub struct TournamentInfo {
     pub prize_token: TokenType,
     pub metric_type: MetricType,
     pub metric_display_name: String,
+    pub client_timezone: Option<String>,
+    pub client_start_time: Option<String>,  // ISO 8601 formatted in client's timezone
+    pub client_end_time: Option<String>,    // ISO 8601 formatted in client's timezone
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

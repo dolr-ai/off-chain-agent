@@ -11,3 +11,4 @@ google_service_account.json
 .claude/
 docs/
 *.hurl
+local_scripts/
