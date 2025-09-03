@@ -4,12 +4,16 @@ use chrono::Utc;
 use futures::stream::{self, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
+use yral_canisters_common::utils::token::{
+    SatsOperations, TokenOperations, TokenOperationsProvider,
+};
 use yral_username_gen::random_username_from_principal;
 
 use crate::{
     app_state::AppState,
     // canister::utils::get_user_principal_canister_list_v2, // Commented out for testing with internal users
     events::types::{EventPayload, TournamentEndedWinnerPayload, TournamentStartedPayload},
+    leaderboard::TokenType,
 };
 use yral_metadata_types::{
     NotificationPayload, SendNotificationReq, WebpushConfig, WebpushFcmOptions,
@@ -49,7 +53,7 @@ pub async fn start_tournament(tournament_id: &str, app_state: &Arc<AppState>) ->
 
         // Set as current tournament
         redis.set_current_tournament(tournament_id).await?;
-        
+
         // Clear upcoming tournament since this one is now active
         redis.clear_upcoming_tournament().await?;
     }
@@ -134,43 +138,56 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
         }
     }
 
-    // TODO: uncomment
     // Distribute prizes if tournament uses YRAL (which is Sats internally)
-    // if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
-    //     // Get JWT token from environment
-    //     let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
+    if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
+        // Get JWT token from environment
+        let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
 
-    //     // Create Sats operations provider
-    //     let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
-    //     let token_ops = Arc::new(token_ops);
+        // Create Sats operations provider
+        let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
+        let token_ops = Arc::new(token_ops);
 
-    //     // Process distributions concurrently, 5 at a time
-    //     let results: Vec<_> = stream::iter(distribution_tasks.clone())
-    //         .map(|(principal, reward, rank, _)| {
-    //             let token_ops = token_ops.clone();
-    //             async move {
-    //                 match token_ops.add_balance(principal, reward).await {
-    //                     Ok(_) => {
-    //                         log::info!("Distributed {} SATS to {} (rank {})", reward, principal, rank);
-    //                         Ok((principal, reward, rank))
-    //                     }
-    //                     Err(e) => {
-    //                         log::error!("Failed to distribute {} SATS to {} (rank {}): {:?}",
-    //                                    reward, principal, rank, e);
-    //                         Err((principal, reward, rank, e))
-    //                     }
-    //                 }
-    //             }
-    //         })
-    //         .buffer_unordered(5) // Process 5 concurrent requests at a time
-    //         .collect()
-    //         .await;
+        // Process distributions concurrently, 5 at a time
+        let results: Vec<_> = stream::iter(distribution_tasks.clone())
+            .map(|(principal, reward, rank, _)| {
+                let token_ops = token_ops.clone();
+                async move {
+                    match token_ops.add_balance(principal, reward).await {
+                        Ok(_) => {
+                            log::info!(
+                                "Distributed {} SATS to {} (rank {})",
+                                reward,
+                                principal,
+                                rank
+                            );
+                            Ok((principal, reward, rank))
+                        }
+                        Err(e) => {
+                            log::error!(
+                                "Failed to distribute {} SATS to {} (rank {}): {:?}",
+                                reward,
+                                principal,
+                                rank,
+                                e
+                            );
+                            Err((principal, reward, rank, e))
+                        }
+                    }
+                }
+            })
+            .buffer_unordered(5) // Process 5 concurrent requests at a time
+            .collect()
+            .await;
 
-    //     // Log summary
-    //     let successful = results.iter().filter(|r| r.is_ok()).count();
-    //     let failed = results.iter().filter(|r| r.is_err()).count();
-    //     log::info!("Prize distribution complete: {} successful, {} failed", successful, failed);
-    // }
+        //     // Log summary
+        let successful = results.iter().filter(|r| r.is_ok()).count();
+        let failed = results.iter().filter(|r| r.is_err()).count();
+        log::info!(
+            "Prize distribution complete: {} successful, {} failed",
+            successful,
+            failed
+        );
+    }
 
     // Build and save tournament results for winners
     let mut winner_entries = Vec::new();
@@ -398,7 +415,7 @@ async fn send_tournament_start_broadcast(
         .collect();
 
     let total_users = users.len();
-    
+
     if total_users == 0 {
         log::warn!("No users found to send tournament notifications to");
         return Ok(());
@@ -413,22 +430,24 @@ async fn send_tournament_start_broadcast(
     // Send notifications concurrently with a limit of 500
     let notification_client = app_state.notification_client.clone();
     let notif_payload_arc = Arc::new(notif_payload);
-    
+
     let sent_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    
+
     stream::iter(users)
         .for_each_concurrent(500, |user_principal| {
             let client = notification_client.clone();
             let payload = notif_payload_arc.clone();
             let sent = sent_count.clone();
-            
+
             async move {
                 // Send notification and track result
-                client.send_notification((*payload).clone(), user_principal).await;
-                
+                client
+                    .send_notification((*payload).clone(), user_principal)
+                    .await;
+
                 // Track progress
                 let count = sent.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                
+
                 // Log progress every 100 notifications
                 if count % 100 == 0 {
                     log::info!("Notification progress: {}/{} sent", count, total_users);
@@ -438,7 +457,7 @@ async fn send_tournament_start_broadcast(
         .await;
 
     let final_sent = sent_count.load(std::sync::atomic::Ordering::Relaxed);
-    
+
     log::info!(
         "Tournament broadcast completed: {}/{} notifications sent successfully for tournament {}",
         final_sent,

@@ -459,19 +459,13 @@ pub async fn get_leaderboard_handler(
         // Parse principal ID
         if let Ok(user_principal) = Principal::from_text(&user_id) {
             // Get user's rank
-            let user_rank = match redis
-                .get_user_rank(&tournament_id, user_principal)
-                .await
-            {
+            let user_rank = match redis.get_user_rank(&tournament_id, user_principal).await {
                 Ok(Some(rank)) => rank,
                 _ => 0,
             };
 
             // Get user's score
-            let user_score = match redis
-                .get_user_score(&tournament_id, user_principal)
-                .await
-            {
+            let user_score = match redis.get_user_score(&tournament_id, user_principal).await {
                 Ok(Some(score)) => score,
                 _ => 0.0,
             };
@@ -551,45 +545,52 @@ pub async fn get_leaderboard_handler(
     };
 
     // Fetch upcoming tournament info if available
-    let upcoming_tournament_info = if let Ok(Some(upcoming_id)) = redis.get_upcoming_tournament().await {
-        if let Ok(Some(upcoming_tournament)) = redis.get_tournament_info(&upcoming_id).await {
-            // Build tournament info with timezone-adjusted times
-            let upcoming_info = if let Some((ref timezone_str, ref tz)) = timezone_info {
-                TournamentInfo {
-                    id: upcoming_tournament.id.clone(),
-                    start_time: upcoming_tournament.start_time,
-                    end_time: upcoming_tournament.end_time,
-                    status: upcoming_tournament.status,
-                    prize_pool: upcoming_tournament.prize_pool,
-                    prize_token: upcoming_tournament.prize_token,
-                    metric_type: upcoming_tournament.metric_type,
-                    metric_display_name: upcoming_tournament.metric_display_name,
-                    client_timezone: Some(timezone_str.clone()),
-                    client_start_time: Some(convert_timestamp_to_timezone(upcoming_tournament.start_time, tz)),
-                    client_end_time: Some(convert_timestamp_to_timezone(upcoming_tournament.end_time, tz)),
-                }
+    let upcoming_tournament_info =
+        if let Ok(Some(upcoming_id)) = redis.get_upcoming_tournament().await {
+            if let Ok(Some(upcoming_tournament)) = redis.get_tournament_info(&upcoming_id).await {
+                // Build tournament info with timezone-adjusted times
+                let upcoming_info = if let Some((ref timezone_str, ref tz)) = timezone_info {
+                    TournamentInfo {
+                        id: upcoming_tournament.id.clone(),
+                        start_time: upcoming_tournament.start_time,
+                        end_time: upcoming_tournament.end_time,
+                        status: upcoming_tournament.status,
+                        prize_pool: upcoming_tournament.prize_pool,
+                        prize_token: upcoming_tournament.prize_token,
+                        metric_type: upcoming_tournament.metric_type,
+                        metric_display_name: upcoming_tournament.metric_display_name,
+                        client_timezone: Some(timezone_str.clone()),
+                        client_start_time: Some(convert_timestamp_to_timezone(
+                            upcoming_tournament.start_time,
+                            tz,
+                        )),
+                        client_end_time: Some(convert_timestamp_to_timezone(
+                            upcoming_tournament.end_time,
+                            tz,
+                        )),
+                    }
+                } else {
+                    TournamentInfo {
+                        id: upcoming_tournament.id.clone(),
+                        start_time: upcoming_tournament.start_time,
+                        end_time: upcoming_tournament.end_time,
+                        status: upcoming_tournament.status,
+                        prize_pool: upcoming_tournament.prize_pool,
+                        prize_token: upcoming_tournament.prize_token,
+                        metric_type: upcoming_tournament.metric_type,
+                        metric_display_name: upcoming_tournament.metric_display_name,
+                        client_timezone: None,
+                        client_start_time: None,
+                        client_end_time: None,
+                    }
+                };
+                Some(upcoming_info)
             } else {
-                TournamentInfo {
-                    id: upcoming_tournament.id.clone(),
-                    start_time: upcoming_tournament.start_time,
-                    end_time: upcoming_tournament.end_time,
-                    status: upcoming_tournament.status,
-                    prize_pool: upcoming_tournament.prize_pool,
-                    prize_token: upcoming_tournament.prize_token,
-                    metric_type: upcoming_tournament.metric_type,
-                    metric_display_name: upcoming_tournament.metric_display_name,
-                    client_timezone: None,
-                    client_start_time: None,
-                    client_end_time: None,
-                }
-            };
-            Some(upcoming_info)
+                None
+            }
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
     // Build response with tournament info and optional user info
     let response = LeaderboardWithTournamentResponse {
@@ -1083,9 +1084,6 @@ pub async fn create_tournament_handler(
 ) -> impl IntoResponse {
     let redis = LeaderboardRedis::new(state.leaderboard_redis_pool.clone());
 
-    // TODO: Add admin authentication check here
-    // For now, we'll proceed without auth
-
     // Generate tournament ID
     let tournament_id = format!("tournament_{}", Utc::now().timestamp());
     let now = Utc::now().timestamp();
@@ -1211,8 +1209,6 @@ pub async fn finalize_tournament_handler(
     Path(tournament_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    // TODO: Add admin authentication check here
-
     match super::tournament::finalize_tournament(&tournament_id, &state).await {
         Ok(_) => (
             StatusCode::OK,
@@ -1420,8 +1416,6 @@ pub async fn start_tournament_handler(
     Path(tournament_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    // TODO: Add admin authentication check here
-
     match super::tournament::start_tournament(&tournament_id, &state).await {
         Ok(_) => (
             StatusCode::OK,
@@ -1449,8 +1443,6 @@ pub async fn end_tournament_handler(
     Path(tournament_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    // TODO: Add admin authentication check here
-
     match super::tournament::end_tournament(&tournament_id, &state).await {
         Ok(_) => (
             StatusCode::OK,
