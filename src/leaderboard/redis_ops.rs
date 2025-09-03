@@ -71,6 +71,10 @@ impl LeaderboardRedis {
         format!("{}:tournament:{}:results", self.key_prefix, tournament_id)
     }
 
+    fn internal_users_key(&self) -> String {
+        format!("{}:internal-users", self.key_prefix)
+    }
+
     // Get current active tournament
     pub async fn get_current_tournament(&self) -> Result<Option<String>> {
         let mut conn = self.pool.get().await?;
@@ -106,6 +110,13 @@ impl LeaderboardRedis {
         let mut conn = self.pool.get().await?;
         conn.del::<_, ()>(self.upcoming_tournament_key()).await?;
         Ok(())
+    }
+
+    // Get internal users for testing
+    pub async fn get_internal_users(&self) -> Result<Vec<String>> {
+        let mut conn = self.pool.get().await?;
+        let users: Vec<String> = conn.smembers(self.internal_users_key()).await?;
+        Ok(users)
     }
 
     // Get tournament info

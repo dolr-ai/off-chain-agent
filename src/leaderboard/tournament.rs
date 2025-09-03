@@ -8,7 +8,7 @@ use yral_username_gen::random_username_from_principal;
 
 use crate::{
     app_state::AppState,
-    canister::utils::get_user_principal_canister_list_v2,
+    // canister::utils::get_user_principal_canister_list_v2, // Commented out for testing with internal users
     events::types::{EventPayload, TournamentEndedWinnerPayload, TournamentStartedPayload},
 };
 use yral_metadata_types::{
@@ -360,20 +360,41 @@ async fn send_tournament_start_broadcast(
         ..Default::default()
     };
 
+    // PRODUCTION CODE (commented out for testing with internal users)
     // Fetch all user principals from the canister system
-    let user_principal_canister_list = match get_user_principal_canister_list_v2(&app_state.agent).await {
-        Ok(list) => list,
+    // let user_principal_canister_list = match get_user_principal_canister_list_v2(&app_state.agent).await {
+    //     Ok(list) => list,
+    //     Err(e) => {
+    //         log::error!("Failed to fetch user principals: {}", e);
+    //         // Fallback to empty list or could use a cached list
+    //         vec![]
+    //     }
+    // };
+
+    // // Extract just the user principals
+    // let users: Vec<Principal> = user_principal_canister_list
+    //     .into_iter()
+    //     .map(|(user_principal, _canister_principal)| user_principal)
+    //     .collect();
+
+    // TESTING CODE - Fetch internal users from Redis
+    let redis = LeaderboardRedis::new(app_state.leaderboard_redis_pool.clone());
+    let internal_user_strings = match redis.get_internal_users().await {
+        Ok(users) => users,
         Err(e) => {
-            log::error!("Failed to fetch user principals: {}", e);
-            // Fallback to empty list or could use a cached list
+            log::error!("Failed to fetch internal users from Redis: {}", e);
             vec![]
         }
     };
 
-    // Extract just the user principals
-    let users: Vec<Principal> = user_principal_canister_list
+    // Convert string principals to Principal objects
+    let users: Vec<Principal> = internal_user_strings
         .into_iter()
-        .map(|(user_principal, _canister_principal)| user_principal)
+        .filter_map(|principal_str| {
+            Principal::from_text(&principal_str)
+                .map_err(|e| log::warn!("Invalid principal string '{}': {}", principal_str, e))
+                .ok()
+        })
         .collect();
 
     let total_users = users.len();
