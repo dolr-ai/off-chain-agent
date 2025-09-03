@@ -24,14 +24,7 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
 
     // Step 1: Check Redis cache for all principals
     let cached_usernames = match redis.get_cached_usernames_bulk(&principals).await {
-        Ok(cache_map) => {
-            log::info!(
-                "Found {} cached usernames out of {}",
-                cache_map.len(),
-                principals.len()
-            );
-            cache_map
-        }
+        Ok(cache_map) => cache_map,
         Err(e) => {
             log::warn!("Failed to get cached usernames: {:?}", e);
             HashMap::new()
@@ -57,10 +50,7 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
         .get_user_metadata_bulk(missing_principals.clone())
         .await
     {
-        Ok(map) => {
-            log::info!("Fetched metadata for {} principals", map.len());
-            map
-        }
+        Ok(map) => map,
         Err(e) => {
             log::warn!("Failed to fetch bulk metadata: {:?}", e);
             HashMap::new()
@@ -88,11 +78,6 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
     // Step 3: Generate usernames for any remaining principals
     for principal in still_missing {
         let generated_username = random_username_from_principal(principal, 15);
-        log::info!(
-            "Generated username for principal {}: {}",
-            principal,
-            generated_username
-        );
 
         final_usernames.insert(principal, generated_username.clone());
 

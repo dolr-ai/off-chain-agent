@@ -208,7 +208,7 @@ impl LeaderboardRedis {
                     } else {
                         PROD_LUA_INCREMENT_SCORE_SHA
                     };
-                    
+
                     // Try EVALSHA first for better performance
                     let result: Result<String, redis::RedisError> = redis::cmd("EVALSHA")
                         .arg(script_sha)

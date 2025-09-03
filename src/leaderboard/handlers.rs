@@ -457,23 +457,24 @@ pub async fn get_leaderboard_handler(
                 _ => 0.0,
             };
 
+            // Get username using our fallback utility
+            let username_map = get_usernames_with_fallback(
+                &redis,
+                &state.yral_metadata_client,
+                vec![user_principal],
+            )
+            .await;
+
+            let username = username_map
+                .get(&user_principal)
+                .cloned()
+                .unwrap_or_else(|| {
+                    log::error!("Missing username for principal {} in map", user_principal);
+                    random_username_from_principal(user_principal, 15)
+                });
+
             if user_rank > 0 {
-                // Get username using our fallback utility
-                let username_map = get_usernames_with_fallback(
-                    &redis,
-                    &state.yral_metadata_client,
-                    vec![user_principal],
-                )
-                .await;
-
-                let username = username_map
-                    .get(&user_principal)
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        log::error!("Missing username for principal {} in map", user_principal);
-                        random_username_from_principal(user_principal, 15)
-                    });
-
+                // User is in the tournament
                 Some(serde_json::json!({
                     "principal_id": user_principal.to_string(),
                     "username": username,
@@ -483,7 +484,15 @@ pub async fn get_leaderboard_handler(
                     "reward": calculate_reward(user_rank, tournament.prize_pool as u64),
                 }))
             } else {
-                None
+                // User is not in the tournament - return with rank = total_participants + 1, score = 0
+                Some(serde_json::json!({
+                    "principal_id": user_principal.to_string(),
+                    "username": username,
+                    "rank": total_participants + 1,
+                    "score": 0.0,
+                    "percentile": 0.0,
+                    "reward": null,
+                }))
             }
         } else {
             None

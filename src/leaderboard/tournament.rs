@@ -68,10 +68,16 @@ pub async fn start_tournament(tournament_id: &str, app_state: &Arc<AppState>) ->
         metric_type: tournament.metric_type.to_string(),
     };
 
-    // Send notification to all users (batch process)
+    // Send notification to all users in background (non-blocking)
     // Note: In production, this should be done via a queue/batch system
-    // For now, we'll send a broadcast notification
-    send_tournament_start_broadcast(&payload, app_state).await?;
+    let app_state_clone = app_state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = send_tournament_start_broadcast(&payload, &app_state_clone).await {
+            log::error!("Failed to send tournament start broadcast: {:?}", e);
+        } else {
+            log::info!("Tournament start broadcast sent successfully");
+        }
+    });
 
     // Schedule finalize for end_time
     let delay = tournament.end_time - Utc::now().timestamp();
