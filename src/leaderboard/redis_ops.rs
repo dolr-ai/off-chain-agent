@@ -12,13 +12,40 @@ use crate::types::RedisPool;
 const TIEBREAKER_WEIGHT: f64 = 0.0000000001; // 10^-10, negligible impact on actual scores
 const TIMESTAMP_BASE: i64 = 1_700_000_000; // Base timestamp to keep numbers manageable
 
-// Helper function to create composite score for ranking with tie-breaking
-fn create_composite_score(actual_score: f64, timestamp: i64) -> f64 {
-    // Normalize timestamp to keep tiebreaker small
-    let time_component = (timestamp - TIMESTAMP_BASE) as f64;
-    // Earlier timestamps get slightly higher composite scores (rank higher on ties)
-    actual_score - (time_component * TIEBREAKER_WEIGHT)
-}
+// Lua script for atomic increment - simple and reliable
+// This script needs to be loaded into Redis with SCRIPT LOAD
+const LUA_INCREMENT_SCRIPT: &str = r#"
+    local users_key = KEYS[1]
+    local scores_key = KEYS[2]
+    local principal = ARGV[1]
+    local increment = tonumber(ARGV[2])
+    local composite_score_offset = tonumber(ARGV[3])
+    
+    -- Atomically increment the score in the hash (handles nil as 0)
+    local new_score = redis.call('HINCRBYFLOAT', users_key, principal, increment)
+    
+    -- Convert to number for composite score calculation
+    new_score = tonumber(new_score)
+    
+    -- Calculate composite score: actual_score - timestamp_offset
+    -- The offset is pre-calculated in Rust as (timestamp - base) * weight
+    local composite_score = new_score - composite_score_offset
+    
+    -- Update sorted set with composite score
+    redis.call('ZADD', scores_key, composite_score, principal)
+    
+    return tostring(new_score)
+"#;
+
+// SHA256 hash of the loaded Lua script (set this after loading the script)
+// To get this SHA: redis-cli SCRIPT LOAD "$(cat script.lua)"
+// Or use the load_lua_scripts() method
+const TEST_LUA_INCREMENT_SCORE_SHA: &str = "7fcb59e3c2bdc81d7b81746d1d7445114443b16a";
+
+const PROD_LUA_INCREMENT_SCORE_SHA: &str = "7fcb59e3c2bdc81d7b81746d1d7445114443b16a";
+
+// Use this flag to switch between EVAL and EVALSHA
+const USE_EVALSHA: bool = true;
 
 #[derive(Clone)]
 pub struct LeaderboardRedis {
@@ -36,6 +63,17 @@ impl LeaderboardRedis {
 
     pub fn new_with_prefix(pool: RedisPool, key_prefix: String) -> Self {
         Self { pool, key_prefix }
+    }
+
+    // Load the Lua script into Redis and return its SHA
+    pub async fn load_lua_scripts(&self) -> Result<String> {
+        let mut conn = self.pool.get().await?;
+        let sha: String = redis::cmd("SCRIPT")
+            .arg("LOAD")
+            .arg(LUA_INCREMENT_SCRIPT)
+            .query_async(&mut *conn)
+            .await?;
+        Ok(sha)
     }
 
     // Key generators
@@ -154,64 +192,82 @@ impl LeaderboardRedis {
         let mut conn = self.pool.get().await?;
         let scores_key = self.tournament_scores_key(tournament_id);
         let users_key = self.tournament_users_key(tournament_id);
-
-        // First, get the current UserTournamentData if it exists
-        let user_data = if let Some(json_str) = conn
-            .hget::<_, _, Option<String>>(&users_key, principal.to_string())
-            .await?
-        {
-            serde_json::from_str::<UserTournamentData>(&json_str).ok()
-        } else {
-            None
-        };
-
-        let current_actual_score = user_data.as_ref().map(|d| d.score).unwrap_or(0.0);
+        let timestamp = Utc::now().timestamp();
 
         let new_score = match operation {
             ScoreOperation::Increment => {
-                // Add to existing actual score
-                current_actual_score + metric_value
-            }
-            ScoreOperation::SetIfHigher => {
-                // Only update if new value is higher
-                if current_actual_score >= metric_value {
-                    current_actual_score
+                // Calculate the composite score offset in Rust
+                let time_component = (timestamp - TIMESTAMP_BASE) as f64;
+                let composite_offset = time_component * TIEBREAKER_WEIGHT;
+
+                // Use EVALSHA or EVAL based on configuration
+                let score_str: String = if USE_EVALSHA {
+                    // Select the appropriate SHA based on environment (test vs prod)
+                    let script_sha = if self.key_prefix.starts_with("test") {
+                        TEST_LUA_INCREMENT_SCORE_SHA
+                    } else {
+                        PROD_LUA_INCREMENT_SCORE_SHA
+                    };
+                    
+                    // Try EVALSHA first for better performance
+                    let result: Result<String, redis::RedisError> = redis::cmd("EVALSHA")
+                        .arg(script_sha)
+                        .arg(2) // number of keys
+                        .arg(&users_key)
+                        .arg(&scores_key)
+                        .arg(principal.to_string())
+                        .arg(metric_value)
+                        .arg(composite_offset)
+                        .query_async(&mut *conn)
+                        .await;
+
+                    match result {
+                        Ok(s) => s,
+                        Err(e) if e.to_string().contains("NOSCRIPT") => {
+                            // Script not loaded, fallback to EVAL
+                            redis::cmd("EVAL")
+                                .arg(LUA_INCREMENT_SCRIPT)
+                                .arg(2) // number of keys
+                                .arg(&users_key)
+                                .arg(&scores_key)
+                                .arg(principal.to_string())
+                                .arg(metric_value)
+                                .arg(composite_offset)
+                                .query_async(&mut *conn)
+                                .await?
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
                 } else {
-                    metric_value
-                }
+                    // Use EVAL directly
+                    redis::cmd("EVAL")
+                        .arg(LUA_INCREMENT_SCRIPT)
+                        .arg(2) // number of keys
+                        .arg(&users_key)
+                        .arg(&scores_key)
+                        .arg(principal.to_string())
+                        .arg(metric_value)
+                        .arg(composite_offset)
+                        .query_async(&mut *conn)
+                        .await?
+                };
+
+                // Parse the returned string to f64
+                score_str
+                    .parse::<f64>()
+                    .context("Failed to parse score from Lua script")?
             }
             ScoreOperation::Set => {
-                // Direct set (for absolute values)
-                metric_value
+                return Err(anyhow::anyhow!(
+                    "Set operation is not supported in update_user_score. Use set_user_score instead."
+                ));
+            }
+            ScoreOperation::SetIfHigher => {
+                return Err(anyhow::anyhow!(
+                    "SetIfHigher operation is not supported in update_user_score. Use set_user_score_if_higher instead."
+                ));
             }
         };
-
-        // Only update if score changed (important for SetIfHigher)
-        if new_score != current_actual_score {
-            // Store composite score in sorted set for ranking with tie-breaking
-            let timestamp = Utc::now().timestamp();
-            let composite_score = create_composite_score(new_score, timestamp);
-            conn.zadd::<_, _, _, ()>(&scores_key, principal.to_string(), composite_score)
-                .await?;
-
-            // Update or create UserTournamentData
-            let updated_user_data = if let Some(mut existing_data) = user_data {
-                existing_data.score = new_score;
-                existing_data.last_updated = timestamp;
-                existing_data
-            } else {
-                UserTournamentData {
-                    principal_id: principal,
-                    username: String::new(), // Will be updated separately
-                    score: new_score,
-                    last_updated: timestamp,
-                }
-            };
-
-            // Store the updated user data
-            conn.hset::<_, _, _, ()>(&users_key, principal.to_string(), serde_json::to_string(&updated_user_data)?)
-                .await?;
-        }
 
         Ok(new_score)
     }
@@ -309,82 +365,36 @@ impl LeaderboardRedis {
         Ok(username_map)
     }
 
-    // Store user metadata
-    pub async fn store_user_metadata(
-        &self,
-        tournament_id: &str,
-        principal: Principal,
-        metadata: &UserTournamentData,
-    ) -> Result<()> {
-        let mut conn = self.pool.get().await?;
-        let key = self.tournament_users_key(tournament_id);
-        let json_str = serde_json::to_string(metadata)?;
-        conn.hset::<_, _, _, ()>(&key, principal.to_string(), json_str)
-            .await?;
-        Ok(())
-    }
-
-    // Get user metadata
-    pub async fn get_user_metadata(
-        &self,
-        tournament_id: &str,
-        principal: Principal,
-    ) -> Result<Option<UserTournamentData>> {
-        let mut conn = self.pool.get().await?;
-        let key = self.tournament_users_key(tournament_id);
-        let data: Option<String> = conn.hget(&key, principal.to_string()).await?;
-
-        match data {
-            Some(json_str) => {
-                let metadata = serde_json::from_str(&json_str)
-                    .context("Failed to deserialize user metadata")?;
-                Ok(Some(metadata))
-            }
-            None => Ok(None),
-        }
-    }
-
-    // Get user metadata in bulk
-    pub async fn get_user_metadata_bulk(
+    // Get user scores in bulk
+    pub async fn get_user_scores_bulk(
         &self,
         tournament_id: &str,
         principals: &[String],
-    ) -> Result<HashMap<String, UserTournamentData>> {
+    ) -> Result<HashMap<String, f64>> {
         if principals.is_empty() {
             return Ok(HashMap::new());
         }
 
         let mut conn = self.pool.get().await?;
         let key = self.tournament_users_key(tournament_id);
-        let mut metadata_map = HashMap::with_capacity(principals.len());
+        let mut score_map = HashMap::with_capacity(principals.len());
 
-        // Use HMGET to fetch all user data in one call
-        let results: Vec<Option<String>> = redis::cmd("HMGET")
+        // Use HMGET to fetch all scores in one call
+        let results: Vec<Option<f64>> = redis::cmd("HMGET")
             .arg(&key)
             .arg(principals)
             .query_async(&mut *conn)
             .await
-            .context("Failed to fetch user metadata in bulk")?;
+            .context("Failed to fetch user scores in bulk")?;
 
         // Process results and build map
-        for (principal_str, data_opt) in principals.iter().zip(results.iter()) {
-            if let Some(json_str) = data_opt {
-                match serde_json::from_str::<UserTournamentData>(json_str) {
-                    Ok(metadata) => {
-                        metadata_map.insert(principal_str.clone(), metadata);
-                    }
-                    Err(e) => {
-                        log::warn!(
-                            "Failed to deserialize user metadata for {}: {:?}",
-                            principal_str,
-                            e
-                        );
-                    }
-                }
+        for (principal_str, score_opt) in principals.iter().zip(results.iter()) {
+            if let Some(score) = score_opt {
+                score_map.insert(principal_str.clone(), *score);
             }
         }
 
-        Ok(metadata_map)
+        Ok(score_map)
     }
 
     // Get leaderboard with pagination
@@ -414,18 +424,16 @@ impl LeaderboardRedis {
             .map(|(principal_str, _)| principal_str.clone())
             .collect();
 
-        // Batch fetch all user metadata
-        let metadata_map = self
-            .get_user_metadata_bulk(tournament_id, &principal_strings)
+        // Batch fetch all user scores
+        let score_map = self
+            .get_user_scores_bulk(tournament_id, &principal_strings)
             .await?;
 
-        // Build result with actual scores from UserTournamentData
+        // Build result with actual scores
         let mut results = Vec::with_capacity(ranked_members.len());
-        for (principal_str, composite_score) in ranked_members {
-            let actual_score = metadata_map
-                .get(&principal_str)
-                .map(|metadata| metadata.score)
-                .unwrap_or(composite_score); // Fallback to composite if no metadata
+        for (principal_str, _composite_score) in ranked_members {
+            // Get actual score from hash, fallback to 0 if not found
+            let actual_score = score_map.get(&principal_str).copied().unwrap_or(0.0);
 
             results.push((principal_str, actual_score));
         }
@@ -454,9 +462,11 @@ impl LeaderboardRedis {
         tournament_id: &str,
         principal: Principal,
     ) -> Result<Option<f64>> {
-        // Get actual score from UserTournamentData, not the composite score from sorted set
-        let metadata = self.get_user_metadata(tournament_id, principal).await?;
-        Ok(metadata.map(|m| m.score))
+        // Get score directly from hash
+        let mut conn = self.pool.get().await?;
+        let key = self.tournament_users_key(tournament_id);
+        let score: Option<f64> = conn.hget(&key, principal.to_string()).await?;
+        Ok(score)
     }
 
     // Get total participants
@@ -501,25 +511,22 @@ impl LeaderboardRedis {
             .filter_map(|(principal_str, _)| Principal::from_text(principal_str).ok())
             .collect();
 
-        // Batch retrieve all usernames and all user metadata in parallel
+        // Batch retrieve all usernames and all user scores in parallel
         let username_map = self.get_cached_usernames_bulk(&principals).await?;
-        let metadata_map = self
-            .get_user_metadata_bulk(tournament_id, &principal_strings)
+        let score_map = self
+            .get_user_scores_bulk(tournament_id, &principal_strings)
             .await?;
 
         // Filter and build results with actual scores
         let mut results = Vec::new();
         let query_lower = query.to_lowercase();
 
-        for (principal_str, composite_score) in participants.iter() {
+        for (principal_str, _composite_score) in participants.iter() {
             if let Ok(principal) = Principal::from_text(principal_str) {
                 if let Some(username) = username_map.get(&principal) {
                     if username.to_lowercase().contains(&query_lower) {
-                        // Get actual score from pre-fetched metadata
-                        let actual_score = metadata_map
-                            .get(principal_str)
-                            .map(|metadata| metadata.score)
-                            .unwrap_or(*composite_score); // Fallback to composite if no metadata
+                        // Get actual score from pre-fetched scores
+                        let actual_score = score_map.get(principal_str).copied().unwrap_or(0.0); // Fallback to 0 if no score
 
                         results.push((principal, actual_score));
                         if results.len() >= limit as usize {
@@ -778,44 +785,6 @@ mod tests {
             .expect("Failed to update score");
         assert_eq!(score2, 15.0);
 
-        // Test SetIfHigher operation
-        let score3 = redis
-            .update_user_score(
-                &tournament_id,
-                principals[1],
-                20.0,
-                &ScoreOperation::SetIfHigher,
-            )
-            .await
-            .expect("Failed to update score");
-        assert_eq!(score3, 20.0);
-
-        // Try to set lower value (should not change)
-        let score4 = redis
-            .update_user_score(
-                &tournament_id,
-                principals[1],
-                10.0,
-                &ScoreOperation::SetIfHigher,
-            )
-            .await
-            .expect("Failed to update score");
-        assert_eq!(score4, 20.0);
-
-        // Test Set operation
-        let score5 = redis
-            .update_user_score(&tournament_id, principals[2], 30.0, &ScoreOperation::Set)
-            .await
-            .expect("Failed to update score");
-        assert_eq!(score5, 30.0);
-
-        // Override with Set
-        let score6 = redis
-            .update_user_score(&tournament_id, principals[2], 25.0, &ScoreOperation::Set)
-            .await
-            .expect("Failed to update score");
-        assert_eq!(score6, 25.0);
-
         // Cleanup
         test_redis.cleanup().await.expect("Failed to cleanup");
     }
@@ -834,7 +803,7 @@ mod tests {
                     &tournament_id,
                     *principal,
                     100.0 - i as f64 * 10.0, // Descending scores
-                    &ScoreOperation::Set,
+                    &ScoreOperation::Increment,
                 )
                 .await
                 .expect("Failed to update score");
@@ -917,43 +886,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_user_metadata() {
-        let test_redis = TestLeaderboardRedis::new().await;
-        let redis = &test_redis.redis;
-        let tournament_id = format!("test_tournament_{}", Uuid::new_v4());
-        let principal = create_test_principals(1)[0];
-
-        let metadata = UserTournamentData {
-            principal_id: principal,
-            username: "test_user".to_string(),
-            score: 100.0,
-            last_updated: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64,
-        };
-
-        // Store user metadata
-        redis
-            .store_user_metadata(&tournament_id, principal, &metadata)
-            .await
-            .expect("Failed to store user metadata");
-
-        // Retrieve user metadata
-        let retrieved = redis
-            .get_user_metadata(&tournament_id, principal)
-            .await
-            .expect("Failed to get user metadata")
-            .expect("Metadata not found");
-
-        assert_eq!(retrieved.username, metadata.username);
-        assert_eq!(retrieved.score, metadata.score);
-
-        // Cleanup
-        test_redis.cleanup().await.expect("Failed to cleanup");
-    }
-
-    #[tokio::test]
     async fn test_search_users() {
         let test_redis = TestLeaderboardRedis::new().await;
         let redis = &test_redis.redis;
@@ -968,7 +900,7 @@ mod tests {
                     &tournament_id,
                     *principal,
                     100.0 - i as f64 * 10.0,
-                    &ScoreOperation::Set,
+                    &ScoreOperation::Increment,
                 )
                 .await
                 .expect("Failed to update score");

@@ -238,8 +238,6 @@ pub async fn update_score_handler(
     let principal = request.principal_id;
     let metadata_client = state.yral_metadata_client.clone();
     let redis_clone = LeaderboardRedis::new(state.leaderboard_redis_pool.clone());
-    let score_for_metadata = new_score;
-    let tournament_id_clone = current_tournament.clone();
 
     tokio::spawn(async move {
         // Use the utility function to get username with fallback
@@ -252,19 +250,8 @@ pub async fn update_score_handler(
             random_username_from_principal(principal, 15)
         });
 
-        // Store user metadata with the resolved username
-        let user_data = UserTournamentData {
-            principal_id: principal,
-            username,
-            score: score_for_metadata,
-            last_updated: Utc::now().timestamp(),
-        };
-
-        if let Err(e) = redis_clone
-            .store_user_metadata(&tournament_id_clone, principal, &user_data)
-            .await
-        {
-            log::warn!("Failed to store user metadata: {:?}", e);
+        if let Err(e) = redis.cache_username(principal, &username, 3600).await {
+            log::warn!("Failed to cache generated username: {:?}", e);
         }
     });
 

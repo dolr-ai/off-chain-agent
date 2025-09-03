@@ -124,14 +124,6 @@ pub struct LeaderboardEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserTournamentData {
-    pub principal_id: Principal,
-    pub username: String,
-    pub score: f64,
-    pub last_updated: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TournamentResult {
     pub tournament_id: String,
     pub user_results: Vec<LeaderboardEntry>,
