@@ -155,17 +155,17 @@ impl LeaderboardRedis {
         let scores_key = self.tournament_scores_key(tournament_id);
         let users_key = self.tournament_users_key(tournament_id);
 
-        // First, get the current actual score from UserTournamentData if it exists
-        let current_actual_score = if let Some(json_str) = conn
+        // First, get the current UserTournamentData if it exists
+        let user_data = if let Some(json_str) = conn
             .hget::<_, _, Option<String>>(&users_key, principal.to_string())
             .await?
         {
-            serde_json::from_str::<UserTournamentData>(&json_str)
-                .map(|data| data.score)
-                .unwrap_or(0.0)
+            serde_json::from_str::<UserTournamentData>(&json_str).ok()
         } else {
-            0.0
+            None
         };
+
+        let current_actual_score = user_data.as_ref().map(|d| d.score).unwrap_or(0.0);
 
         let new_score = match operation {
             ScoreOperation::Increment => {
@@ -192,6 +192,24 @@ impl LeaderboardRedis {
             let timestamp = Utc::now().timestamp();
             let composite_score = create_composite_score(new_score, timestamp);
             conn.zadd::<_, _, _, ()>(&scores_key, principal.to_string(), composite_score)
+                .await?;
+
+            // Update or create UserTournamentData
+            let updated_user_data = if let Some(mut existing_data) = user_data {
+                existing_data.score = new_score;
+                existing_data.last_updated = timestamp;
+                existing_data
+            } else {
+                UserTournamentData {
+                    principal_id: principal,
+                    username: String::new(), // Will be updated separately
+                    score: new_score,
+                    last_updated: timestamp,
+                }
+            };
+
+            // Store the updated user data
+            conn.hset::<_, _, _, ()>(&users_key, principal.to_string(), serde_json::to_string(&updated_user_data)?)
                 .await?;
         }
 
@@ -815,7 +833,7 @@ mod tests {
                 .update_user_score(
                     &tournament_id,
                     *principal,
-                    (100.0 - i as f64 * 10.0), // Descending scores
+                    100.0 - i as f64 * 10.0, // Descending scores
                     &ScoreOperation::Set,
                 )
                 .await
@@ -824,7 +842,7 @@ mod tests {
 
         // Test getting leaderboard (top 5)
         let top5 = redis
-            .get_leaderboard(&tournament_id, 0, 4)
+            .get_leaderboard(&tournament_id, 0, 4, SortOrder::Desc)
             .await
             .expect("Failed to get leaderboard");
 
@@ -834,7 +852,7 @@ mod tests {
 
         // Test pagination
         let next5 = redis
-            .get_leaderboard(&tournament_id, 5, 9)
+            .get_leaderboard(&tournament_id, 5, 9, SortOrder::Desc)
             .await
             .expect("Failed to get leaderboard");
 
@@ -949,7 +967,7 @@ mod tests {
                 .update_user_score(
                     &tournament_id,
                     *principal,
-                    (100.0 - i as f64 * 10.0),
+                    100.0 - i as f64 * 10.0,
                     &ScoreOperation::Set,
                 )
                 .await
@@ -1047,7 +1065,7 @@ mod tests {
             .collect();
 
         // Execute all concurrently
-        let results = future::try_join_all(futures)
+        let _results = future::try_join_all(futures)
             .await
             .expect("Failed to execute concurrent updates");
 
@@ -1072,7 +1090,7 @@ mod tests {
 
         // Test getting leaderboard from empty tournament
         let leaderboard = redis
-            .get_leaderboard(&tournament_id, 0, 99)
+            .get_leaderboard(&tournament_id, 0, 99, SortOrder::Desc)
             .await
             .expect("Failed to get leaderboard");
 
