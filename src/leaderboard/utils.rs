@@ -17,7 +17,7 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
     principals: Vec<Principal>,
 ) -> HashMap<Principal, String> {
     let mut final_usernames = HashMap::new();
-    
+
     if principals.is_empty() {
         return final_usernames;
     }
@@ -25,7 +25,11 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
     // Step 1: Check Redis cache for all principals
     let cached_usernames = match redis.get_cached_usernames_bulk(&principals).await {
         Ok(cache_map) => {
-            log::info!("Found {} cached usernames out of {}", cache_map.len(), principals.len());
+            log::info!(
+                "Found {} cached usernames out of {}",
+                cache_map.len(),
+                principals.len()
+            );
             cache_map
         }
         Err(e) => {
@@ -70,7 +74,7 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
             if !metadata.user_name.trim().is_empty() {
                 let username = metadata.user_name.clone();
                 final_usernames.insert(principal, username.clone());
-                
+
                 // Cache the fetched username
                 if let Err(e) = redis.cache_username(principal, &username, 3600).await {
                     log::warn!("Failed to cache username for {}: {:?}", principal, e);
@@ -89,12 +93,19 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
             principal,
             generated_username
         );
-        
+
         final_usernames.insert(principal, generated_username.clone());
-        
+
         // Cache the generated username
-        if let Err(e) = redis.cache_username(principal, &generated_username, 3600).await {
-            log::warn!("Failed to cache generated username for {}: {:?}", principal, e);
+        if let Err(e) = redis
+            .cache_username(principal, &generated_username, 3600)
+            .await
+        {
+            log::warn!(
+                "Failed to cache generated username for {}: {:?}",
+                principal,
+                e
+            );
         }
     }
 

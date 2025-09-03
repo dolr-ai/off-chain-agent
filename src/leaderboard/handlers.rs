@@ -72,7 +72,7 @@ async fn get_timezone_from_ip(ip: &str) -> Option<(String, Tz)> {
 
 // Helper function to convert Unix timestamp to ISO 8601 string in given timezone
 fn convert_timestamp_to_timezone(timestamp: i64, tz: &Tz) -> String {
-    let utc_dt = DateTime::from_timestamp(timestamp, 0).unwrap_or_else(|| Utc::now());
+    let utc_dt = DateTime::from_timestamp(timestamp, 0).unwrap_or_else(Utc::now);
     let local_dt = tz.from_utc_datetime(&utc_dt.naive_utc());
     local_dt.to_rfc3339()
 }
@@ -357,10 +357,10 @@ pub async fn get_leaderboard_handler(
     };
 
     // Get total participants first (needed for rank calculation in ascending order)
-    let total_participants = match redis.get_total_participants(&tournament_id).await {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+    let total_participants = redis
+        .get_total_participants(&tournament_id)
+        .await
+        .unwrap_or(0);
 
     // Get paginated players
     let leaderboard_data = match redis
@@ -659,10 +659,10 @@ pub async fn get_user_rank_handler(
     };
 
     // Get total participants first
-    let total_participants = match redis.get_total_participants(&current_tournament).await {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+    let total_participants = redis
+        .get_total_participants(&current_tournament)
+        .await
+        .unwrap_or(0);
 
     // Get user's rank and determine if they're in the leaderboard
     let (user_rank, is_in_leaderboard) =
@@ -733,7 +733,7 @@ pub async fn get_user_rank_handler(
         let context_start = (user_rank as i32 - 3).max(0) as u32;
         let context_end = context_start + 4; // 5 total including user
 
-        let surrounding_data = match redis
+        let surrounding_data = redis
             .get_leaderboard(
                 &current_tournament,
                 context_start as isize,
@@ -741,10 +741,7 @@ pub async fn get_user_rank_handler(
                 SortOrder::Desc, // Always desc for rank context
             )
             .await
-        {
-            Ok(data) => data,
-            Err(_) => vec![],
-        };
+            .unwrap_or_default();
 
         // Build surrounding entries
         surrounding_data
@@ -907,10 +904,10 @@ pub async fn search_users_handler(
     };
 
     // Get total participants for rank calculation in ascending order
-    let _total_participants = match redis.get_total_participants(&current_tournament).await {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+    let _total_participants = redis
+        .get_total_participants(&current_tournament)
+        .await
+        .unwrap_or(0);
 
     // Build search result entries with ranks
     let mut entries = Vec::new();
@@ -931,7 +928,7 @@ pub async fn search_users_handler(
                 principal_id: *principal,
                 username,
                 score: *score,
-                rank: rank,
+                rank,
                 reward: calculate_reward(rank, tournament.prize_pool as u64),
             });
         }
@@ -1376,10 +1373,10 @@ pub async fn get_tournament_results_handler(
         .collect();
 
     // Get total participants
-    let total_participants = match redis.get_total_participants(&tournament_id).await {
-        Ok(count) => count,
-        Err(_) => 0,
-    };
+    let total_participants = redis
+        .get_total_participants(&tournament_id)
+        .await
+        .unwrap_or(0);
 
     // Calculate cursor info
     let has_more = (start + limit) < total_participants;

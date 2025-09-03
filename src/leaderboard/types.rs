@@ -20,6 +20,7 @@ pub enum TokenType {
     // BTC,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for TokenType {
     fn default() -> Self {
         TokenType::YRAL
@@ -49,6 +50,7 @@ pub enum MetricType {
     Custom(String),
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for MetricType {
     fn default() -> Self {
         MetricType::GamesPlayed
@@ -89,6 +91,7 @@ pub enum SortOrder {
     Desc,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for SortOrder {
     fn default() -> Self {
         SortOrder::Desc // Keep current behavior as default
@@ -356,8 +359,8 @@ pub struct TournamentInfo {
     pub metric_type: MetricType,
     pub metric_display_name: String,
     pub client_timezone: Option<String>,
-    pub client_start_time: Option<String>,  // ISO 8601 formatted in client's timezone
-    pub client_end_time: Option<String>,    // ISO 8601 formatted in client's timezone
+    pub client_start_time: Option<String>, // ISO 8601 formatted in client's timezone
+    pub client_end_time: Option<String>,   // ISO 8601 formatted in client's timezone
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

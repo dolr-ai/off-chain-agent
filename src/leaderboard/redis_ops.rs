@@ -191,7 +191,7 @@ impl LeaderboardRedis {
             // Store composite score in sorted set for ranking with tie-breaking
             let timestamp = Utc::now().timestamp();
             let composite_score = create_composite_score(new_score, timestamp);
-            conn.zadd(&scores_key, principal.to_string(), composite_score)
+            conn.zadd::<_, _, _, ()>(&scores_key, principal.to_string(), composite_score)
                 .await?;
         }
 
@@ -231,7 +231,7 @@ impl LeaderboardRedis {
         let mut username_map = HashMap::with_capacity(principals.len());
 
         const BATCH_SIZE: usize = 100;
-        let total_batches = (principals.len() + BATCH_SIZE - 1) / BATCH_SIZE;
+        let total_batches = principals.len().div_ceil(BATCH_SIZE);
 
         for (batch_idx, batch) in principals.chunks(BATCH_SIZE).enumerate() {
             // Build keys for this batch
@@ -521,10 +521,10 @@ impl LeaderboardRedis {
         let key = self.tournament_history_key();
 
         // Add to left of list (most recent first)
-        conn.lpush(&key, tournament_id).await?;
+        conn.lpush::<_, _, ()>(&key, tournament_id).await?;
 
         // Keep only last 5 tournaments
-        conn.ltrim(&key, 0, 4).await?;
+        conn.ltrim::<_, ()>(&key, 0, 4).await?;
 
         Ok(())
     }
