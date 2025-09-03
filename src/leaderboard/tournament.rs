@@ -1,12 +1,10 @@
 use anyhow::{Context, Result};
 use candid::Principal;
 use chrono::Utc;
-use futures::stream::{self, StreamExt};
+use futures::stream::StreamExt;
 use serde_json::json;
 use std::sync::Arc;
-use yral_canisters_common::utils::token::{
-    SatsOperations, TokenOperations, TokenOperationsProvider,
-};
+use yral_canisters_common::utils::token::TokenOperationsProvider;
 use yral_username_gen::random_username_from_principal;
 
 use crate::{
@@ -52,6 +50,9 @@ pub async fn start_tournament(tournament_id: &str, app_state: &Arc<AppState>) ->
 
         // Set as current tournament
         redis.set_current_tournament(tournament_id).await?;
+        
+        // Clear upcoming tournament since this one is now active
+        redis.clear_upcoming_tournament().await?;
     }
 
     // Create tournament started payload

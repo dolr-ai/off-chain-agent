@@ -519,7 +519,7 @@ pub async fn get_leaderboard_handler(
     let timezone_info = get_timezone_from_ip(&client_ip).await;
 
     // Build tournament info for response with timezone-adjusted times
-    let tournament_info = if let Some((timezone_str, tz)) = timezone_info {
+    let tournament_info = if let Some((ref timezone_str, ref tz)) = timezone_info {
         TournamentInfo {
             id: tournament.id.clone(),
             start_time: tournament.start_time,
@@ -529,9 +529,9 @@ pub async fn get_leaderboard_handler(
             prize_token: tournament.prize_token,
             metric_type: tournament.metric_type,
             metric_display_name: tournament.metric_display_name,
-            client_timezone: Some(timezone_str),
-            client_start_time: Some(convert_timestamp_to_timezone(tournament.start_time, &tz)),
-            client_end_time: Some(convert_timestamp_to_timezone(tournament.end_time, &tz)),
+            client_timezone: Some(timezone_str.clone()),
+            client_start_time: Some(convert_timestamp_to_timezone(tournament.start_time, tz)),
+            client_end_time: Some(convert_timestamp_to_timezone(tournament.end_time, tz)),
         }
     } else {
         // Fallback when timezone cannot be determined
@@ -550,12 +550,54 @@ pub async fn get_leaderboard_handler(
         }
     };
 
+    // Fetch upcoming tournament info if available
+    let upcoming_tournament_info = if let Ok(Some(upcoming_id)) = redis.get_upcoming_tournament().await {
+        if let Ok(Some(upcoming_tournament)) = redis.get_tournament_info(&upcoming_id).await {
+            // Build tournament info with timezone-adjusted times
+            let upcoming_info = if let Some((ref timezone_str, ref tz)) = timezone_info {
+                TournamentInfo {
+                    id: upcoming_tournament.id.clone(),
+                    start_time: upcoming_tournament.start_time,
+                    end_time: upcoming_tournament.end_time,
+                    status: upcoming_tournament.status,
+                    prize_pool: upcoming_tournament.prize_pool,
+                    prize_token: upcoming_tournament.prize_token,
+                    metric_type: upcoming_tournament.metric_type,
+                    metric_display_name: upcoming_tournament.metric_display_name,
+                    client_timezone: Some(timezone_str.clone()),
+                    client_start_time: Some(convert_timestamp_to_timezone(upcoming_tournament.start_time, tz)),
+                    client_end_time: Some(convert_timestamp_to_timezone(upcoming_tournament.end_time, tz)),
+                }
+            } else {
+                TournamentInfo {
+                    id: upcoming_tournament.id.clone(),
+                    start_time: upcoming_tournament.start_time,
+                    end_time: upcoming_tournament.end_time,
+                    status: upcoming_tournament.status,
+                    prize_pool: upcoming_tournament.prize_pool,
+                    prize_token: upcoming_tournament.prize_token,
+                    metric_type: upcoming_tournament.metric_type,
+                    metric_display_name: upcoming_tournament.metric_display_name,
+                    client_timezone: None,
+                    client_start_time: None,
+                    client_end_time: None,
+                }
+            };
+            Some(upcoming_info)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Build response with tournament info and optional user info
     let response = LeaderboardWithTournamentResponse {
         data: entries,
         cursor_info,
         tournament_info,
         user_info,
+        upcoming_tournament_info,
     };
 
     (StatusCode::OK, Json(response)).into_response()
@@ -738,7 +780,7 @@ pub async fn get_user_rank_handler(
             "rank": user_rank,
             "score": user_score,
             "percentile": if is_in_leaderboard && total_participants > 0 {
-                ((total_participants - user_rank + 1) as f32 / total_participants as f32 * 100.0)
+                (total_participants - user_rank + 1) as f32 / total_participants as f32 * 100.0
             } else {
                 0.0
             },
@@ -753,6 +795,14 @@ pub async fn get_user_rank_handler(
             "id": tournament.id,
             "metric_type": tournament.metric_type.to_string(),
             "metric_display_name": tournament.metric_display_name,
+            "status": match tournament.status {
+                TournamentStatus::Upcoming => "upcoming",
+                TournamentStatus::Active => "active",
+                TournamentStatus::Finalizing => "finalizing",
+                TournamentStatus::Completed => "completed",
+                TournamentStatus::Ended => "ended",
+                TournamentStatus::Cancelled => "cancelled",
+            },
         },
         "total_participants": total_participants,
     });
@@ -856,7 +906,7 @@ pub async fn search_users_handler(
     };
 
     // Get total participants for rank calculation in ascending order
-    let total_participants = match redis.get_total_participants(&current_tournament).await {
+    let _total_participants = match redis.get_total_participants(&current_tournament).await {
         Ok(count) => count,
         Err(_) => 0,
     };
@@ -1113,6 +1163,14 @@ pub async fn create_tournament_handler(
             }
         }
     } else {
+        // Set as upcoming tournament
+        if let Err(e) = redis.set_upcoming_tournament(&tournament_id).await {
+            log::error!("Failed to set upcoming tournament: {:?}", e);
+            // Continue anyway, this is not critical
+        } else {
+            log::info!("Tournament {} set as upcoming tournament", tournament_id);
+        }
+
         // Schedule start for start_time
         let delay = tournament.start_time - now;
         if delay > 0 {

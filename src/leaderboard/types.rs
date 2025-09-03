@@ -366,6 +366,7 @@ pub struct LeaderboardWithTournamentResponse {
     pub cursor_info: CursorInfo,
     pub tournament_info: TournamentInfo,
     pub user_info: Option<serde_json::Value>,
+    pub upcoming_tournament_info: Option<TournamentInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]

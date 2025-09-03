@@ -59,6 +59,10 @@ impl LeaderboardRedis {
         format!("{}:tournament:current", self.key_prefix)
     }
 
+    fn upcoming_tournament_key(&self) -> String {
+        format!("{}:tournament:upcoming", self.key_prefix)
+    }
+
     fn tournament_history_key(&self) -> String {
         format!("{}:tournaments:history", self.key_prefix)
     }
@@ -79,6 +83,28 @@ impl LeaderboardRedis {
         let mut conn = self.pool.get().await?;
         conn.set::<_, _, ()>(self.current_tournament_key(), tournament_id)
             .await?;
+        Ok(())
+    }
+
+    // Get upcoming tournament
+    pub async fn get_upcoming_tournament(&self) -> Result<Option<String>> {
+        let mut conn = self.pool.get().await?;
+        let tournament_id: Option<String> = conn.get(self.upcoming_tournament_key()).await?;
+        Ok(tournament_id)
+    }
+
+    // Set upcoming tournament
+    pub async fn set_upcoming_tournament(&self, tournament_id: &str) -> Result<()> {
+        let mut conn = self.pool.get().await?;
+        conn.set::<_, _, ()>(self.upcoming_tournament_key(), tournament_id)
+            .await?;
+        Ok(())
+    }
+
+    // Clear upcoming tournament
+    pub async fn clear_upcoming_tournament(&self) -> Result<()> {
+        let mut conn = self.pool.get().await?;
+        conn.del::<_, ()>(self.upcoming_tournament_key()).await?;
         Ok(())
     }
 
