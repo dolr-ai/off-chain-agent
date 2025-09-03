@@ -28,7 +28,7 @@ pub struct LeaderboardRedis {
 
 impl LeaderboardRedis {
     pub fn new(pool: RedisPool) -> Self {
-        Self { 
+        Self {
             pool,
             key_prefix: "leaderboard".to_string(),
         }
@@ -374,7 +374,7 @@ impl LeaderboardRedis {
             SortOrder::Asc => conn.zrange_withscores(&scores_key, start, stop).await?,
             SortOrder::Desc => conn.zrevrange_withscores(&scores_key, start, stop).await?,
         };
-        
+
         if ranked_members.is_empty() {
             return Ok(vec![]);
         }
@@ -386,8 +386,10 @@ impl LeaderboardRedis {
             .collect();
 
         // Batch fetch all user metadata
-        let metadata_map = self.get_user_metadata_bulk(tournament_id, &principal_strings).await?;
-        
+        let metadata_map = self
+            .get_user_metadata_bulk(tournament_id, &principal_strings)
+            .await?;
+
         // Build result with actual scores from UserTournamentData
         let mut results = Vec::with_capacity(ranked_members.len());
         for (principal_str, composite_score) in ranked_members {
@@ -395,7 +397,7 @@ impl LeaderboardRedis {
                 .get(&principal_str)
                 .map(|metadata| metadata.score)
                 .unwrap_or(composite_score); // Fallback to composite if no metadata
-            
+
             results.push((principal_str, actual_score));
         }
 
@@ -472,7 +474,9 @@ impl LeaderboardRedis {
 
         // Batch retrieve all usernames and all user metadata in parallel
         let username_map = self.get_cached_usernames_bulk(&principals).await?;
-        let metadata_map = self.get_user_metadata_bulk(tournament_id, &principal_strings).await?;
+        let metadata_map = self
+            .get_user_metadata_bulk(tournament_id, &principal_strings)
+            .await?;
 
         // Filter and build results with actual scores
         let mut results = Vec::new();
@@ -487,7 +491,7 @@ impl LeaderboardRedis {
                             .get(principal_str)
                             .map(|metadata| metadata.score)
                             .unwrap_or(*composite_score); // Fallback to composite if no metadata
-                        
+
                         results.push((principal, actual_score));
                         if results.len() >= limit as usize {
                             break;
@@ -527,22 +531,25 @@ impl LeaderboardRedis {
     pub async fn save_tournament_results(&self, results: &TournamentResult) -> Result<()> {
         let mut conn = self.pool.get().await?;
         let key = self.tournament_results_key(&results.tournament_id);
-        
-        let serialized = serde_json::to_string(results)
-            .context("Failed to serialize tournament results")?;
-        
+
+        let serialized =
+            serde_json::to_string(results).context("Failed to serialize tournament results")?;
+
         // Store permanently (no expiry)
         conn.set::<_, _, ()>(&key, serialized).await?;
         Ok(())
     }
 
     // Get saved tournament results
-    pub async fn get_tournament_results(&self, tournament_id: &str) -> Result<Option<TournamentResult>> {
+    pub async fn get_tournament_results(
+        &self,
+        tournament_id: &str,
+    ) -> Result<Option<TournamentResult>> {
         let mut conn = self.pool.get().await?;
         let key = self.tournament_results_key(tournament_id);
-        
+
         let data: Option<String> = conn.get(&key).await?;
-        
+
         match data {
             Some(json_str) => {
                 let results = serde_json::from_str(&json_str)

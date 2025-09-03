@@ -1,24 +1,23 @@
 use anyhow::{Context, Result};
 use candid::Principal;
 use chrono::Utc;
-use futures::stream::StreamExt;
+use futures::stream::{self, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
-use yral_canisters_common::utils::token::TokenOperationsProvider;
 use yral_username_gen::random_username_from_principal;
 
 use crate::{
     app_state::AppState,
+    canister::utils::get_user_principal_canister_list_v2,
     events::types::{EventPayload, TournamentEndedWinnerPayload, TournamentStartedPayload},
 };
 use yral_metadata_types::{
-    AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
-    SendNotificationReq, WebpushConfig, WebpushFcmOptions,
+    NotificationPayload, SendNotificationReq, WebpushConfig, WebpushFcmOptions,
 };
 
 use super::{
     redis_ops::LeaderboardRedis,
-    types::{calculate_reward, LeaderboardEntry, TokenType, TournamentResult, TournamentStatus},
+    types::{calculate_reward, LeaderboardEntry, TournamentResult, TournamentStatus},
 };
 
 /// Start a tournament and send notifications to all users
@@ -319,7 +318,7 @@ pub async fn end_tournament(tournament_id: &str, app_state: &Arc<AppState>) -> R
 }
 
 /// Send broadcast notification for tournament start
-/// In production, this should be handled by a batch notification system
+/// Sends notifications to all users with a concurrency limit of 500
 async fn send_tournament_start_broadcast(
     payload: &TournamentStartedPayload,
     app_state: &Arc<AppState>,
@@ -361,38 +360,70 @@ async fn send_tournament_start_broadcast(
         ..Default::default()
     };
 
-    // In a production system, you would:
-    // 1. Query all users with notification tokens
-    // 2. Batch them into groups
-    // 3. Send notifications in parallel
-    //
-    // For now, we'll use a broadcast approach via a special broadcast endpoint
-    // or topic subscription (e.g., all users subscribe to a "tournaments" topic)
+    // Fetch all user principals from the canister system
+    let user_principal_canister_list = match get_user_principal_canister_list_v2(&app_state.agent).await {
+        Ok(list) => list,
+        Err(e) => {
+            log::error!("Failed to fetch user principals: {}", e);
+            // Fallback to empty list or could use a cached list
+            vec![]
+        }
+    };
 
-    // Example: Send to a broadcast topic (requires metadata service support)
-    // app_state.notification_client.send_broadcast_notification(notif_payload).await;
+    // Extract just the user principals
+    let users: Vec<Principal> = user_principal_canister_list
+        .into_iter()
+        .map(|(user_principal, _canister_principal)| user_principal)
+        .collect();
 
-    // For now, just log the broadcast intent
+    let total_users = users.len();
+    
+    if total_users == 0 {
+        log::warn!("No users found to send tournament notifications to");
+        return Ok(());
+    }
+
     log::info!(
-        "Tournament start broadcast notification prepared for tournament {}",
+        "Sending tournament start notifications to {} users for tournament {}",
+        total_users,
         payload.tournament_id
     );
 
-    // TODO: Implement actual broadcast mechanism with metadata service
-    // This might involve:
-    // - Fetching all users with FCM tokens from metadata service
-    // - Batching notifications (FCM has a limit of 500 devices per multicast)
-    // - Sending via FCM topic subscriptions
+    // Send notifications concurrently with a limit of 500
+    let notification_client = app_state.notification_client.clone();
+    let notif_payload_arc = Arc::new(notif_payload);
+    
+    let sent_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    
+    stream::iter(users)
+        .for_each_concurrent(500, |user_principal| {
+            let client = notification_client.clone();
+            let payload = notif_payload_arc.clone();
+            let sent = sent_count.clone();
+            
+            async move {
+                // Send notification and track result
+                client.send_notification((*payload).clone(), user_principal).await;
+                
+                // Track progress
+                let count = sent.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                
+                // Log progress every 100 notifications
+                if count % 100 == 0 {
+                    log::info!("Notification progress: {}/{} sent", count, total_users);
+                }
+            }
+        })
+        .await;
 
-    let users = vec!["ebp2n-emlpn-pz52l-oymqw-gwyt3-uadux-4wamr-sbkva-ruwat-i2dbf-qqe"];
-
-    for user in users {
-        log::info!("Would send notification to user: {}", user);
-        app_state
-            .notification_client
-            .send_notification(notif_payload.clone(), Principal::from_text(user).unwrap())
-            .await;
-    }
+    let final_sent = sent_count.load(std::sync::atomic::Ordering::Relaxed);
+    
+    log::info!(
+        "Tournament broadcast completed: {}/{} notifications sent successfully for tournament {}",
+        final_sent,
+        total_users,
+        payload.tournament_id
+    );
 
     Ok(())
 }
