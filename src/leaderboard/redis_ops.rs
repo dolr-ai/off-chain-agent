@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use candid::Principal;
 use chrono::Utc;
+use once_cell::sync::Lazy;
 use redis::AsyncCommands;
 use serde_json;
 use sha1::{Digest, Sha1};
@@ -46,6 +47,14 @@ fn calculate_script_sha(script: &str) -> String {
     hex::encode(result)
 }
 
+// Lazily compute and store the SHA1 of the Lua script
+// This is computed once on first access and then cached
+static LUA_INCREMENT_SCRIPT_SHA: Lazy<String> = Lazy::new(|| {
+    let sha = calculate_script_sha(LUA_INCREMENT_SCRIPT);
+    log::info!("Calculated Lua script SHA: {}", sha);
+    sha
+});
+
 #[derive(Clone)]
 pub struct LeaderboardRedis {
     pool: RedisPool,
@@ -73,9 +82,9 @@ impl LeaderboardRedis {
             .query_async(&mut *conn)
             .await?;
 
-        // Verify the SHA matches what we calculate
-        let expected_sha = calculate_script_sha(LUA_INCREMENT_SCRIPT);
-        if sha != expected_sha {
+        // Verify the SHA matches what we expect
+        let expected_sha = &*LUA_INCREMENT_SCRIPT_SHA;
+        if sha != *expected_sha {
             log::warn!(
                 "Loaded script SHA {} doesn't match calculated SHA {}",
                 sha,
@@ -210,16 +219,14 @@ impl LeaderboardRedis {
                 let time_component = (timestamp - TIMESTAMP_BASE) as f64;
                 let composite_offset = time_component * TIEBREAKER_WEIGHT;
 
-                // Calculate the SHA1 of our script for EVALSHA
-                let script_sha = calculate_script_sha(LUA_INCREMENT_SCRIPT);
-
-                log::info!("Using script SHA: {}", script_sha);
+                // Get the pre-calculated SHA1 of our script for EVALSHA
+                let script_sha = &*LUA_INCREMENT_SCRIPT_SHA;
 
                 // Try EVALSHA first for better performance, fallback to EVAL on NOSCRIPT
                 let score_str: String = {
                     // First attempt with EVALSHA
                     let result: Result<String, redis::RedisError> = redis::cmd("EVALSHA")
-                        .arg(&script_sha)
+                        .arg(script_sha)
                         .arg(2) // number of keys
                         .arg(&users_key)
                         .arg(&scores_key)
