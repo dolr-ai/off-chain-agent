@@ -3,6 +3,7 @@ use candid::Principal;
 use chrono::Utc;
 use redis::AsyncCommands;
 use serde_json;
+use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 
 use super::types::*;
@@ -37,15 +38,13 @@ const LUA_INCREMENT_SCRIPT: &str = r#"
     return tostring(new_score)
 "#;
 
-// SHA256 hash of the loaded Lua script (set this after loading the script)
-// To get this SHA: redis-cli SCRIPT LOAD "$(cat script.lua)"
-// Or use the load_lua_scripts() method
-const TEST_LUA_INCREMENT_SCORE_SHA: &str = "7fcb59e3c2bdc81d7b81746d1d7445114443b16a";
-
-const PROD_LUA_INCREMENT_SCORE_SHA: &str = "7fcb59e3c2bdc81d7b81746d1d7445114443b16a";
-
-// Use this flag to switch between EVAL and EVALSHA
-const USE_EVALSHA: bool = true;
+// Helper function to calculate SHA1 hash of a script
+fn calculate_script_sha(script: &str) -> String {
+    let mut hasher = Sha1::new();
+    hasher.update(script.as_bytes());
+    let result = hasher.finalize();
+    hex::encode(result)
+}
 
 #[derive(Clone)]
 pub struct LeaderboardRedis {
@@ -73,6 +72,17 @@ impl LeaderboardRedis {
             .arg(LUA_INCREMENT_SCRIPT)
             .query_async(&mut *conn)
             .await?;
+
+        // Verify the SHA matches what we calculate
+        let expected_sha = calculate_script_sha(LUA_INCREMENT_SCRIPT);
+        if sha != expected_sha {
+            log::warn!(
+                "Loaded script SHA {} doesn't match calculated SHA {}",
+                sha,
+                expected_sha
+            );
+        }
+
         Ok(sha)
     }
 
@@ -200,18 +210,16 @@ impl LeaderboardRedis {
                 let time_component = (timestamp - TIMESTAMP_BASE) as f64;
                 let composite_offset = time_component * TIEBREAKER_WEIGHT;
 
-                // Use EVALSHA or EVAL based on configuration
-                let score_str: String = if USE_EVALSHA {
-                    // Select the appropriate SHA based on environment (test vs prod)
-                    let script_sha = if self.key_prefix.starts_with("test") {
-                        TEST_LUA_INCREMENT_SCORE_SHA
-                    } else {
-                        PROD_LUA_INCREMENT_SCORE_SHA
-                    };
+                // Calculate the SHA1 of our script for EVALSHA
+                let script_sha = calculate_script_sha(LUA_INCREMENT_SCRIPT);
 
-                    // Try EVALSHA first for better performance
+                log::info!("Using script SHA: {}", script_sha);
+
+                // Try EVALSHA first for better performance, fallback to EVAL on NOSCRIPT
+                let score_str: String = {
+                    // First attempt with EVALSHA
                     let result: Result<String, redis::RedisError> = redis::cmd("EVALSHA")
-                        .arg(script_sha)
+                        .arg(&script_sha)
                         .arg(2) // number of keys
                         .arg(&users_key)
                         .arg(&scores_key)
@@ -223,33 +231,40 @@ impl LeaderboardRedis {
 
                     match result {
                         Ok(s) => s,
-                        Err(e) if e.to_string().contains("NOSCRIPT") => {
-                            // Script not loaded, fallback to EVAL
-                            redis::cmd("EVAL")
-                                .arg(LUA_INCREMENT_SCRIPT)
-                                .arg(2) // number of keys
-                                .arg(&users_key)
-                                .arg(&scores_key)
-                                .arg(principal.to_string())
-                                .arg(metric_value)
-                                .arg(composite_offset)
-                                .query_async(&mut *conn)
-                                .await?
+                        Err(e) => {
+                            // Check for NOSCRIPT error (different formats possible)
+                            let error_str = e.to_string();
+                            if error_str.contains("NOSCRIPT")
+                                || error_str.contains("No matching script")
+                                || e.kind() == redis::ErrorKind::NoScriptError
+                            {
+                                log::debug!(
+                                    "Script not in cache, loading with EVAL for SHA: {}",
+                                    script_sha
+                                );
+
+                                // Script not loaded, use EVAL which loads it automatically
+                                redis::cmd("EVAL")
+                                    .arg(LUA_INCREMENT_SCRIPT)
+                                    .arg(2) // number of keys
+                                    .arg(&users_key)
+                                    .arg(&scores_key)
+                                    .arg(principal.to_string())
+                                    .arg(metric_value)
+                                    .arg(composite_offset)
+                                    .query_async(&mut *conn)
+                                    .await
+                                    .map_err(|e| {
+                                        log::error!("EVAL failed after NOSCRIPT: {:?}", e);
+                                        e
+                                    })?
+                            } else {
+                                // Some other error, propagate it
+                                log::error!("EVALSHA failed with non-NOSCRIPT error: {:?}", e);
+                                return Err(e.into());
+                            }
                         }
-                        Err(e) => return Err(e.into()),
                     }
-                } else {
-                    // Use EVAL directly
-                    redis::cmd("EVAL")
-                        .arg(LUA_INCREMENT_SCRIPT)
-                        .arg(2) // number of keys
-                        .arg(&users_key)
-                        .arg(&scores_key)
-                        .arg(principal.to_string())
-                        .arg(metric_value)
-                        .arg(composite_offset)
-                        .query_async(&mut *conn)
-                        .await?
                 };
 
                 // Parse the returned string to f64
