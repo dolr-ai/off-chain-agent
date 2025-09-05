@@ -2,18 +2,19 @@ mod verify;
 
 use std::sync::Arc;
 
-use axum::{extract::State, middleware, response::Response, routing::post, Json, Router};
+use axum::middleware;
+use axum::{extract::State, response::Response, routing::post, Json, Router};
 use hotornot_job::start_hotornot_job_v2;
 use http::StatusCode;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
 use tower::ServiceBuilder;
 use tracing::instrument;
-use verify::verify_qstash_message;
 
 use crate::pipeline::Step;
 use crate::qstash::duplicate::VideoPublisherDataV2;
 use crate::qstash::hotornot_job::start_hotornot_job_v3;
+use crate::qstash::verify::verify_qstash_message;
 use crate::setup_context;
 use crate::{
     app_state::AppState,
@@ -144,6 +145,22 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/video_gen_callback",
             post(crate::videogen::qstash_callback::handle_video_gen_callback),
+        )
+        .route(
+            "/tournament/create",
+            post(crate::leaderboard::handlers::create_tournament_handler),
+        )
+        .route(
+            "/tournament/start/{id}",
+            post(crate::leaderboard::handlers::start_tournament_handler),
+        )
+        .route(
+            "/tournament/finalize/{id}",
+            post(crate::leaderboard::handlers::finalize_tournament_handler),
+        )
+        .route(
+            "/tournament/end/{id}",
+            post(crate::leaderboard::handlers::end_tournament_handler),
         )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),

@@ -10,3 +10,5 @@ google_service_account.json
 .vscode/
 .claude/
 docs/
+*.hurl
+local_scripts/

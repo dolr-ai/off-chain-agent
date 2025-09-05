@@ -9,11 +9,14 @@ edition = "2021"
 axum = { version = "0.8.0", features = ["macros", "json"] }
 candid = "0.10.6"
 chrono = { version = "=0.4.38", features = ["serde"] }
+chrono-tz = "0.10"
 futures = "0.3.30"
 ic-agent = "0.41.0"
 serde = "1.0.197"
 serde_json = { version = "1.0.114", default-features = false }
 stringreader = "0.1.1"
+strum = { version = "0.26", features = ["derive"] }
+strum_macros = "0.26"
 tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread", "time"] }
 tonic = { version = "0.13.0", features = ["tls-webpki-roots"] }
 prost = "0.13.5"
@@ -53,6 +56,7 @@ google-cloud-bigquery = { version = "0.13.1", default-features = false, features
 ] }
 hex = "0.4.3"
 sha2 = "0.10"
+sha1 = "0.10"
 ic-sns-governance = { git = "https://github.com/dfinity/ic", rev = "tags/release-2025-07-11_03-31-base" }
 ic-utils = "0.41.0"
 utoipa = "5.3.1"
@@ -117,6 +121,7 @@ videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "
 yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 
 
 # Local (Path) - uncomment to use local development versions
@@ -128,10 +133,14 @@ yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "maste
 # yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
 # yral-qstash-types = { path = "../yral-common/qstash-types" }
 # yral-metrics = { path = "../yral-common/metrics" }
-# videogen-common = { path = "../yral-common/videogen-common", features = ["ic"] }
+# videogen-common = { path = "../yral-common/videogen-common", features = [
+#     "ic",
+#     "server",
+# ] }
 # yral-identity = { path = "../yral-common/identity" }
 # yral-canisters-common = { path = "../yral-common/canisters-common" }
 # yral-types = { path = "../yral-common/types" }
+# yral-username-gen = { path = "../yral-common/username-gen" }
 
 
 [build-dependencies]
