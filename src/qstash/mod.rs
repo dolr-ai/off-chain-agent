@@ -27,6 +27,7 @@ use crate::{
     },
     events::{
         event::{storj::storj_ingest, upload_video_gcs},
+        hls::process_hls,
         nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
     },
     posts::report_post::qstash_report_post,
@@ -94,6 +95,7 @@ async fn video_deduplication_handler(
                 let qstash_client = qstash_client.clone();
 
                 Box::pin(async move {
+                    // Only trigger video processing (HLS will be triggered after NSFW)
                     qstash_client
                         .publish_video(&vid_id, post_id, timestamp, &publisher_user_id)
                         .await
@@ -123,6 +125,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
         .route("/enqueue_video_nsfw_detection_v2", post(nsfw_job_v2))
+        .route("/process_hls", post(process_hls))
         .route("/storj_ingest", post(storj_ingest))
         .route("/report_post", post(qstash_report_post))
         .route(

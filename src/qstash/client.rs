@@ -228,6 +228,35 @@ impl QStashClient {
     }
 
     #[instrument(skip(self))]
+    pub async fn publish_hls_processing(
+        &self,
+        video_id: &str,
+        video_info: &UploadVideoInfoV2,
+        is_nsfw: bool,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/process_hls").unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let req = serde_json::json!({
+            "video_id": video_id,
+            "video_info": video_info,
+            "is_nsfw": is_nsfw,
+        });
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("Upstash-Flow-Control-Key", "HLS_PROCESSING")
+            .header("Upstash-Flow-Control-Value", "Rate=5,Parallelism=3")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
     pub async fn publish_report_post(
         &self,
         report_request: ReportPostRequestV3,
@@ -328,6 +357,45 @@ impl QStashClient {
         }
 
         log::info!("Backup canister batch completed");
+
+        Ok(())
+    }
+
+    #[instrument(skip(self, file_data))]
+    pub async fn upload_hls_file(
+        &self,
+        video_id: &str,
+        hls_file_name: &str,
+        file_data: Vec<u8>,
+        is_nsfw: bool,
+    ) -> anyhow::Result<()> {
+        use crate::consts::{STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL};
+
+        // Build the storj interface URL with query parameters
+        let storj_url = format!(
+            "{}/hls/duplicate?video_id={}&is_nsfw={}&hls_file_name={}",
+            STORJ_INTERFACE_URL.as_str().trim_end_matches('/'),
+            video_id,
+            is_nsfw,
+            hls_file_name
+        );
+
+        // Send through QStash
+        let qstash_url = self.base_url.join(&format!("publish/{}", storj_url))?;
+
+        self.client
+            .post(qstash_url)
+            .body(file_data)
+            .header(CONTENT_TYPE, "application/octet-stream")
+            .header("upstash-method", "POST")
+            .header(
+                "Upstash-Forward-Authorization",
+                format!("Bearer {}", STORJ_INTERFACE_TOKEN.as_str()),
+            )
+            .header("Upstash-Flow-Control-Key", "HLS_UPLOAD")
+            .header("Upstash-Flow-Control-Value", "Rate=50,Parallelism=20")
+            .send()
+            .await?;
 
         Ok(())
     }
