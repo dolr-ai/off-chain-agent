@@ -62,7 +62,7 @@ tower-http = { version = "0.6.2", features = ["cors"] }
 image = "0.24"
 rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
-storj-interface = { git = "https://github.com/yral-dapp/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
+storj-interface = { git = "https://github.com/yral-dapp/storj-interface", branch = "main" }
 # yral-metrics = { path = "../yral-common/metrics" }
 yral-metadata-types = { git = "https://github.com/yral-dapp/yral-metadata", branch = "master", version = "0.1.0" }
 sentry = { version = "0.37.0", default-features = false, features = [

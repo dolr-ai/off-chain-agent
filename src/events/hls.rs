@@ -125,74 +125,38 @@ async fn download_video(video_url: &str) -> Result<Vec<u8>, Error> {
 async fn upload_hls_to_storj(
     video_id: &str,
     hls_data: HlsVideo,
-    video_info: &UploadVideoInfoV2,
+    _video_info: &UploadVideoInfoV2,
     qstash_client: &crate::qstash::client::QStashClient,
     is_nsfw: bool,
 ) -> Result<(), Error> {
-    // Create temporary directory for HLS files
-    let temp_dir = format!("/tmp/hls_{}", video_id);
-    fs::create_dir_all(&temp_dir)?;
-
-    let base_path = format!("{}/hls", video_id);
-
-    // Write and upload master playlist
-    let master_path = format!("{}/master.m3u8", temp_dir);
-    fs::write(&master_path, &hls_data.master_m3u8_data)?;
-
-    // Upload master playlist via QStash/Storj duplicate mechanism
-    let master_args = storj_interface::duplicate::Args {
-        publisher_user_id: video_info.publisher_user_id.clone(),
-        video_id: format!("{}/master.m3u8", base_path),
+    // Upload master playlist
+    qstash_client.upload_hls_file(
+        video_id,
+        "master.m3u8",
+        hls_data.master_m3u8_data,
         is_nsfw,
-        metadata: [].into(),
-    };
-
-    qstash_client.duplicate_to_storj(master_args).await?;
+    ).await?;
 
     // Process each resolution
     for resolution in hls_data.resolutions {
-        // Write and upload playlist
-        let playlist_path = format!("{}/{}", temp_dir, resolution.playlist_name);
-        fs::write(&playlist_path, &resolution.playlist_data)?;
-
-        let playlist_args = storj_interface::duplicate::Args {
-            publisher_user_id: video_info.publisher_user_id.clone(),
-            video_id: format!("{}/{}", base_path, resolution.playlist_name),
-            is_nsfw: false,
-            metadata: [
-                ("post_id".into(), video_info.post_id.to_string()),
-                ("timestamp".into(), video_info.timestamp.clone()),
-                ("file_type".into(), "hls_playlist".into()),
-                ("original_video_id".into(), video_id.to_string()),
-            ]
-            .into(),
-        };
-
-        qstash_client.duplicate_to_storj(playlist_args).await?;
+        // Upload playlist
+        qstash_client.upload_hls_file(
+            video_id,
+            &resolution.playlist_name,
+            resolution.playlist_data,
+            is_nsfw,
+        ).await?;
 
         // Process segments
         for segment in resolution.segments {
-            let segment_path = format!("{}/{}", temp_dir, segment.segment_name);
-            fs::write(&segment_path, &segment.segment_data)?;
-
-            let segment_args = storj_interface::duplicate::Args {
-                publisher_user_id: video_info.publisher_user_id.clone(),
-                video_id: format!("{}/{}", base_path, segment.segment_name),
-                is_nsfw: false,
-                metadata: [
-                    ("post_id".into(), video_info.post_id.to_string()),
-                    ("timestamp".into(), video_info.timestamp.clone()),
-                    ("file_type".into(), "hls_segment".into()),
-                    ("original_video_id".into(), video_id.to_string()),
-                ]
-                .into(),
-            };
-
-            qstash_client.duplicate_to_storj(segment_args).await?;
+            qstash_client.upload_hls_file(
+                video_id,
+                &segment.segment_name,
+                segment.segment_data,
+                is_nsfw,
+            ).await?;
         }
     }
-
-    fs::remove_dir_all(&temp_dir).ok();
 
     Ok(())
 }

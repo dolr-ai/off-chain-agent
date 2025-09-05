@@ -536,6 +536,7 @@ dependencies = [
  "matchit 0.8.4",
  "memchr",
  "mime",
+ "multer",
  "percent-encoding",
  "pin-project-lite",
  "rustversion",
@@ -5518,6 +5519,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "multer"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83e87776546dc87511aa5ee218730c92b666d7264ab6ed41f9d215af9cd5224b"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "futures-util",
+ "http 1.3.1",
+ "httparse",
+ "memchr",
+ "mime",
+ "spin 0.9.8",
+ "version_check",
+]
+
+[[package]]
 name = "multimap"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8241,7 +8259,7 @@ dependencies = [
 [[package]]
 name = "storj-interface"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/storj-interface?rev=b824766e5a528deafa56fbb01ecb9f7e09a79e50#b824766e5a528deafa56fbb01ecb9f7e09a79e50"
+source = "git+https://github.com/yral-dapp/storj-interface?branch=main#b5ce5632eb5e45bcff236d53b88b96fef5d0e849"
 dependencies = [
  "anyhow",
  "axum 0.8.4",
