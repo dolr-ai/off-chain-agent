@@ -444,7 +444,7 @@ pub async fn get_leaderboard_handler(
     // Fetch user info if user_id is provided
     let user_info = if let Some(ref user_id) = params.user_id {
         // Parse principal ID
-        if let Ok(user_principal) = Principal::from_text(&user_id) {
+        if let Ok(user_principal) = Principal::from_text(user_id) {
             // Get user's rank
             let user_rank = match redis.get_user_rank(&tournament_id, user_principal).await {
                 Ok(Some(rank)) => rank,

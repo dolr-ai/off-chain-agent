@@ -147,55 +147,55 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     }
 
     // Distribute prizes if tournament uses YRAL (which is Sats internally)
-    // if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
-    //     // Get JWT token from environment
-    //     let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
+    if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
+        // Get JWT token from environment
+        let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
 
-    //     // Create Sats operations provider
-    //     let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
-    //     let token_ops = Arc::new(token_ops);
+        // Create Sats operations provider
+        let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
+        let token_ops = Arc::new(token_ops);
 
-    //     // Process distributions concurrently, 5 at a time
-    //     let results: Vec<_> = stream::iter(distribution_tasks.clone())
-    //         .map(|(principal, reward, rank, _)| {
-    //             let token_ops = token_ops.clone();
-    //             async move {
-    //                 match token_ops.add_balance(principal, reward).await {
-    //                     Ok(_) => {
-    //                         log::info!(
-    //                             "Distributed {} SATS to {} (rank {})",
-    //                             reward,
-    //                             principal,
-    //                             rank
-    //                         );
-    //                         Ok((principal, reward, rank))
-    //                     }
-    //                     Err(e) => {
-    //                         log::error!(
-    //                             "Failed to distribute {} SATS to {} (rank {}): {:?}",
-    //                             reward,
-    //                             principal,
-    //                             rank,
-    //                             e
-    //                         );
-    //                         Err((principal, reward, rank, e))
-    //                     }
-    //                 }
-    //             }
-    //         })
-    //         .buffer_unordered(5) // Process 5 concurrent requests at a time
-    //         .collect()
-    //         .await;
+        // Process distributions concurrently, 5 at a time
+        let results: Vec<_> = stream::iter(distribution_tasks.clone())
+            .map(|(principal, reward, rank, _)| {
+                let token_ops = token_ops.clone();
+                async move {
+                    match token_ops.add_balance(principal, reward).await {
+                        Ok(_) => {
+                            log::info!(
+                                "Distributed {} SATS to {} (rank {})",
+                                reward,
+                                principal,
+                                rank
+                            );
+                            Ok((principal, reward, rank))
+                        }
+                        Err(e) => {
+                            log::error!(
+                                "Failed to distribute {} SATS to {} (rank {}): {:?}",
+                                reward,
+                                principal,
+                                rank,
+                                e
+                            );
+                            Err((principal, reward, rank, e))
+                        }
+                    }
+                }
+            })
+            .buffer_unordered(5) // Process 5 concurrent requests at a time
+            .collect()
+            .await;
 
-    //     //     // Log summary
-    //     let successful = results.iter().filter(|r| r.is_ok()).count();
-    //     let failed = results.iter().filter(|r| r.is_err()).count();
-    //     log::info!(
-    //         "Prize distribution complete: {} successful, {} failed",
-    //         successful,
-    //         failed
-    //     );
-    // }
+        //     // Log summary
+        let successful = results.iter().filter(|r| r.is_ok()).count();
+        let failed = results.iter().filter(|r| r.is_err()).count();
+        log::info!(
+            "Prize distribution complete: {} successful, {} failed",
+            successful,
+            failed
+        );
+    }
 
     // Build and save tournament results for winners
     let mut winner_entries = Vec::new();
@@ -390,11 +390,6 @@ async fn send_tournament_start_broadcast(
     payload: &TournamentStartedPayload,
     app_state: &Arc<AppState>,
 ) -> Result<()> {
-    // Format end time as human readable
-    let end_time_str = chrono::DateTime::from_timestamp(payload.end_time, 0)
-        .map(|dt| dt.format("%B %d at %I:%M %p UTC").to_string())
-        .unwrap_or_else(|| "soon".to_string());
-
     let title = "New Tournament Started!";
     let body = "The new YRAL tournament is live!  Play to climb the leaderboard and win rewards.";
 
@@ -533,10 +528,6 @@ pub async fn check_tournament_lifecycle(app_state: &Arc<AppState>) -> Result<()>
             }
         }
     }
-
-    // Check for tournaments that should start
-    // This would typically query a list of upcoming tournaments
-    // For now, this is a placeholder for the logic
 
     Ok(())
 }
