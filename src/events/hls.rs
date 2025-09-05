@@ -130,31 +130,32 @@ async fn upload_hls_to_storj(
     is_nsfw: bool,
 ) -> Result<(), Error> {
     // Upload master playlist
-    qstash_client.upload_hls_file(
-        video_id,
-        "master.m3u8",
-        hls_data.master_m3u8_data,
-        is_nsfw,
-    ).await?;
+    qstash_client
+        .upload_hls_file(video_id, "master.m3u8", hls_data.master_m3u8_data, is_nsfw)
+        .await?;
 
     // Process each resolution
     for resolution in hls_data.resolutions {
         // Upload playlist
-        qstash_client.upload_hls_file(
-            video_id,
-            &resolution.playlist_name,
-            resolution.playlist_data,
-            is_nsfw,
-        ).await?;
+        qstash_client
+            .upload_hls_file(
+                video_id,
+                &resolution.playlist_name,
+                resolution.playlist_data,
+                is_nsfw,
+            )
+            .await?;
 
         // Process segments
         for segment in resolution.segments {
-            qstash_client.upload_hls_file(
-                video_id,
-                &segment.segment_name,
-                segment.segment_data,
-                is_nsfw,
-            ).await?;
+            qstash_client
+                .upload_hls_file(
+                    video_id,
+                    &segment.segment_name,
+                    segment.segment_data,
+                    is_nsfw,
+                )
+                .await?;
         }
     }
 

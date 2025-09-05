@@ -370,7 +370,7 @@ impl QStashClient {
         is_nsfw: bool,
     ) -> anyhow::Result<()> {
         use crate::consts::{STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL};
-        
+
         // Build the storj interface URL with query parameters
         let storj_url = format!(
             "{}/hls/duplicate?video_id={}&is_nsfw={}&hls_file_name={}",
@@ -379,16 +379,19 @@ impl QStashClient {
             is_nsfw,
             hls_file_name
         );
-        
+
         // Send through QStash
         let qstash_url = self.base_url.join(&format!("publish/{}", storj_url))?;
-        
+
         self.client
             .post(qstash_url)
             .body(file_data)
             .header(CONTENT_TYPE, "application/octet-stream")
             .header("upstash-method", "POST")
-            .header("Upstash-Forward-Authorization", format!("Bearer {}", STORJ_INTERFACE_TOKEN.as_str()))
+            .header(
+                "Upstash-Forward-Authorization",
+                format!("Bearer {}", STORJ_INTERFACE_TOKEN.as_str()),
+            )
             .header("Upstash-Flow-Control-Key", "HLS_UPLOAD")
             .header("Upstash-Flow-Control-Value", "Rate=50,Parallelism=20")
             .send()
