@@ -380,6 +380,31 @@ impl QStashClient {
         Ok(())
     }
 
+    #[instrument(skip(self, tournament_config))]
+    pub async fn schedule_tournament_create(
+        &self,
+        tournament_config: serde_json::Value,
+        delay_seconds: i64,
+    ) -> anyhow::Result<()> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/tournament/create")
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
+
+        self.client
+            .post(url)
+            .json(&tournament_config)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("upstash-delay", format!("{}s", delay_seconds))
+            .header("Upstash-Retries", "0")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
     #[instrument(skip(self))]
     pub async fn queue_video_generation(
         &self,

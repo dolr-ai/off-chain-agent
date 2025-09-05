@@ -601,14 +601,14 @@ pub async fn get_leaderboard_handler(
                         reward: info.reward,
                         status: info.status.clone(),
                     };
-                    
+
                     // Mark as seen if this is the current tournament endpoint (no tournament_id param)
                     if params.tournament_id.is_none() && info.status == "unseen" {
                         if let Err(e) = redis.mark_last_tournament_seen(user_principal).await {
                             log::error!("Failed to mark last tournament as seen: {:?}", e);
                         }
                     }
-                    
+
                     Some(response_info)
                 }
                 Ok(None) => None,
@@ -1240,14 +1240,54 @@ pub async fn finalize_tournament_handler(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match super::tournament::finalize_tournament(&tournament_id, &state).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "success": true,
-                "message": format!("Tournament {} finalized successfully", tournament_id),
-            })),
-        )
-            .into_response(),
+        Ok(_) => {
+            // Schedule the creation of the next tournament 10 minutes from now
+            let redis = LeaderboardRedis::new(state.leaderboard_redis_pool.clone());
+
+            // Get the finalized tournament info to use as template for next tournament
+            if let Ok(Some(tournament)) = redis.get_tournament_info(&tournament_id).await {
+                // Calculate next tournament times using same duration as previous
+                let now = Utc::now().timestamp();
+                let tournament_duration = tournament.end_time - tournament.start_time;
+                let next_start_time = now + 600; // 10 minutes from now
+                let next_end_time = next_start_time + tournament_duration; // Same duration as previous tournament
+
+                // Prepare configuration for next tournament
+                let next_tournament_config = serde_json::json!({
+                    "start_time": next_start_time,
+                    "end_time": next_end_time,
+                    "prize_pool": tournament.prize_pool,
+                    "prize_token": tournament.prize_token,
+                    "metric_type": tournament.metric_type,
+                    "metric_display_name": tournament.metric_display_name,
+                    "allowed_sources": tournament.allowed_sources,
+                });
+
+                // Schedule tournament creation via QStash (10 minutes delay)
+                if let Err(e) = state
+                    .qstash_client
+                    .schedule_tournament_create(next_tournament_config, 60)
+                    .await
+                {
+                    log::error!("Failed to schedule next tournament creation: {:?}", e);
+                    // Don't fail the finalization if scheduling fails
+                } else {
+                    log::info!(
+                        "Scheduled next tournament to be created in 10 minutes (at {})",
+                        next_start_time
+                    );
+                }
+            }
+
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "success": true,
+                    "message": format!("Tournament {} finalized successfully", tournament_id),
+                })),
+            )
+                .into_response()
+        }
         Err(e) => {
             log::error!("Failed to finalize tournament {}: {:?}", tournament_id, e);
             let (status, message) = if e.to_string().contains("not found") {

@@ -980,8 +980,8 @@ impl EventPayload {
             EventPayload::TournamentEndedWinner(payload) => {
                 let title = format!("Congratulations! You won rank #{}!", payload.rank);
                 let body = format!(
-                    "You've won {} {} in the tournament!",
-                    payload.prize_amount, payload.prize_token
+                    "You ranked #{}! You’ve won {} {} in the tournament. Check the leaderboard now!",
+                    payload.rank, payload.prize_amount, payload.prize_token
                 );
 
                 let notif_payload = SendNotificationReq {

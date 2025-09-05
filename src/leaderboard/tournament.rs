@@ -396,10 +396,7 @@ async fn send_tournament_start_broadcast(
         .unwrap_or_else(|| "soon".to_string());
 
     let title = "New Tournament Started!";
-    let body = format!(
-        "Compete to win {} {} prizes! Track {} until {}",
-        payload.prize_pool, payload.prize_token, payload.metric_display_name, end_time_str
-    );
+    let body = "The new YRAL tournament is live!  Play to climb the leaderboard and win rewards.";
 
     // Create notification payload
     let notif_payload = SendNotificationReq {
