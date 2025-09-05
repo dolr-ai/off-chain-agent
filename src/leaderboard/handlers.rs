@@ -290,9 +290,9 @@ pub async fn get_leaderboard_handler(
     let sort_order = params.get_sort_order();
 
     // Determine which tournament to use
-    let tournament_id = if let Some(id) = params.tournament_id {
+    let tournament_id = if let Some(ref id) = params.tournament_id {
         // Use specified tournament for historical data
-        id
+        id.clone()
     } else {
         // Get current tournament
         match redis.get_current_tournament().await {
@@ -442,7 +442,7 @@ pub async fn get_leaderboard_handler(
     };
 
     // Fetch user info if user_id is provided
-    let user_info = if let Some(user_id) = params.user_id {
+    let user_info = if let Some(ref user_id) = params.user_id {
         // Parse principal ID
         if let Ok(user_principal) = Principal::from_text(&user_id) {
             // Get user's rank
@@ -588,6 +588,42 @@ pub async fn get_leaderboard_handler(
             None
         };
 
+    // Fetch last tournament info if user_id is provided
+    let last_tournament_info = if let Some(ref user_id) = params.user_id {
+        if let Ok(user_principal) = Principal::from_text(user_id) {
+            // Get user's last tournament info
+            match redis.get_user_last_tournament(user_principal).await {
+                Ok(Some(info)) => {
+                    // Convert to response format
+                    let response_info = UserLastTournamentResponse {
+                        tournament_id: info.tournament_id.clone(),
+                        rank: info.rank,
+                        reward: info.reward,
+                        status: info.status.clone(),
+                    };
+                    
+                    // Mark as seen if this is the current tournament endpoint (no tournament_id param)
+                    if params.tournament_id.is_none() && info.status == "unseen" {
+                        if let Err(e) = redis.mark_last_tournament_seen(user_principal).await {
+                            log::error!("Failed to mark last tournament as seen: {:?}", e);
+                        }
+                    }
+                    
+                    Some(response_info)
+                }
+                Ok(None) => None,
+                Err(e) => {
+                    log::error!("Failed to get user last tournament info: {:?}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Build response with tournament info and optional user info
     let response = LeaderboardWithTournamentResponse {
         data: entries,
@@ -595,6 +631,7 @@ pub async fn get_leaderboard_handler(
         tournament_info,
         user_info,
         upcoming_tournament_info,
+        last_tournament_info,
     };
 
     (StatusCode::OK, Json(response)).into_response()

@@ -280,6 +280,24 @@ pub struct LeaderboardQueryParams {
     pub tournament_id: Option<String>, // Optional tournament ID for historical data
 }
 
+// User's last completed tournament info
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserLastTournament {
+    pub tournament_id: String,
+    pub rank: u32,
+    pub reward: Option<u64>,
+    pub status: String, // "seen" or "unseen"
+}
+
+// Response format for user's last tournament
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserLastTournamentResponse {
+    pub tournament_id: String,
+    pub rank: u32,
+    pub reward: Option<u64>,
+    pub status: String,
+}
+
 impl Default for CursorPaginationParams {
     fn default() -> Self {
         Self {
@@ -362,6 +380,7 @@ pub struct LeaderboardWithTournamentResponse {
     pub tournament_info: TournamentInfo,
     pub user_info: Option<serde_json::Value>,
     pub upcoming_tournament_info: Option<TournamentInfo>,
+    pub last_tournament_info: Option<UserLastTournamentResponse>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]

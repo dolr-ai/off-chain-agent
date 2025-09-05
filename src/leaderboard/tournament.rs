@@ -21,7 +21,9 @@ use yral_metadata_types::{
 
 use super::{
     redis_ops::LeaderboardRedis,
-    types::{calculate_reward, LeaderboardEntry, TournamentResult, TournamentStatus},
+    types::{
+        calculate_reward, LeaderboardEntry, TournamentResult, TournamentStatus, UserLastTournament,
+    },
 };
 
 /// Start a tournament and send notifications to all users
@@ -145,55 +147,55 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     }
 
     // Distribute prizes if tournament uses YRAL (which is Sats internally)
-    if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
-        // Get JWT token from environment
-        let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
+    // if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
+    //     // Get JWT token from environment
+    //     let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
 
-        // Create Sats operations provider
-        let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
-        let token_ops = Arc::new(token_ops);
+    //     // Create Sats operations provider
+    //     let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
+    //     let token_ops = Arc::new(token_ops);
 
-        // Process distributions concurrently, 5 at a time
-        let results: Vec<_> = stream::iter(distribution_tasks.clone())
-            .map(|(principal, reward, rank, _)| {
-                let token_ops = token_ops.clone();
-                async move {
-                    match token_ops.add_balance(principal, reward).await {
-                        Ok(_) => {
-                            log::info!(
-                                "Distributed {} SATS to {} (rank {})",
-                                reward,
-                                principal,
-                                rank
-                            );
-                            Ok((principal, reward, rank))
-                        }
-                        Err(e) => {
-                            log::error!(
-                                "Failed to distribute {} SATS to {} (rank {}): {:?}",
-                                reward,
-                                principal,
-                                rank,
-                                e
-                            );
-                            Err((principal, reward, rank, e))
-                        }
-                    }
-                }
-            })
-            .buffer_unordered(5) // Process 5 concurrent requests at a time
-            .collect()
-            .await;
+    //     // Process distributions concurrently, 5 at a time
+    //     let results: Vec<_> = stream::iter(distribution_tasks.clone())
+    //         .map(|(principal, reward, rank, _)| {
+    //             let token_ops = token_ops.clone();
+    //             async move {
+    //                 match token_ops.add_balance(principal, reward).await {
+    //                     Ok(_) => {
+    //                         log::info!(
+    //                             "Distributed {} SATS to {} (rank {})",
+    //                             reward,
+    //                             principal,
+    //                             rank
+    //                         );
+    //                         Ok((principal, reward, rank))
+    //                     }
+    //                     Err(e) => {
+    //                         log::error!(
+    //                             "Failed to distribute {} SATS to {} (rank {}): {:?}",
+    //                             reward,
+    //                             principal,
+    //                             rank,
+    //                             e
+    //                         );
+    //                         Err((principal, reward, rank, e))
+    //                     }
+    //                 }
+    //             }
+    //         })
+    //         .buffer_unordered(5) // Process 5 concurrent requests at a time
+    //         .collect()
+    //         .await;
 
-        //     // Log summary
-        let successful = results.iter().filter(|r| r.is_ok()).count();
-        let failed = results.iter().filter(|r| r.is_err()).count();
-        log::info!(
-            "Prize distribution complete: {} successful, {} failed",
-            successful,
-            failed
-        );
-    }
+    //     //     // Log summary
+    //     let successful = results.iter().filter(|r| r.is_ok()).count();
+    //     let failed = results.iter().filter(|r| r.is_err()).count();
+    //     log::info!(
+    //         "Prize distribution complete: {} successful, {} failed",
+    //         successful,
+    //         failed
+    //     );
+    // }
 
     // Build and save tournament results for winners
     let mut winner_entries = Vec::new();
@@ -268,6 +270,48 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     // Save tournament results
     if let Err(e) = redis.save_tournament_results(&tournament_result).await {
         log::error!("Failed to save tournament results: {:?}", e);
+    }
+
+    // Save last tournament info for all participants
+    log::info!("Saving last tournament info for all participants");
+    let all_participants = redis
+        .get_leaderboard(
+            tournament_id,
+            0,
+            -1, // Get all participants
+            super::types::SortOrder::Desc,
+        )
+        .await?;
+
+    let mut last_tournament_entries = Vec::new();
+
+    for (index, (principal_str, _score)) in all_participants.iter().enumerate() {
+        if let Ok(principal) = Principal::from_text(principal_str) {
+            let rank = (index + 1) as u32;
+            let reward = calculate_reward(rank, tournament.prize_pool as u64);
+
+            let last_tournament_info = UserLastTournament {
+                tournament_id: tournament_id.to_string(),
+                rank,
+                reward,
+                status: "unseen".to_string(),
+            };
+
+            last_tournament_entries.push((principal, last_tournament_info));
+        }
+    }
+
+    // Batch save all participants' last tournament info
+    if let Err(e) = redis
+        .save_batch_user_last_tournaments(last_tournament_entries)
+        .await
+    {
+        log::error!("Failed to save batch user last tournament info: {:?}", e);
+    } else {
+        log::info!(
+            "Successfully saved last tournament info for {} participants",
+            all_participants.len()
+        );
     }
 
     // Update tournament status to Completed

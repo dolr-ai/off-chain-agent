@@ -617,6 +617,78 @@ impl LeaderboardRedis {
             None => Ok(None),
         }
     }
+
+    // User's last tournament tracking methods
+    pub async fn save_user_last_tournament(
+        &self,
+        principal: Principal,
+        info: &UserLastTournament,
+    ) -> Result<()> {
+        let mut conn = self.pool.get().await?;
+        let key = format!("{}:user_last_tournament", self.key_prefix);
+        let json_value = serde_json::to_string(info)
+            .context("Failed to serialize user last tournament info")?;
+        
+        conn.hset::<_, _, _, ()>(&key, principal.to_string(), json_value).await?;
+        Ok(())
+    }
+
+    pub async fn get_user_last_tournament(
+        &self,
+        principal: Principal,
+    ) -> Result<Option<UserLastTournament>> {
+        let mut conn = self.pool.get().await?;
+        let key = format!("{}:user_last_tournament", self.key_prefix);
+        
+        let data: Option<String> = conn.hget(&key, principal.to_string()).await?;
+        
+        match data {
+            Some(json_str) => {
+                let info = serde_json::from_str(&json_str)
+                    .context("Failed to deserialize user last tournament info")?;
+                Ok(Some(info))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub async fn mark_last_tournament_seen(
+        &self,
+        principal: Principal,
+    ) -> Result<()> {
+        // Get existing info
+        if let Some(mut info) = self.get_user_last_tournament(principal).await? {
+            // Update status to seen
+            info.status = "seen".to_string();
+            // Save back
+            self.save_user_last_tournament(principal, &info).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn save_batch_user_last_tournaments(
+        &self,
+        entries: Vec<(Principal, UserLastTournament)>,
+    ) -> Result<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.pool.get().await?;
+        let key = format!("{}:user_last_tournament", self.key_prefix);
+        
+        // Use pipeline for batch operations
+        let mut pipeline = redis::pipe();
+        
+        for (principal, info) in entries {
+            let json_value = serde_json::to_string(&info)
+                .context("Failed to serialize user last tournament info")?;
+            pipeline.hset(&key, principal.to_string(), json_value);
+        }
+        
+        pipeline.query_async::<()>(&mut *conn).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
