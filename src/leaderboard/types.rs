@@ -160,8 +160,9 @@ pub struct LeaderboardResponse {
     pub last_updated: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserRankInfo {
+    #[schema(value_type = String)]
     pub principal_id: Principal,
     pub username: String,
     pub rank: u32,
@@ -200,6 +201,41 @@ pub struct WinnerInfo {
     pub username: String,
     pub score: f64,
     pub reward: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserRankResponse {
+    pub user: UserRankInfo,
+    pub surrounding_players: Vec<LeaderboardEntry>,
+    pub tournament: TournamentRankInfo,
+    pub total_participants: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TournamentRankInfo {
+    pub id: String,
+    pub metric_type: String,
+    pub metric_display_name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TournamentResultsResponse {
+    pub tournament: TournamentResultInfo,
+    pub results: Vec<LeaderboardEntry>,
+    pub cursor_info: CursorInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TournamentResultInfo {
+    pub id: String,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub status: TournamentStatus,
+    pub prize_pool: f64,
+    pub prize_token: String,
+    pub metric_type: String,
+    pub metric_display_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

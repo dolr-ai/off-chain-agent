@@ -804,39 +804,46 @@ pub async fn get_user_rank_handler(
         vec![]
     };
 
-    let response = serde_json::json!({
-        "user": {
-            "principal_id": principal.to_string(),
-            "username": username,
-            "rank": user_rank,
-            "score": user_score,
-            "percentile": if is_in_leaderboard && total_participants > 0 {
-                (total_participants - user_rank + 1) as f32 / total_participants as f32 * 100.0
-            } else {
-                0.0
-            },
-            "reward": if is_in_leaderboard {
-                calculate_reward(user_rank, tournament.prize_pool as u64)
-            } else {
-                None
-            },
+    // Build user info struct
+    let user = UserRankInfo {
+        principal_id: principal,
+        username,
+        rank: user_rank,
+        score: user_score,
+        percentile: if is_in_leaderboard && total_participants > 0 {
+            (total_participants - user_rank + 1) as f32 / total_participants as f32 * 100.0
+        } else {
+            0.0
         },
-        "surrounding_players": surrounding_entries,
-        "tournament": {
-            "id": tournament.id,
-            "metric_type": tournament.metric_type.to_string(),
-            "metric_display_name": tournament.metric_display_name,
-            "status": match tournament.status {
-                TournamentStatus::Upcoming => "upcoming",
-                TournamentStatus::Active => "active",
-                TournamentStatus::Finalizing => "finalizing",
-                TournamentStatus::Completed => "completed",
-                TournamentStatus::Ended => "ended",
-                TournamentStatus::Cancelled => "cancelled",
-            },
+        reward: if is_in_leaderboard {
+            calculate_reward(user_rank, tournament.prize_pool as u64)
+        } else {
+            None
         },
-        "total_participants": total_participants,
-    });
+    };
+
+    // Build tournament info struct
+    let tournament_info = TournamentRankInfo {
+        id: tournament.id,
+        metric_type: tournament.metric_type.to_string(),
+        metric_display_name: tournament.metric_display_name,
+        status: match tournament.status {
+            TournamentStatus::Upcoming => "upcoming".to_string(),
+            TournamentStatus::Active => "active".to_string(),
+            TournamentStatus::Finalizing => "finalizing".to_string(),
+            TournamentStatus::Completed => "completed".to_string(),
+            TournamentStatus::Ended => "ended".to_string(),
+            TournamentStatus::Cancelled => "cancelled".to_string(),
+        },
+    };
+
+    // Build response struct
+    let response = UserRankResponse {
+        user,
+        surrounding_players: surrounding_entries,
+        tournament: tournament_info,
+        total_participants,
+    };
 
     (StatusCode::OK, Json(response)).into_response()
 }
@@ -1463,20 +1470,24 @@ pub async fn get_tournament_results_handler(
         has_more,
     };
 
-    let response = serde_json::json!({
-        "tournament": {
-            "id": tournament.id,
-            "start_time": tournament.start_time,
-            "end_time": tournament.end_time,
-            "status": tournament.status,
-            "prize_pool": tournament.prize_pool,
-            "prize_token": tournament.prize_token.to_string(),
-            "metric_type": tournament.metric_type.to_string(),
-            "metric_display_name": tournament.metric_display_name,
-        },
-        "results": entries,
-        "cursor_info": cursor_info,
-    });
+    // Build tournament info struct
+    let tournament_info = TournamentResultInfo {
+        id: tournament.id,
+        start_time: tournament.start_time,
+        end_time: tournament.end_time,
+        status: tournament.status,
+        prize_pool: tournament.prize_pool,
+        prize_token: tournament.prize_token.to_string(),
+        metric_type: tournament.metric_type.to_string(),
+        metric_display_name: tournament.metric_display_name,
+    };
+
+    // Build response struct
+    let response = TournamentResultsResponse {
+        tournament: tournament_info,
+        results: entries,
+        cursor_info,
+    };
 
     (StatusCode::OK, Json(response)).into_response()
 }
