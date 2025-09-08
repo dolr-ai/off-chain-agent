@@ -11,7 +11,6 @@ use yral_username_gen::random_username_from_principal;
 
 use crate::{
     app_state::AppState,
-    // canister::utils::get_user_principal_canister_list_v2, // Commented out for testing with internal users
     events::types::{EventPayload, TournamentEndedWinnerPayload, TournamentStartedPayload},
     leaderboard::TokenType,
 };
@@ -213,7 +212,7 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
             _ => {
                 let generated = random_username_from_principal(*principal, 15);
                 // Cache generated username
-                if let Err(e) = redis.cache_username(*principal, &generated, 3600).await {
+                if let Err(e) = redis.cache_username(*principal, &generated).await {
                     log::warn!("Failed to cache generated username: {:?}", e);
                 }
                 generated
@@ -421,14 +420,15 @@ async fn send_tournament_start_broadcast(
 
     // PRODUCTION CODE (commented out for testing with internal users)
     // Fetch all user principals from the canister system
-    // let user_principal_canister_list = match get_user_principal_canister_list_v2(&app_state.agent).await {
-    //     Ok(list) => list,
-    //     Err(e) => {
-    //         log::error!("Failed to fetch user principals: {}", e);
-    //         // Fallback to empty list or could use a cached list
-    //         vec![]
-    //     }
-    // };
+    // let user_principal_canister_list =
+    //     match get_user_principal_canister_list_v2(&app_state.agent).await {
+    //         Ok(list) => list,
+    //         Err(e) => {
+    //             log::error!("Failed to fetch user principals: {}", e);
+    //             // Fallback to empty list or could use a cached list
+    //             vec![]
+    //         }
+    //     };
 
     // // Extract just the user principals
     // let users: Vec<Principal> = user_principal_canister_list

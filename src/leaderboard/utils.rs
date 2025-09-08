@@ -66,7 +66,7 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
                 final_usernames.insert(principal, username.clone());
 
                 // Cache the fetched username
-                if let Err(e) = redis.cache_username(principal, &username, 3600).await {
+                if let Err(e) = redis.cache_username(principal, &username).await {
                     log::warn!("Failed to cache username for {}: {:?}", principal, e);
                 }
                 continue;
@@ -82,10 +82,7 @@ pub async fn get_usernames_with_fallback<const AUTH: bool>(
         final_usernames.insert(principal, generated_username.clone());
 
         // Cache the generated username
-        if let Err(e) = redis
-            .cache_username(principal, &generated_username, 3600)
-            .await
-        {
+        if let Err(e) = redis.cache_username(principal, &generated_username).await {
             log::warn!(
                 "Failed to cache generated username for {}: {:?}",
                 principal,
