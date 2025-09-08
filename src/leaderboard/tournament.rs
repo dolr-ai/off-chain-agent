@@ -11,7 +11,6 @@ use yral_username_gen::random_username_from_principal;
 
 use crate::{
     app_state::AppState,
-    canister::utils::get_user_principal_canister_list_v2,
     events::types::{EventPayload, TournamentEndedWinnerPayload, TournamentStartedPayload},
     leaderboard::TokenType,
 };
