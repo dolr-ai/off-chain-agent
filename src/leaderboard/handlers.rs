@@ -205,6 +205,7 @@ pub async fn update_score_handler(
     // Determine operation based on metric type
     let operation = match tournament.metric_type {
         MetricType::GamesPlayed
+        | MetricType::GamesWon
         | MetricType::TokensEarned
         | MetricType::VideosWatched
         | MetricType::ReferralsMade => ScoreOperation::Increment,

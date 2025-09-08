@@ -33,6 +33,10 @@ pub enum MetricType {
     #[serde(rename = "games_played")]
     GamesPlayed,
 
+    #[strum(serialize = "games_won")]
+    #[serde(rename = "games_won")]
+    GamesWon,
+
     #[strum(serialize = "tokens_earned")]
     #[serde(rename = "tokens_earned")]
     TokensEarned,
@@ -53,7 +57,7 @@ pub enum MetricType {
 #[allow(clippy::derivable_impls)]
 impl Default for MetricType {
     fn default() -> Self {
-        MetricType::GamesPlayed
+        MetricType::GamesWon
     }
 }
 
