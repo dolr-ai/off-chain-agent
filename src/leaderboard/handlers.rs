@@ -457,21 +457,23 @@ pub async fn get_leaderboard_handler(
                 _ => 0.0,
             };
 
-            // Get username using our fallback utility
-            let username_map = get_usernames_with_fallback(
-                &redis,
-                &state.yral_metadata_client,
-                vec![user_principal],
-            )
-            .await;
-
-            let username = username_map
-                .get(&user_principal)
-                .cloned()
-                .unwrap_or_else(|| {
-                    log::error!("Missing username for principal {} in map", user_principal);
-                    random_username_from_principal(user_principal, 15)
-                });
+            // Fetch username
+            let username = match state
+                .yral_metadata_client
+                .get_user_metadata_v2(user_principal.to_string())
+                .await
+            {
+                Ok(Some(metadata)) if !metadata.user_name.trim().is_empty() => metadata.user_name,
+                _ => {
+                    // Generate deterministic username from principal for empty/missing usernames
+                    let generated = random_username_from_principal(user_principal, 15);
+                    // Also cache it for consistency
+                    if let Err(e) = redis.cache_username(user_principal, &generated, 3600).await {
+                        log::warn!("Failed to cache generated username: {:?}", e);
+                    }
+                    generated
+                }
+            };
 
             if user_rank > 0 {
                 // User is in the tournament
