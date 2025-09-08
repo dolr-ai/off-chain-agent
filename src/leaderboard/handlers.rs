@@ -250,7 +250,7 @@ pub async fn update_score_handler(
             random_username_from_principal(principal, 15)
         });
 
-        if let Err(e) = redis.cache_username(principal, &username, 3600).await {
+        if let Err(e) = redis.cache_username(principal, &username).await {
             log::warn!("Failed to cache generated username: {:?}", e);
         }
     });
@@ -466,7 +466,7 @@ pub async fn get_leaderboard_handler(
                 Ok(Some(metadata)) if !metadata.user_name.trim().is_empty() => {
                     let name = metadata.user_name;
                     // Cache the username from metadata
-                    if let Err(e) = redis.cache_username(user_principal, &name, 3600).await {
+                    if let Err(e) = redis.cache_username(user_principal, &name).await {
                         log::warn!("Failed to cache username from metadata: {:?}", e);
                     }
                     name
@@ -475,7 +475,7 @@ pub async fn get_leaderboard_handler(
                     // Generate deterministic username from principal for empty/missing usernames
                     let generated = random_username_from_principal(user_principal, 15);
                     // Cache the generated username
-                    if let Err(e) = redis.cache_username(user_principal, &generated, 3600).await {
+                    if let Err(e) = redis.cache_username(user_principal, &generated).await {
                         log::warn!("Failed to cache generated username: {:?}", e);
                     }
                     generated
@@ -760,7 +760,7 @@ pub async fn get_user_rank_handler(
         Ok(Some(metadata)) if !metadata.user_name.trim().is_empty() => {
             let name = metadata.user_name;
             // Cache the username from metadata
-            if let Err(e) = redis.cache_username(principal, &name, 3600).await {
+            if let Err(e) = redis.cache_username(principal, &name).await {
                 log::warn!("Failed to cache username from metadata: {:?}", e);
             }
             name
@@ -769,7 +769,7 @@ pub async fn get_user_rank_handler(
             // Generate deterministic username from principal for empty/missing usernames
             let generated = random_username_from_principal(principal, 15);
             // Cache the generated username
-            if let Err(e) = redis.cache_username(principal, &generated, 3600).await {
+            if let Err(e) = redis.cache_username(principal, &generated).await {
                 log::warn!("Failed to cache generated username: {:?}", e);
             }
             generated

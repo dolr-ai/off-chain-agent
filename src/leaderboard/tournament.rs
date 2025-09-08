@@ -212,7 +212,7 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
             _ => {
                 let generated = random_username_from_principal(*principal, 15);
                 // Cache generated username
-                if let Err(e) = redis.cache_username(*principal, &generated, 3600).await {
+                if let Err(e) = redis.cache_username(*principal, &generated).await {
                     log::warn!("Failed to cache generated username: {:?}", e);
                 }
                 generated

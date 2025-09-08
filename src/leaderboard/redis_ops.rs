@@ -295,15 +295,10 @@ impl LeaderboardRedis {
     }
 
     // Cache username
-    pub async fn cache_username(
-        &self,
-        principal: Principal,
-        username: &str,
-        ttl: u64,
-    ) -> Result<()> {
+    pub async fn cache_username(&self, principal: Principal, username: &str) -> Result<()> {
         let mut conn = self.pool.get().await?;
         let key = self.username_cache_key(&principal);
-        conn.set_ex::<_, _, ()>(&key, username, ttl).await?;
+        conn.set::<_, _, ()>(&key, username).await?;
         Ok(())
     }
 
@@ -960,7 +955,7 @@ mod tests {
 
         // Cache username
         redis
-            .cache_username(principal, username, 60)
+            .cache_username(principal, username)
             .await
             .expect("Failed to cache username");
 
@@ -998,7 +993,7 @@ mod tests {
                 .expect("Failed to update score");
 
             redis
-                .cache_username(*principal, username, 3600)
+                .cache_username(*principal, username)
                 .await
                 .expect("Failed to cache username");
         }
