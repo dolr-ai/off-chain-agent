@@ -163,17 +163,21 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
 
     // Distribute prizes based on token type
     if !distribution_tasks.is_empty() {
-        // Get JWT token from environment
-        let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
-
         // Create appropriate token operations provider based on token type
         let token_ops: Arc<TokenOperationsProvider> = match tournament.prize_token {
-            TokenType::YRAL => Arc::new(TokenOperationsProvider::Sats(SatsOperations::new(
-                jwt_token,
-            ))),
-            TokenType::CKBTC => Arc::new(TokenOperationsProvider::CkBtc(CkBtcOperations::new(
-                jwt_token,
-            ))),
+            TokenType::YRAL => {
+                // Get JWT token from environment for YRAL/SATS
+                let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
+                Arc::new(TokenOperationsProvider::Sats(SatsOperations::new(
+                    jwt_token,
+                )))
+            }
+            TokenType::CKBTC => {
+                // Use admin agent for direct ckBTC transfers
+                Arc::new(TokenOperationsProvider::CkBtc(CkBtcOperations::new(
+                    app_state.agent.clone(),
+                )))
+            }
         };
 
         let token_name = tournament.prize_token.to_string();
