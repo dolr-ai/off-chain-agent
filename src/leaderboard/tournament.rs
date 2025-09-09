@@ -9,6 +9,9 @@ use yral_canisters_common::utils::token::{
 };
 use yral_username_gen::random_username_from_principal;
 
+// Conversion rate: 1 USD = 886 SATS (ckBTC satoshis)
+const USD_TO_CKBTC_SATS_RATE: f64 = 886.0;
+
 use crate::{
     app_state::AppState,
     events::types::{EventPayload, TournamentEndedWinnerPayload, TournamentStartedPayload},
@@ -139,7 +142,20 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     for (rank, (principal_str, score)) in top_players.iter().enumerate() {
         if let Ok(principal) = Principal::from_text(principal_str) {
             let rank = (rank + 1) as u32;
-            if let Some(reward) = calculate_reward(rank, tournament.prize_pool as u64) {
+            
+            // Convert prize pool based on token type
+            let prize_pool_in_units = match tournament.prize_token {
+                TokenType::CKBTC => {
+                    // Convert USD to ckBTC sats: e.g., $100 * 886 = 88,600 sats
+                    (tournament.prize_pool * USD_TO_CKBTC_SATS_RATE) as u64
+                }
+                TokenType::YRAL => {
+                    // YRAL uses the prize_pool value directly (already in YRAL units)
+                    tournament.prize_pool as u64
+                }
+            };
+            
+            if let Some(reward) = calculate_reward(rank, prize_pool_in_units) {
                 distribution_tasks.push((principal, reward, rank, *score));
             }
         }
