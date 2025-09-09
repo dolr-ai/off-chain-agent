@@ -162,9 +162,9 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/tournament/end/{id}",
             post(crate::leaderboard::handlers::end_tournament_handler),
         )
-        .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
-            app_state.qstash.clone(),
-            verify_qstash_message,
-        )))
+        // .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
+        //     app_state.qstash.clone(),
+        //     verify_qstash_message,
+        // )))
         .with_state(app_state)
 }

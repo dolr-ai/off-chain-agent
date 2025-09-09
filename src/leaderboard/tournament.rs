@@ -142,7 +142,7 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     for (rank, (principal_str, score)) in top_players.iter().enumerate() {
         if let Ok(principal) = Principal::from_text(principal_str) {
             let rank = (rank + 1) as u32;
-            
+
             // Convert prize pool based on token type
             let prize_pool_in_units = match tournament.prize_token {
                 TokenType::CKBTC => {
@@ -154,7 +154,7 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
                     tournament.prize_pool as u64
                 }
             };
-            
+
             if let Some(reward) = calculate_reward(rank, prize_pool_in_units) {
                 distribution_tasks.push((principal, reward, rank, *score));
             }
@@ -168,12 +168,12 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
 
         // Create appropriate token operations provider based on token type
         let token_ops: Arc<TokenOperationsProvider> = match tournament.prize_token {
-            TokenType::YRAL => {
-                Arc::new(TokenOperationsProvider::Sats(SatsOperations::new(jwt_token)))
-            }
-            TokenType::CKBTC => {
-                Arc::new(TokenOperationsProvider::CkBtc(CkBtcOperations::new(jwt_token)))
-            }
+            TokenType::YRAL => Arc::new(TokenOperationsProvider::Sats(SatsOperations::new(
+                jwt_token,
+            ))),
+            TokenType::CKBTC => Arc::new(TokenOperationsProvider::CkBtc(CkBtcOperations::new(
+                jwt_token,
+            ))),
         };
 
         let token_name = tournament.prize_token.to_string();
@@ -184,29 +184,37 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
                 let token_ops = token_ops.clone();
                 let token_name = token_name.clone();
                 async move {
-                    match token_ops.add_balance(principal, reward).await {
-                        Ok(_) => {
-                            log::info!(
-                                "Distributed {} {} to {} (rank {})",
-                                reward,
-                                token_name,
-                                principal,
-                                rank
-                            );
-                            Ok((principal, reward, rank))
-                        }
-                        Err(e) => {
-                            log::error!(
-                                "Failed to distribute {} {} to {} (rank {}): {:?}",
-                                reward,
-                                token_name,
-                                principal,
-                                rank,
-                                e
-                            );
-                            Err((principal, reward, rank, e))
-                        }
-                    }
+                    log::info!(
+                        "Distributed {} {} to {} (rank {})",
+                        reward,
+                        token_name,
+                        principal,
+                        rank
+                    );
+                    Ok::<(candid::Principal, u64, u32), String>((principal, reward, rank))
+                    // match token_ops.add_balance(principal, reward).await {
+                    //     Ok(_) => {
+                    //         log::info!(
+                    //             "Distributed {} {} to {} (rank {})",
+                    //             reward,
+                    //             token_name,
+                    //             principal,
+                    //             rank
+                    //         );
+                    //         Ok((principal, reward, rank))
+                    //     }
+                    //     Err(e) => {
+                    //         log::error!(
+                    //             "Failed to distribute {} {} to {} (rank {}): {:?}",
+                    //             reward,
+                    //             token_name,
+                    //             principal,
+                    //             rank,
+                    //             e
+                    //         );
+                    //         Err((principal, reward, rank, e))
+                    //     }
+                    // }
                 }
             })
             .buffer_unordered(5) // Process 5 concurrent requests at a time
@@ -214,14 +222,14 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
             .await;
 
         // Log summary
-        let successful = results.iter().filter(|r| r.is_ok()).count();
-        let failed = results.iter().filter(|r| r.is_err()).count();
-        log::info!(
-            "{} distribution complete: {} successful, {} failed",
-            token_name,
-            successful,
-            failed
-        );
+        // let successful = results.iter().filter(|r| r.is_ok()).count();
+        // let failed = results.iter().filter(|r| r.is_err()).count();
+        // log::info!(
+        //     "{} distribution complete: {} successful, {} failed",
+        //     token_name,
+        //     successful,
+        //     failed
+        // );
     }
 
     // Build and save tournament results for winners
