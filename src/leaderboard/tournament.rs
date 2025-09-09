@@ -5,7 +5,7 @@ use futures::stream::{self, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
 use yral_canisters_common::utils::token::{
-    SatsOperations, TokenOperations, TokenOperationsProvider,
+    CkBtcOperations, SatsOperations, TokenOperations, TokenOperationsProvider,
 };
 use yral_username_gen::random_username_from_principal;
 
@@ -145,25 +145,35 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
         }
     }
 
-    // Distribute prizes if tournament uses YRAL (which is Sats internally)
-    if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
+    // Distribute prizes based on token type
+    if !distribution_tasks.is_empty() {
         // Get JWT token from environment
         let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
 
-        // Create Sats operations provider
-        let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
-        let token_ops = Arc::new(token_ops);
+        // Create appropriate token operations provider based on token type
+        let token_ops: Arc<TokenOperationsProvider> = match tournament.prize_token {
+            TokenType::YRAL => {
+                Arc::new(TokenOperationsProvider::Sats(SatsOperations::new(jwt_token)))
+            }
+            TokenType::CKBTC => {
+                Arc::new(TokenOperationsProvider::CkBtc(CkBtcOperations::new(jwt_token)))
+            }
+        };
+
+        let token_name = tournament.prize_token.to_string();
 
         // Process distributions concurrently, 5 at a time
         let results: Vec<_> = stream::iter(distribution_tasks.clone())
             .map(|(principal, reward, rank, _)| {
                 let token_ops = token_ops.clone();
+                let token_name = token_name.clone();
                 async move {
                     match token_ops.add_balance(principal, reward).await {
                         Ok(_) => {
                             log::info!(
-                                "Distributed {} SATS to {} (rank {})",
+                                "Distributed {} {} to {} (rank {})",
                                 reward,
+                                token_name,
                                 principal,
                                 rank
                             );
@@ -171,8 +181,9 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
                         }
                         Err(e) => {
                             log::error!(
-                                "Failed to distribute {} SATS to {} (rank {}): {:?}",
+                                "Failed to distribute {} {} to {} (rank {}): {:?}",
                                 reward,
+                                token_name,
                                 principal,
                                 rank,
                                 e
@@ -186,11 +197,12 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
             .collect()
             .await;
 
-        //     // Log summary
+        // Log summary
         let successful = results.iter().filter(|r| r.is_ok()).count();
         let failed = results.iter().filter(|r| r.is_err()).count();
         log::info!(
-            "Prize distribution complete: {} successful, {} failed",
+            "{} distribution complete: {} successful, {} failed",
+            token_name,
             successful,
             failed
         );
