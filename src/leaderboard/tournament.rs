@@ -226,10 +226,22 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
             // Check if user has a registered session before distributing rewards
             if !check_user_registration(principal, app_state).await {
                 log::warn!(
-                    "Skipping reward distribution for {} (rank {}) - user does not have registered session",
+                    "Removing unregistered user {} (rank {}) from tournament {}",
                     principal,
-                    rank
+                    rank,
+                    tournament_id
                 );
+                // Remove user from the tournament leaderboard
+                if let Err(e) = redis
+                    .remove_user_from_leaderboard(tournament_id, principal)
+                    .await
+                {
+                    log::error!(
+                        "Failed to remove user {} from leaderboard: {:?}",
+                        principal,
+                        e
+                    );
+                }
                 continue;
             }
 
