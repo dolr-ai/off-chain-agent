@@ -279,7 +279,7 @@ pub async fn init_canisters_ctx() -> WrappedContextCanisters {
 
 async fn init_leaderboard_redis_pool() -> RedisPool {
     let redis_url =
-        std::env::var("TEST_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set"); // TODO: replace with LEADERBOARD_REDIS_URL before merging
+        std::env::var("LEADERBOARD_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
 
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
