@@ -164,7 +164,7 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     // Distribute prizes based on token type
     if !distribution_tasks.is_empty() {
         // Create appropriate token operations provider based on token type
-        let token_ops: Arc<TokenOperationsProvider> = match tournament.prize_token {
+        let token_ops = match tournament.prize_token {
             TokenType::YRAL => {
                 // Get JWT token from environment for YRAL/SATS
                 let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
@@ -188,14 +188,6 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
                 let token_ops = token_ops.clone();
                 let token_name = token_name.clone();
                 async move {
-                    // log::info!(
-                    //     "Distributed {} {} to {} (rank {})",
-                    //     reward,
-                    //     token_name,
-                    //     principal,
-                    //     rank
-                    // );
-                    // Ok::<(candid::Principal, u64, u32), String>((principal, reward, rank))
                     match token_ops.add_balance(principal, reward).await {
                         Ok(_) => {
                             log::info!(
