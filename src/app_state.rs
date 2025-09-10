@@ -10,7 +10,6 @@ use crate::types::RedisPool;
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
-use firestore::{FirestoreDb, FirestoreDbOptions};
 use google_cloud_alloydb_v1::client::AlloyDBAdmin;
 use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
@@ -32,8 +31,6 @@ pub struct AppState {
     pub yral_metadata_client: MetadataClient<true>,
     #[cfg(not(feature = "local-bin"))]
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
-    #[cfg(not(feature = "local-bin"))]
-    pub firestoredb: FirestoreDb,
     pub qstash: QStashState,
     #[cfg(not(feature = "local-bin"))]
     pub bigquery_client: Client,
@@ -67,8 +64,6 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
-            #[cfg(not(feature = "local-bin"))]
-            firestoredb: init_firestoredb().await,
             qstash: init_qstash(),
             #[cfg(not(feature = "local-bin"))]
             bigquery_client: init_bigquery_client().await,
@@ -217,15 +212,6 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
         .build()
         .await
         .unwrap()
-}
-
-pub async fn init_firestoredb() -> FirestoreDb {
-    let options = FirestoreDbOptions::new("hot-or-not-feed-intelligence".to_string())
-        .with_database_id("ic-pump-fun".to_string());
-
-    FirestoreDb::with_options(options)
-        .await
-        .expect("failed to create firestore db")
 }
 
 pub fn init_qstash() -> QStashState {

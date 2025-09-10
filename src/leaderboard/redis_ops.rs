@@ -294,6 +294,18 @@ impl LeaderboardRedis {
         Ok(new_score)
     }
 
+    // Remove user from leaderboard
+    pub async fn remove_user_from_leaderboard(
+        &self,
+        tournament_id: &str,
+        principal: Principal,
+    ) -> Result<()> {
+        let mut conn = self.pool.get().await?;
+        let key = self.tournament_scores_key(tournament_id);
+        conn.zrem::<_, _, ()>(&key, principal.to_string()).await?;
+        Ok(())
+    }
+
     // Cache username
     pub async fn cache_username(&self, principal: Principal, username: &str) -> Result<()> {
         let mut conn = self.pool.get().await?;

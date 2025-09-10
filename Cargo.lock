@@ -75,7 +75,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -2501,7 +2501,7 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 [[package]]
 name = "global-constants"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "candid",
  "num-bigint 0.4.6",
@@ -2948,7 +2948,7 @@ dependencies = [
 [[package]]
 name = "hon-worker-common"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "candid",
  "global-constants",
@@ -3063,7 +3063,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -5514,7 +5514,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.2.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "anyhow",
  "bb8",
@@ -6452,7 +6452,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -8050,7 +8050,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "sns-validation"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "candid",
  "humantime",
@@ -9340,7 +9340,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "videogen-common"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "candid",
  "enum_dispatch",
@@ -9547,7 +9547,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -9958,7 +9958,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "anyhow",
  "candid",
@@ -9978,7 +9978,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-common"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "async-trait",
  "candid",
@@ -10015,7 +10015,7 @@ dependencies = [
 [[package]]
 name = "yral-identity"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#3a192f65b7967de725493497b30020ac94b52f87"
 dependencies = [
  "candid",
  "ic-agent",
@@ -10082,7 +10082,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "candid",
  "log",
@@ -10097,7 +10097,7 @@ dependencies = [
 [[package]]
 name = "yral-pump-n-dump-common"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "candid",
  "serde",
@@ -10110,7 +10110,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "candid",
  "serde",
@@ -10128,7 +10128,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "ic-agent",
  "k256",
@@ -10143,7 +10143,7 @@ dependencies = [
 [[package]]
 name = "yral-username-gen"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#c96ebbb420708c5500bd5ed84d222aad878a323b"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "candid",
  "rand 0.9.2",

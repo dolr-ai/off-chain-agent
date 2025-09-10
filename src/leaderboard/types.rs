@@ -8,16 +8,9 @@ pub enum TokenType {
     #[strum(serialize = "YRAL")]
     #[serde(rename = "YRAL")]
     YRAL,
-    // Future tokens can be added here:
-    // #[strum(serialize = "USDT")]
-    // #[serde(rename = "USDT")]
-    // USDT,
-    // #[strum(serialize = "DOLR")]
-    // #[serde(rename = "DOLR")]
-    // DOLR,
-    // #[strum(serialize = "BTC")]
-    // #[serde(rename = "BTC")]
-    // BTC,
+    #[strum(serialize = "CKBTC")]
+    #[serde(rename = "CKBTC")]
+    CKBTC, // Note : for CKBTC, prize pool is in USD units.
 }
 
 #[allow(clippy::derivable_impls)]

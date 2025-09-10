@@ -4,13 +4,19 @@ use chrono::Utc;
 use futures::stream::{self, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
+use yral_canisters_client::individual_user_template::IndividualUserTemplate;
+use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 use yral_canisters_common::utils::token::{
-    SatsOperations, TokenOperations, TokenOperationsProvider,
+    CkBtcOperations, SatsOperations, TokenOperations, TokenOperationsProvider,
 };
 use yral_username_gen::random_username_from_principal;
 
+// Conversion rate: 1 USD = 886 SATS (ckBTC satoshis)
+const USD_TO_CKBTC_SATS_RATE: f64 = 886.0;
+
 use crate::{
     app_state::AppState,
+    consts::USER_INFO_SERVICE_CANISTER_ID,
     events::types::{EventPayload, TournamentEndedWinnerPayload, TournamentStartedPayload},
     leaderboard::TokenType,
 };
@@ -24,6 +30,83 @@ use super::{
         calculate_reward, LeaderboardEntry, TournamentResult, TournamentStatus, UserLastTournament,
     },
 };
+
+/// Checks if user is registered via individual canister
+async fn check_individual_canister_registration(
+    user_principal: Principal,
+    app_state: &Arc<AppState>,
+) -> bool {
+    let canister_id = match app_state
+        .get_individual_canister_by_user_principal(user_principal)
+        .await
+    {
+        Ok(id) => id,
+        Err(e) => {
+            log::debug!("Failed to get individual canister for principal {user_principal}: {e}");
+            return false;
+        }
+    };
+
+    let individual_user = IndividualUserTemplate(canister_id, &app_state.agent);
+
+    let session_result = match individual_user.get_session_type().await {
+        Ok(result) => result,
+        Err(e) => {
+            log::debug!(
+                "Error calling get_session_type on individual canister for {user_principal}: {e}"
+            );
+            return false;
+        }
+    };
+
+    match session_result {
+        yral_canisters_client::individual_user_template::Result7::Ok(session_type) => {
+            matches!(
+                session_type,
+                yral_canisters_client::individual_user_template::SessionType::RegisteredSession
+            )
+        }
+        yral_canisters_client::individual_user_template::Result7::Err(e) => {
+            log::debug!(
+                "Failed to get session type from individual canister for {user_principal}: {e}"
+            );
+            false
+        }
+    }
+}
+
+/// Checks if user is registered via user info service
+async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppState>) -> bool {
+    let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &app_state.agent);
+
+    let result = match user_info_service
+        .get_user_session_type(user_principal)
+        .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            log::debug!("Failed to get session type for principal {user_principal}: {e}");
+            return false;
+        }
+    };
+
+    match result {
+        yral_canisters_client::user_info_service::Result2::Ok(session_type) => {
+            matches!(session_type, SessionType::RegisteredSession)
+        }
+        yral_canisters_client::user_info_service::Result2::Err(e) => {
+            if e.contains("User not found") {
+                log::debug!(
+                    "User {user_principal} not found in user info service, checking individual canister"
+                );
+                check_individual_canister_registration(user_principal, app_state).await
+            } else {
+                log::debug!("Failed to get session type for principal {user_principal}: {e}");
+                false
+            }
+        }
+    }
+}
 
 /// Start a tournament and send notifications to all users
 pub async fn start_tournament(tournament_id: &str, app_state: &Arc<AppState>) -> Result<()> {
@@ -139,31 +222,80 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     for (rank, (principal_str, score)) in top_players.iter().enumerate() {
         if let Ok(principal) = Principal::from_text(principal_str) {
             let rank = (rank + 1) as u32;
-            if let Some(reward) = calculate_reward(rank, tournament.prize_pool as u64) {
+
+            // Check if user has a registered session before distributing rewards
+            if !check_user_registration(principal, app_state).await {
+                log::warn!(
+                    "Removing unregistered user {} (rank {}) from tournament {}",
+                    principal,
+                    rank,
+                    tournament_id
+                );
+                // Remove user from the tournament leaderboard
+                if let Err(e) = redis
+                    .remove_user_from_leaderboard(tournament_id, principal)
+                    .await
+                {
+                    log::error!(
+                        "Failed to remove user {} from leaderboard: {:?}",
+                        principal,
+                        e
+                    );
+                }
+                continue;
+            }
+
+            // Convert prize pool based on token type
+            let prize_pool_in_units = match tournament.prize_token {
+                TokenType::CKBTC => {
+                    // Convert USD to ckBTC sats: e.g., $100 * 886 = 88,600 sats
+                    (tournament.prize_pool * USD_TO_CKBTC_SATS_RATE) as u64
+                }
+                TokenType::YRAL => {
+                    // YRAL uses the prize_pool value directly (already in YRAL units)
+                    tournament.prize_pool as u64
+                }
+            };
+
+            if let Some(reward) = calculate_reward(rank, prize_pool_in_units) {
                 distribution_tasks.push((principal, reward, rank, *score));
             }
         }
     }
 
-    // Distribute prizes if tournament uses YRAL (which is Sats internally)
-    if tournament.prize_token == TokenType::YRAL && !distribution_tasks.is_empty() {
-        // Get JWT token from environment
-        let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
+    // Distribute prizes based on token type
+    if !distribution_tasks.is_empty() {
+        // Create appropriate token operations provider based on token type
+        let token_ops = match tournament.prize_token {
+            TokenType::YRAL => {
+                // Get JWT token from environment for YRAL/SATS
+                let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
+                Arc::new(TokenOperationsProvider::Sats(SatsOperations::new(
+                    jwt_token,
+                )))
+            }
+            TokenType::CKBTC => {
+                // Use admin agent for direct ckBTC transfers
+                Arc::new(TokenOperationsProvider::CkBtc(CkBtcOperations::new(
+                    app_state.agent.clone(),
+                )))
+            }
+        };
 
-        // Create Sats operations provider
-        let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
-        let token_ops = Arc::new(token_ops);
+        let token_name = tournament.prize_token.to_string();
 
         // Process distributions concurrently, 5 at a time
         let results: Vec<_> = stream::iter(distribution_tasks.clone())
             .map(|(principal, reward, rank, _)| {
                 let token_ops = token_ops.clone();
+                let token_name = token_name.clone();
                 async move {
                     match token_ops.add_balance(principal, reward).await {
                         Ok(_) => {
                             log::info!(
-                                "Distributed {} SATS to {} (rank {})",
+                                "Distributed {} {} to {} (rank {})",
                                 reward,
+                                token_name,
                                 principal,
                                 rank
                             );
@@ -171,8 +303,9 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
                         }
                         Err(e) => {
                             log::error!(
-                                "Failed to distribute {} SATS to {} (rank {}): {:?}",
+                                "Failed to distribute {} {} to {} (rank {}): {:?}",
                                 reward,
+                                token_name,
                                 principal,
                                 rank,
                                 e
@@ -186,11 +319,12 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
             .collect()
             .await;
 
-        //     // Log summary
+        // Log summary
         let successful = results.iter().filter(|r| r.is_ok()).count();
         let failed = results.iter().filter(|r| r.is_err()).count();
         log::info!(
-            "Prize distribution complete: {} successful, {} failed",
+            "{} distribution complete: {} successful, {} failed",
+            token_name,
             successful,
             failed
         );
