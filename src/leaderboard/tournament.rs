@@ -4,6 +4,8 @@ use chrono::Utc;
 use futures::stream::{self, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
+use yral_canisters_client::individual_user_template::IndividualUserTemplate;
+use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 use yral_canisters_common::utils::token::{
     CkBtcOperations, SatsOperations, TokenOperations, TokenOperationsProvider,
 };
@@ -14,6 +16,7 @@ const USD_TO_CKBTC_SATS_RATE: f64 = 886.0;
 
 use crate::{
     app_state::AppState,
+    consts::USER_INFO_SERVICE_CANISTER_ID,
     events::types::{EventPayload, TournamentEndedWinnerPayload, TournamentStartedPayload},
     leaderboard::TokenType,
 };
@@ -27,6 +30,83 @@ use super::{
         calculate_reward, LeaderboardEntry, TournamentResult, TournamentStatus, UserLastTournament,
     },
 };
+
+/// Checks if user is registered via individual canister
+async fn check_individual_canister_registration(
+    user_principal: Principal,
+    app_state: &Arc<AppState>,
+) -> bool {
+    let canister_id = match app_state
+        .get_individual_canister_by_user_principal(user_principal)
+        .await
+    {
+        Ok(id) => id,
+        Err(e) => {
+            log::debug!("Failed to get individual canister for principal {user_principal}: {e}");
+            return false;
+        }
+    };
+
+    let individual_user = IndividualUserTemplate(canister_id, &app_state.agent);
+
+    let session_result = match individual_user.get_session_type().await {
+        Ok(result) => result,
+        Err(e) => {
+            log::debug!(
+                "Error calling get_session_type on individual canister for {user_principal}: {e}"
+            );
+            return false;
+        }
+    };
+
+    match session_result {
+        yral_canisters_client::individual_user_template::Result7::Ok(session_type) => {
+            matches!(
+                session_type,
+                yral_canisters_client::individual_user_template::SessionType::RegisteredSession
+            )
+        }
+        yral_canisters_client::individual_user_template::Result7::Err(e) => {
+            log::debug!(
+                "Failed to get session type from individual canister for {user_principal}: {e}"
+            );
+            false
+        }
+    }
+}
+
+/// Checks if user is registered via user info service
+async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppState>) -> bool {
+    let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &app_state.agent);
+
+    let result = match user_info_service
+        .get_user_session_type(user_principal)
+        .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            log::debug!("Failed to get session type for principal {user_principal}: {e}");
+            return false;
+        }
+    };
+
+    match result {
+        yral_canisters_client::user_info_service::Result2::Ok(session_type) => {
+            matches!(session_type, SessionType::RegisteredSession)
+        }
+        yral_canisters_client::user_info_service::Result2::Err(e) => {
+            if e.contains("User not found") {
+                log::debug!(
+                    "User {user_principal} not found in user info service, checking individual canister"
+                );
+                check_individual_canister_registration(user_principal, app_state).await
+            } else {
+                log::debug!("Failed to get session type for principal {user_principal}: {e}");
+                false
+            }
+        }
+    }
+}
 
 /// Start a tournament and send notifications to all users
 pub async fn start_tournament(tournament_id: &str, app_state: &Arc<AppState>) -> Result<()> {
@@ -142,6 +222,16 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     for (rank, (principal_str, score)) in top_players.iter().enumerate() {
         if let Ok(principal) = Principal::from_text(principal_str) {
             let rank = (rank + 1) as u32;
+
+            // Check if user has a registered session before distributing rewards
+            if !check_user_registration(principal, app_state).await {
+                log::warn!(
+                    "Skipping reward distribution for {} (rank {}) - user does not have registered session",
+                    principal,
+                    rank
+                );
+                continue;
+            }
 
             // Convert prize pool based on token type
             let prize_pool_in_units = match tournament.prize_token {
