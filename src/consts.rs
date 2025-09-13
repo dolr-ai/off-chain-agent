@@ -52,7 +52,7 @@ pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev
 pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
 
 pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
-    Url::parse("https://storjinterk8ghzksx4p-351e21788abc0683.tec-s1.onthetaedgecloud.com/")
+    Url::parse("https://storjinterutdu7phc9s-368643dc6f41f83b.tec-s1.onthetaedgecloud.com/")
         .unwrap()
 });
 
