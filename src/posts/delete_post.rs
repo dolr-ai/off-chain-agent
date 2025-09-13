@@ -25,7 +25,9 @@ use yral_canisters_client::{
 
 use crate::{
     app_state::AppState,
-    consts::{DEDUP_INDEX_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID},
+    consts::{
+        DEDUP_INDEX_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID,
+    },
     posts::queries::get_duplicate_children_query,
     user::utils::get_agent_from_delegated_identity_wire,
 };
@@ -160,9 +162,9 @@ pub async fn handle_delete_post_v2(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Route based on canister
-    if publisher_canister_id == *USER_POST_SERVICE_CANISTER_ID {
+    if publisher_canister_id == *USER_INFO_SERVICE_CANISTER_ID {
         // Use UserPostService
-        let user_post_service = UserPostService(publisher_canister_id, &user_ic_agent);
+        let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &user_ic_agent);
 
         // UserPostService.delete_post takes a String
         let delete_res = user_post_service.delete_post(post_id.clone()).await;
