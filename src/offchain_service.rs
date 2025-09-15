@@ -1,10 +1,8 @@
 use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
-    app_state::AppState,
-    consts::{GOOGLE_CHAT_REPORT_SPACE_URL, USER_POST_SERVICE_CANISTER_ID},
-    posts::report_post::repost_post_common_impl,
-    AppError,
+    app_state::AppState, consts::USER_POST_SERVICE_CANISTER_ID,
+    posts::report_post::repost_post_common_impl, AppError,
 };
 use anyhow::{Context, Result};
 use axum::extract::State;
@@ -13,7 +11,7 @@ use http::HeaderMap;
 use ic_agent::Agent;
 use jsonwebtoken::DecodingKey;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::Value;
 use yral_canisters_client::{
     ic::USER_INFO_SERVICE_ID,
     individual_user_template::{IndividualUserTemplate, PostStatus},
