@@ -10,7 +10,6 @@ use crate::types::RedisPool;
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
-use firestore::{FirestoreDb, FirestoreDbOptions};
 use google_cloud_alloydb_v1::client::AlloyDBAdmin;
 use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
@@ -32,8 +31,6 @@ pub struct AppState {
     pub yral_metadata_client: MetadataClient<true>,
     #[cfg(not(feature = "local-bin"))]
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
-    #[cfg(not(feature = "local-bin"))]
-    pub firestoredb: FirestoreDb,
     pub qstash: QStashState,
     #[cfg(not(feature = "local-bin"))]
     pub bigquery_client: Client,
@@ -55,6 +52,7 @@ pub struct AppState {
     pub canisters_ctx: WrappedContextCanisters,
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_redis: YralAuthRedis,
+    pub leaderboard_redis_pool: RedisPool,
     pub config: AppConfig,
 }
 
@@ -66,8 +64,6 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
-            #[cfg(not(feature = "local-bin"))]
-            firestoredb: init_firestoredb().await,
             qstash: init_qstash(),
             #[cfg(not(feature = "local-bin"))]
             bigquery_client: init_bigquery_client().await,
@@ -91,6 +87,7 @@ impl AppState {
             canisters_ctx: init_canisters_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             yral_auth_redis: YralAuthRedis::init(&app_config).await,
+            leaderboard_redis_pool: init_leaderboard_redis_pool().await,
             config: app_config,
         }
     }
@@ -217,15 +214,6 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
         .unwrap()
 }
 
-pub async fn init_firestoredb() -> FirestoreDb {
-    let options = FirestoreDbOptions::new("hot-or-not-feed-intelligence".to_string())
-        .with_database_id("ic-pump-fun".to_string());
-
-    FirestoreDb::with_options(options)
-        .await
-        .expect("failed to create firestore db")
-}
-
 pub fn init_qstash() -> QStashState {
     let qstash_key =
         env::var("QSTASH_CURRENT_SIGNING_KEY").expect("QSTASH_CURRENT_SIGNING_KEY is required");
@@ -287,4 +275,13 @@ async fn init_canister_backup_redis_pool() -> RedisPool {
 
 pub async fn init_canisters_ctx() -> WrappedContextCanisters {
     WrappedContextCanisters::new().expect("Canisters context to be connected")
+}
+
+async fn init_leaderboard_redis_pool() -> RedisPool {
+    let redis_url =
+        std::env::var("LEADERBOARD_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
+
+    let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
+        .expect("failed to open connection to redis");
+    RedisPool::builder().build(manager).await.unwrap()
 }

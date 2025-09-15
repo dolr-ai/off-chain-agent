@@ -1,4 +1,6 @@
-use crate::consts::{OFF_CHAIN_AGENT_URL, USER_POST_SERVICE_CANISTER_ID};
+use crate::consts::{
+    OFF_CHAIN_AGENT_URL, USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID,
+};
 use crate::events::types::{
     string_or_number, VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2,
     VideoUploadSuccessfulPayload,
@@ -546,7 +548,7 @@ impl Event {
                                 {
                                     Ok(publisher_canister_id) => {
                                         // Check if it's the user post service canister
-                                        if publisher_canister_id == *USER_POST_SERVICE_CANISTER_ID {
+                                        if publisher_canister_id == *USER_INFO_SERVICE_CANISTER_ID {
                                             // Use UserPostService
                                             let payload = match percentage_watched.cmp(&95) {
                                                 Ordering::Less => {
@@ -561,7 +563,7 @@ impl Event {
                                             };
 
                                             let user_post_service = UserPostService(
-                                                publisher_canister_id,
+                                                *USER_POST_SERVICE_CANISTER_ID,
                                                 &app_state.agent,
                                             );
 
