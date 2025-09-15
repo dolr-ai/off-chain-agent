@@ -1,8 +1,10 @@
 use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
-    app_state::AppState, consts::USER_POST_SERVICE_CANISTER_ID,
-    posts::report_post::repost_post_common_impl, AppError,
+    app_state::AppState,
+    consts::{GOOGLE_CHAT_REPORT_SPACE_URL, USER_POST_SERVICE_CANISTER_ID},
+    posts::report_post::repost_post_common_impl,
+    AppError,
 };
 use anyhow::{Context, Result};
 use axum::extract::State;
@@ -11,7 +13,7 @@ use http::HeaderMap;
 use ic_agent::Agent;
 use jsonwebtoken::DecodingKey;
 use reqwest::Client;
-use serde_json::Value;
+use serde_json::{json, Value};
 use yral_canisters_client::{
     ic::USER_INFO_SERVICE_ID,
     individual_user_template::{IndividualUserTemplate, PostStatus},
@@ -167,18 +169,27 @@ async fn mark_post_as_banned(
         USER_INFO_SERVICE_ID => {
             let post_service_canister = UserPostService(*USER_POST_SERVICE_CANISTER_ID, agent);
             post_service_canister
-                .update_post_status(post_id, PostServicePostStatus::BannedDueToUserReporting)
-                .await?;
-            Ok(())
+                .update_post_status(
+                    post_id.clone(),
+                    PostServicePostStatus::BannedDueToUserReporting,
+                )
+                .await?
         }
         _ => {
             let individual_user = IndividualUserTemplate(user_canister_id, agent);
             individual_user
                 .update_post_status(post_id.parse()?, PostStatus::BannedDueToUserReporting)
-                .await?;
-            Ok(())
+                .await?
         }
-    }
+    };
+
+    let confirmation_msg = json!({
+        "text": format!("Successfully banned post : {}/{}", user_canister_id, post_id)
+    });
+
+    send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+
+    Ok(())
 }
 
 pub async fn report_approved_handler(
