@@ -211,9 +211,9 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     tournament.updated_at = Utc::now().timestamp();
     redis.set_tournament_info(&tournament).await?;
 
-    // Get top 10 winners for prize distribution
+    // Get top 20 winners for prize distribution
     let top_players = redis
-        .get_leaderboard(tournament_id, 0, 9, super::types::SortOrder::Desc)
+        .get_leaderboard(tournament_id, 0, 19, super::types::SortOrder::Desc)
         .await?;
 
     // Calculate prize distribution and prepare for token distribution
