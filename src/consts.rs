@@ -51,10 +51,8 @@ pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev
 
 pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
 
-pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
-    Url::parse("https://storj-interface.yral.com/")
-        .unwrap()
-});
+pub static STORJ_INTERFACE_URL: Lazy<Url> =
+    Lazy::new(|| Url::parse("https://storj-interface.yral.com/").unwrap());
 
 pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
     Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").expect("STORJ_INTERFACE_TOKEN to be set"));
