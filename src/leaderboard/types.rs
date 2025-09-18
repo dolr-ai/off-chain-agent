@@ -252,27 +252,59 @@ impl PrizeDistribution {
         vec![
             PrizeDistribution {
                 rank_range: RankRange::Single(1),
-                percentage: 20.0,
+                percentage: 15.0, // 30/200
             },
             PrizeDistribution {
                 rank_range: RankRange::Single(2),
-                percentage: 15.0,
+                percentage: 13.5, // 27/200
             },
             PrizeDistribution {
                 rank_range: RankRange::Single(3),
-                percentage: 11.0,
+                percentage: 12.5, // 25/200
             },
             PrizeDistribution {
-                rank_range: RankRange::Range(4, 5),
-                percentage: 7.0, // Each gets 7%
+                rank_range: RankRange::Single(4),
+                percentage: 10.0, // 20/200
             },
             PrizeDistribution {
-                rank_range: RankRange::Range(6, 10),
-                percentage: 4.0, // Each gets 4%
+                rank_range: RankRange::Single(5),
+                percentage: 7.5, // 15/200
             },
             PrizeDistribution {
-                rank_range: RankRange::Range(11, 20),
-                percentage: 2.0, // Each gets 2%
+                rank_range: RankRange::Single(6),
+                percentage: 6.5, // 13/200
+            },
+            PrizeDistribution {
+                rank_range: RankRange::Single(7),
+                percentage: 5.5, // 11/200
+            },
+            PrizeDistribution {
+                rank_range: RankRange::Single(8),
+                percentage: 4.5, // 9/200
+            },
+            PrizeDistribution {
+                rank_range: RankRange::Single(9),
+                percentage: 4.0, // 8/200
+            },
+            PrizeDistribution {
+                rank_range: RankRange::Single(10),
+                percentage: 3.5, // 7/200
+            },
+            PrizeDistribution {
+                rank_range: RankRange::Range(11, 13),
+                percentage: 2.0, // Each gets 2% (4/200)
+            },
+            PrizeDistribution {
+                rank_range: RankRange::Range(14, 17),
+                percentage: 1.5, // Each gets 1.5% (3/200)
+            },
+            PrizeDistribution {
+                rank_range: RankRange::Range(18, 20),
+                percentage: 1.0, // Each gets 1% (2/200)
+            },
+            PrizeDistribution {
+                rank_range: RankRange::Range(21, 25),
+                percentage: 0.5, // Each gets 0.5% (1/200)
             },
         ]
     }
@@ -477,16 +509,25 @@ mod tests {
     fn test_calculate_reward() {
         let total_prize = 1000000; // 1 million tokens
 
-        assert_eq!(calculate_reward(1, total_prize), Some(200000)); // 20%
-        assert_eq!(calculate_reward(2, total_prize), Some(150000)); // 15%
-        assert_eq!(calculate_reward(3, total_prize), Some(110000)); // 11%
-        assert_eq!(calculate_reward(4, total_prize), Some(70000)); // 7%
-        assert_eq!(calculate_reward(5, total_prize), Some(70000)); // 7%
-        assert_eq!(calculate_reward(6, total_prize), Some(40000)); // 4%
-        assert_eq!(calculate_reward(10, total_prize), Some(40000)); // 4%
+        assert_eq!(calculate_reward(1, total_prize), Some(150000)); // 15%
+        assert_eq!(calculate_reward(2, total_prize), Some(135000)); // 13.5%
+        assert_eq!(calculate_reward(3, total_prize), Some(125000)); // 12.5%
+        assert_eq!(calculate_reward(4, total_prize), Some(100000)); // 10%
+        assert_eq!(calculate_reward(5, total_prize), Some(75000)); // 7.5%
+        assert_eq!(calculate_reward(6, total_prize), Some(65000)); // 6.5%
+        assert_eq!(calculate_reward(7, total_prize), Some(55000)); // 5.5%
+        assert_eq!(calculate_reward(8, total_prize), Some(45000)); // 4.5%
+        assert_eq!(calculate_reward(9, total_prize), Some(40000)); // 4%
+        assert_eq!(calculate_reward(10, total_prize), Some(35000)); // 3.5%
         assert_eq!(calculate_reward(11, total_prize), Some(20000)); // 2%
-        assert_eq!(calculate_reward(20, total_prize), Some(20000)); // 2%
-        assert_eq!(calculate_reward(21, total_prize), None); // No reward
+        assert_eq!(calculate_reward(13, total_prize), Some(20000)); // 2%
+        assert_eq!(calculate_reward(14, total_prize), Some(15000)); // 1.5%
+        assert_eq!(calculate_reward(17, total_prize), Some(15000)); // 1.5%
+        assert_eq!(calculate_reward(18, total_prize), Some(10000)); // 1%
+        assert_eq!(calculate_reward(20, total_prize), Some(10000)); // 1%
+        assert_eq!(calculate_reward(21, total_prize), Some(5000)); // 0.5%
+        assert_eq!(calculate_reward(25, total_prize), Some(5000)); // 0.5%
+        assert_eq!(calculate_reward(26, total_prize), None); // No reward
     }
 
     #[test]
