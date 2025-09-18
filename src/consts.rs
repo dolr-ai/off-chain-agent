@@ -98,3 +98,5 @@ pub const VEO3_LOCATION: &str = "us-central1";
 // LumaLabs Constants
 pub const LUMALABS_API_URL: &str = "https://api.lumalabs.ai/dream-machine/v1";
 pub const LUMALABS_IMAGE_BUCKET: &str = "videogen_tmp_image_store";
+
+pub const RUNPOD_WAN2_2_ENDPOINT: &str = "wan-2-2-t2v-720";
