@@ -214,8 +214,24 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
 
     // Get top 25 winners for prize distribution (extended from 20 to 25)
     let top_players = redis
-        .get_leaderboard(tournament_id, 0, 24, super::types::SortOrder::Desc)
+        .get_leaderboard(
+            tournament_id,
+            0,
+            tournament.num_winners as isize - 1, // Top N players (0-indexed)
+            super::types::SortOrder::Desc,
+        )
         .await?;
+
+    if top_players.len() > tournament.num_winners as usize {
+        log::warn!(
+            "More top players ({}) than num_winners ({}), trimming list",
+            top_players.len(),
+            tournament.num_winners
+        );
+        return Err(anyhow::anyhow!(
+            "Top players exceed number of winners, cannot finalize"
+        ));
+    }
 
     // Calculate prize distribution and prepare for token distribution
     let mut distribution_tasks = Vec::new();
@@ -259,6 +275,14 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
             };
 
             if let Some(reward) = calculate_reward(rank, prize_pool_in_units) {
+                // Check for CKBTC reward limit
+                if tournament.prize_token == TokenType::CKBTC && reward > 50000 {
+                    log::error!(
+                        "CKBTC reward {} sats exceeds 50000 limit for user {} (rank {}) in tournament {}. Skipping distribution.",
+                        reward, principal, rank, tournament_id
+                    );
+                    continue;
+                }
                 distribution_tasks.push((principal, reward, rank, *score));
             }
         }

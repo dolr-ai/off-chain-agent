@@ -589,6 +589,7 @@ pub async fn get_leaderboard_handler(
             client_timezone: Some(timezone_str.clone()),
             client_start_time: Some(convert_timestamp_to_timezone(tournament.start_time, tz)),
             client_end_time: Some(convert_timestamp_to_timezone(tournament.end_time, tz)),
+            num_winners: tournament.num_winners,
         }
     } else {
         // Fallback when timezone cannot be determined
@@ -604,6 +605,7 @@ pub async fn get_leaderboard_handler(
             client_timezone: None,
             client_start_time: None,
             client_end_time: None,
+            num_winners: tournament.num_winners,
         }
     };
 
@@ -631,6 +633,7 @@ pub async fn get_leaderboard_handler(
                             upcoming_tournament.end_time,
                             tz,
                         )),
+                        num_winners: upcoming_tournament.num_winners,
                     }
                 } else {
                     TournamentInfo {
@@ -645,6 +648,7 @@ pub async fn get_leaderboard_handler(
                         client_timezone: None,
                         client_start_time: None,
                         client_end_time: None,
+                        num_winners: upcoming_tournament.num_winners,
                     }
                 };
                 Some(upcoming_info)
@@ -1176,6 +1180,7 @@ pub async fn get_tournament_history_handler(
                 prize_token: tournament.prize_token,
                 total_participants,
                 winner: winner_info,
+                num_winners: tournament.num_winners,
             });
         }
     }
@@ -1233,6 +1238,7 @@ pub async fn create_tournament_handler(
         allowed_sources: request.allowed_sources,
         created_at: now,
         updated_at: now,
+        num_winners: request.num_winners.unwrap_or(10),
     };
 
     // Store tournament info
@@ -1572,6 +1578,7 @@ pub async fn get_tournament_results_handler(
         prize_token: tournament.prize_token.to_string(),
         metric_type: tournament.metric_type.to_string(),
         metric_display_name: tournament.metric_display_name,
+        num_winners: tournament.num_winners,
     };
 
     // Build response struct
