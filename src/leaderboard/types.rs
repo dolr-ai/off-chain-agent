@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use utoipa::{IntoParams, ToSchema};
 
+fn default_num_winners() -> u32 {
+    10
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Display, EnumString, PartialEq, Eq, ToSchema)]
 pub enum TokenType {
     #[strum(serialize = "YRAL")]
@@ -108,6 +112,8 @@ pub struct Tournament {
     pub allowed_sources: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default = "default_num_winners")]
+    pub num_winners: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -138,6 +144,7 @@ pub struct CreateTournamentRequest {
     pub metric_type: MetricType,
     pub metric_display_name: String,
     pub allowed_sources: Vec<String>,
+    pub num_winners: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,6 +197,8 @@ pub struct TournamentSummary {
     pub prize_token: TokenType,
     pub total_participants: u32,
     pub winner: Option<WinnerInfo>,
+    #[serde(default = "default_num_winners")]
+    pub num_winners: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -233,6 +242,8 @@ pub struct TournamentResultInfo {
     pub prize_token: String,
     pub metric_type: String,
     pub metric_display_name: String,
+    #[serde(default = "default_num_winners")]
+    pub num_winners: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -436,6 +447,8 @@ pub struct TournamentInfo {
     pub client_timezone: Option<String>,
     pub client_start_time: Option<String>, // ISO 8601 formatted in client's timezone
     pub client_end_time: Option<String>,   // ISO 8601 formatted in client's timezone
+    #[serde(default = "default_num_winners")]
+    pub num_winners: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
