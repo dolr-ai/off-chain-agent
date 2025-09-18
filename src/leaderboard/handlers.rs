@@ -1346,7 +1346,7 @@ pub async fn finalize_tournament_handler(
                 let next_end_time = next_start_time + tournament_duration; // Same duration as previous tournament
 
                 // Prepare configuration for next tournament
-                let next_tournament_config = serde_json::json!({
+                let _next_tournament_config = serde_json::json!({
                     "start_time": next_start_time,
                     "end_time": next_end_time,
                     "prize_pool": tournament.prize_pool,
@@ -1357,19 +1357,19 @@ pub async fn finalize_tournament_handler(
                 });
 
                 // Schedule tournament creation via QStash (10 minutes delay)
-                if let Err(e) = state
-                    .qstash_client
-                    .schedule_tournament_create(next_tournament_config, 60)
-                    .await
-                {
-                    log::error!("Failed to schedule next tournament creation: {:?}", e);
-                    // Don't fail the finalization if scheduling fails
-                } else {
-                    log::info!(
-                        "Scheduled next tournament to be created in 10 minutes (at {})",
-                        next_start_time
-                    );
-                }
+                // if let Err(e) = state
+                //     .qstash_client
+                //     .schedule_tournament_create(next_tournament_config, 60)
+                //     .await
+                // {
+                //     log::error!("Failed to schedule next tournament creation: {:?}", e);
+                //     // Don't fail the finalization if scheduling fails
+                // } else {
+                //     log::info!(
+                //         "Scheduled next tournament to be created in 10 minutes (at {})",
+                //         next_start_time
+                //     );
+                // }
             }
 
             (
