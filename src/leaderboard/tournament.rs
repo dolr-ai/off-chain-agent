@@ -14,6 +14,7 @@ use yral_username_gen::random_username_from_principal;
 // Conversion rate: 1 USD = 886 SATS (ckBTC satoshis)
 const USD_TO_CKBTC_SATS_RATE: f64 = 886.0;
 
+use crate::canister::utils::get_user_principal_canister_list_v2;
 use crate::{
     app_state::AppState,
     consts::USER_INFO_SERVICE_CANISTER_ID,
@@ -211,9 +212,9 @@ pub async fn finalize_tournament(tournament_id: &str, app_state: &Arc<AppState>)
     tournament.updated_at = Utc::now().timestamp();
     redis.set_tournament_info(&tournament).await?;
 
-    // Get top 20 winners for prize distribution
+    // Get top 25 winners for prize distribution (extended from 20 to 25)
     let top_players = redis
-        .get_leaderboard(tournament_id, 0, 19, super::types::SortOrder::Desc)
+        .get_leaderboard(tournament_id, 0, 24, super::types::SortOrder::Desc)
         .await?;
 
     // Calculate prize distribution and prepare for token distribution
@@ -554,41 +555,41 @@ async fn send_tournament_start_broadcast(
 
     // PRODUCTION CODE (commented out for testing with internal users)
     // Fetch all user principals from the canister system
-    // let user_principal_canister_list =
-    //     match get_user_principal_canister_list_v2(&app_state.agent).await {
-    //         Ok(list) => list,
-    //         Err(e) => {
-    //             log::error!("Failed to fetch user principals: {}", e);
-    //             // Fallback to empty list or could use a cached list
-    //             vec![]
-    //         }
-    //     };
+    let user_principal_canister_list =
+        match get_user_principal_canister_list_v2(&app_state.agent).await {
+            Ok(list) => list,
+            Err(e) => {
+                log::error!("Failed to fetch user principals: {}", e);
+                // Fallback to empty list or could use a cached list
+                vec![]
+            }
+        };
 
-    // // Extract just the user principals
-    // let users: Vec<Principal> = user_principal_canister_list
-    //     .into_iter()
-    //     .map(|(user_principal, _canister_principal)| user_principal)
-    //     .collect();
+    // Extract just the user principals
+    let users: Vec<Principal> = user_principal_canister_list
+        .into_iter()
+        .map(|(user_principal, _canister_principal)| user_principal)
+        .collect();
 
     // TESTING CODE - Fetch internal users from Redis
-    let redis = LeaderboardRedis::new(app_state.leaderboard_redis_pool.clone());
-    let internal_user_strings = match redis.get_internal_users().await {
-        Ok(users) => users,
-        Err(e) => {
-            log::error!("Failed to fetch internal users from Redis: {}", e);
-            vec![]
-        }
-    };
+    // let redis = LeaderboardRedis::new(app_state.leaderboard_redis_pool.clone());
+    // let internal_user_strings = match redis.get_internal_users().await {
+    //     Ok(users) => users,
+    //     Err(e) => {
+    //         log::error!("Failed to fetch internal users from Redis: {}", e);
+    //         vec![]
+    //     }
+    // };
 
-    // Convert string principals to Principal objects
-    let users: Vec<Principal> = internal_user_strings
-        .into_iter()
-        .filter_map(|principal_str| {
-            Principal::from_text(&principal_str)
-                .map_err(|e| log::warn!("Invalid principal string '{}': {}", principal_str, e))
-                .ok()
-        })
-        .collect();
+    // // Convert string principals to Principal objects
+    // let users: Vec<Principal> = internal_user_strings
+    //     .into_iter()
+    //     .filter_map(|principal_str| {
+    //         Principal::from_text(&principal_str)
+    //             .map_err(|e| log::warn!("Invalid principal string '{}': {}", principal_str, e))
+    //             .ok()
+    //     })
+    //     .collect();
 
     let total_users = users.len();
 
