@@ -240,18 +240,19 @@ async fn backfill_watched_individual(
             return Err(StatusCode::BAD_GATEWAY);
         }
 
-        let data: Value = games_played
-            .json()
-            .await
-            .map_err(|e| {
-                log::error!("Failed to parse API response as JSON: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+        let data: Value = games_played.json().await.map_err(|e| {
+            log::error!("Failed to parse API response as JSON: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
         if let Some(games) = data["games"].as_array() {
             let games_count = games.len();
             total_games_fetched += games_count;
-            log::info!("Received {} games in this batch (total: {})", games_count, total_games_fetched);
+            log::info!(
+                "Received {} games in this batch (total: {})",
+                games_count,
+                total_games_fetched
+            );
 
             for game in games {
                 if let (Some(publisher), Some(post_id)) = (
@@ -263,7 +264,10 @@ async fn backfill_watched_individual(
                         post_id, publisher
                     ));
                 } else {
-                    log::debug!("Skipping game with missing publisher or post_id: {:?}", game);
+                    log::debug!(
+                        "Skipping game with missing publisher or post_id: {:?}",
+                        game
+                    );
                 }
             }
         } else {
@@ -279,8 +283,11 @@ async fn backfill_watched_individual(
         }
     }
 
-    log::info!("Finished fetching games. Total games: {}, Valid pairs: {}",
-              total_games_fetched, lookup_pairs.len());
+    log::info!(
+        "Finished fetching games. Total games: {}, Valid pairs: {}",
+        total_games_fetched,
+        lookup_pairs.len()
+    );
 
     if lookup_pairs.is_empty() {
         log::warn!("No valid game pairs found for principal: {}", principal);
@@ -298,73 +305,107 @@ async fn backfill_watched_individual(
             .unwrap());
     }
 
-    log::info!("Building BigQuery query with {} lookup pairs", lookup_pairs.len());
-    log::debug!("First 5 lookup pairs: {:?}", &lookup_pairs[..lookup_pairs.len().min(5)]);
+    // Batch BigQuery queries to avoid massive queries
+    const BATCH_SIZE: usize = 100; // Process 500 pairs at a time
+    let mut all_video_ids: Vec<String> = Vec::new();
 
-    let query = format!(
-        r#"
-    WITH lookup_pairs AS (
-        SELECT post_id, publisher FROM UNNEST([
-            {}
-        ])
-    )
-    SELECT DISTINCT
-        REGEXP_EXTRACT(vi.uri, r'gs://yral-videos/([a-f0-9-]+)\.mp4') AS video_id
-    FROM
-        `hot-or-not-feed-intelligence.yral_ds.video_index` vi
-    INNER JOIN
-        lookup_pairs lp
-    ON
-        vi.post_id = lp.post_id
-        AND vi.publisher_user_id = lp.publisher
-    WHERE
-        vi.uri IS NOT NULL
-    "#,
-        lookup_pairs.join(",\n            ")
+    let total_batches = (lookup_pairs.len() + BATCH_SIZE - 1) / BATCH_SIZE;
+    log::info!(
+        "Processing {} lookup pairs in {} batches of up to {} pairs each",
+        lookup_pairs.len(),
+        total_batches,
+        BATCH_SIZE
     );
 
-    log::debug!("Query length: {} characters", query.len());
+    for (batch_idx, chunk) in lookup_pairs.chunks(BATCH_SIZE).enumerate() {
+        log::info!(
+            "Processing batch {}/{} with {} pairs",
+            batch_idx + 1,
+            total_batches,
+            chunk.len()
+        );
 
-    let request = QueryRequest {
-        query: query.clone(),
-        use_legacy_sql: false,
-        ..Default::default()
-    };
+        let query = format!(
+            r#"
+        WITH lookup_pairs AS (
+            SELECT post_id, publisher FROM UNNEST([
+                {}
+            ])
+        )
+        SELECT DISTINCT
+            REGEXP_EXTRACT(vi.uri, r'gs://yral-videos/([a-f0-9-]+)\.mp4') AS video_id
+        FROM
+            `hot-or-not-feed-intelligence.yral_ds.video_index` vi
+        INNER JOIN
+            lookup_pairs lp
+        ON
+            vi.post_id = lp.post_id
+            AND vi.publisher_user_id = lp.publisher
+        WHERE
+            vi.uri IS NOT NULL
+        "#,
+            chunk.join(",\n                ")
+        );
 
-    log::info!("Executing BigQuery query...");
+        log::debug!(
+            "Batch {} query length: {} characters",
+            batch_idx + 1,
+            query.len()
+        );
 
-    let mut result_set: google_cloud_bigquery::query::Iterator<QueryRow> = state
-        .bigquery_client
-        .query("hot-or-not-feed-intelligence", request)
-        .await
-        .map_err(|e| {
-            log::error!("BigQuery execution failed: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        let request = QueryRequest {
+            query: query.clone(),
+            use_legacy_sql: false,
+            ..Default::default()
+        };
 
-    log::info!("BigQuery query executed successfully, collecting results...");
+        log::info!("Executing BigQuery batch {}...", batch_idx + 1);
 
-    // Collect just the video UUIDs
-    let mut video_ids: Vec<String> = Vec::new();
-    let mut row_count = 0;
+        let mut result_set: google_cloud_bigquery::query::Iterator<QueryRow> = state
+            .bigquery_client
+            .query("hot-or-not-feed-intelligence", request)
+            .await
+            .map_err(|e| {
+                log::error!("BigQuery batch {} execution failed: {:?}", batch_idx + 1, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
-    while let Ok(Some(row)) = result_set.next().await {
-        row_count += 1;
-        if let Ok(video_id) = row.column::<String>(0) {
-            video_ids.push(video_id.clone());
-            if row_count <= 5 {
-                log::debug!("Sample video ID #{}: {}", row_count, video_id);
+        log::info!(
+            "BigQuery batch {} executed successfully, collecting results...",
+            batch_idx + 1
+        );
+
+        let mut batch_count = 0;
+        while let Ok(Some(row)) = result_set.next().await {
+            if let Ok(video_id) = row.column::<String>(0) {
+                all_video_ids.push(video_id.clone());
+                batch_count += 1;
+                if batch_count <= 3 && batch_idx == 0 {
+                    log::debug!("Sample video ID from batch 1: {}", video_id);
+                }
             }
-        } else {
-            log::debug!("Failed to extract video ID from row #{}", row_count);
         }
+
+        log::info!(
+            "Batch {} complete: {} video IDs found (total so far: {})",
+            batch_idx + 1,
+            batch_count,
+            all_video_ids.len()
+        );
     }
 
-    log::info!("BigQuery results: {} rows processed, {} video IDs extracted", row_count, video_ids.len());
+    let video_ids = all_video_ids;
+    log::info!(
+        "All BigQuery batches complete: {} total video IDs extracted",
+        video_ids.len()
+    );
 
     if !video_ids.is_empty() {
         let principal_str = principal.to_string();
-        log::info!("Starting Redis operations for {} video IDs", video_ids.len());
+        log::info!(
+            "Starting Redis operations for {} video IDs",
+            video_ids.len()
+        );
 
         let clean_key = format!(
             "{}{}",
@@ -424,7 +465,11 @@ async fn backfill_watched_individual(
     });
 
     log::info!("=== Completed backfill_watched_individual ===");
-    log::info!("Principal: {}, Video IDs processed: {}", principal, video_ids.len());
+    log::info!(
+        "Principal: {}, Video IDs processed: {}",
+        principal,
+        video_ids.len()
+    );
 
     Ok(Response::builder()
         .status(StatusCode::OK)
