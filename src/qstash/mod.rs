@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use axum::middleware;
 use axum::{extract::State, response::Response, routing::post, Json, Router};
-use candid::Principal;
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use google_cloud_bigquery::query::row::Row as QueryRow;
 use hotornot_job::start_hotornot_job_v2;
