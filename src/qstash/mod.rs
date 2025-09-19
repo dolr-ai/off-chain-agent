@@ -121,7 +121,7 @@ async fn video_deduplication_handler(
 
 #[derive(Deserialize)]
 pub struct BackfillWatchedIndividual {
-    principal: Principal,
+    principal: String,
 }
 
 async fn backfill_watched_all(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
@@ -245,6 +245,8 @@ async fn backfill_watched_individual(
         }
     }
 
+    log::info!("Fetched games played");
+
     if lookup_pairs.is_empty() {
         return Ok(Response::builder()
             .status(StatusCode::OK)
@@ -302,6 +304,8 @@ async fn backfill_watched_individual(
             video_ids.push(video_id);
         }
     }
+
+    log::info!("Bigquery post_id -> video_id mapped! {}", video_ids.len());
 
     if !video_ids.is_empty() {
         let principal_str = principal.to_string();
