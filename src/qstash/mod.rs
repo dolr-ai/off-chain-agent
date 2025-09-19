@@ -306,7 +306,7 @@ async fn backfill_watched_individual(
     }
 
     // Batch BigQuery queries to avoid massive queries
-    const BATCH_SIZE: usize = 100; // Process 500 pairs at a time
+    const BATCH_SIZE: usize = 500; // Process 500 pairs at a time
     let mut all_video_ids: Vec<String> = Vec::new();
 
     let total_batches = lookup_pairs.len().div_ceil(BATCH_SIZE);
