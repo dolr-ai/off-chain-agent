@@ -4,10 +4,13 @@ use std::sync::Arc;
 
 use axum::middleware;
 use axum::{extract::State, response::Response, routing::post, Json, Router};
+use google_cloud_bigquery::http::job::query::QueryRequest;
+use google_cloud_bigquery::query::row::Row as QueryRow;
 use hotornot_job::start_hotornot_job_v2;
 use http::StatusCode;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
+use serde_json::{json, Value};
 use tower::ServiceBuilder;
 use tracing::instrument;
 
@@ -115,6 +118,365 @@ async fn video_deduplication_handler(
     Ok(response)
 }
 
+#[derive(Deserialize)]
+pub struct BackfillWatchedIndividual {
+    principal: String,
+}
+
+async fn backfill_watched_all(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
+    // Get all user principals from the canisters
+    let user_principal_canister_list =
+        crate::canister::utils::get_user_principal_canister_list_v2(&state.agent)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to get user principals: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+    log::info!(
+        "Found {} user principals to backfill",
+        user_principal_canister_list.len()
+    );
+
+    // Queue individual backfill jobs for each principal via QStash
+    let mut queued_count = 0;
+    let qstash_client = state.qstash_client.clone();
+
+    for (user_principal, _canister_id) in user_principal_canister_list {
+        // Create the payload for individual backfill
+        let payload = json!({
+            "principal": user_principal.to_string()
+        });
+
+        // Queue the job to QStash
+        let off_chain_ep = crate::consts::OFF_CHAIN_AGENT_URL
+            .join("qstash/backfill_watched/individual")
+            .unwrap();
+
+        let url = qstash_client
+            .base_url
+            .join(&format!("publish/{off_chain_ep}"))
+            .unwrap();
+
+        match qstash_client
+            .client
+            .post(url)
+            .json(&payload)
+            .header("Content-Type", "application/json")
+            .header("upstash-method", "POST")
+            .header("Upstash-Retries", "0")
+            .header("upstash-delay", "1s") // Small delay between jobs
+            .send()
+            .await
+        {
+            Ok(_) => {
+                queued_count += 1;
+            }
+            Err(e) => {
+                log::error!(
+                    "Failed to queue backfill for principal {}: {}",
+                    user_principal,
+                    e
+                );
+            }
+        }
+    }
+
+    log::info!("Successfully queued {} backfill jobs", queued_count);
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(
+            json!({
+                "status": "success",
+                "queued_count": queued_count,
+                "message": format!("Queued {} user backfill jobs", queued_count)
+            })
+            .to_string()
+            .into(),
+        )
+        .unwrap())
+}
+
+async fn backfill_watched_individual(
+    State(state): State<Arc<AppState>>,
+    Json(BackfillWatchedIndividual { principal }): Json<BackfillWatchedIndividual>,
+) -> Result<Response, StatusCode> {
+    log::info!("=== Starting backfill_watched_individual ===");
+    log::info!("Principal: {}", principal);
+
+    let mut next_cursor = None;
+    let mut lookup_pairs = Vec::new();
+    let mut total_games_fetched = 0;
+    let mut api_call_count = 0;
+
+    log::info!("Beginning to fetch games from API");
+
+    loop {
+        api_call_count += 1;
+        log::info!("API call #{}, cursor: {:?}", api_call_count, next_cursor);
+
+        let url = format!("https://yral-hot-or-not.go-bazzinga.workers.dev/v4/games/{principal}");
+        log::debug!("Calling API: {}", url);
+
+        let games_played = reqwest::Client::new()
+            .post(url)
+            .json(&json!({
+                "page_size": 1000,
+                "cursor": next_cursor
+            }))
+            .send()
+            .await
+            .map_err(|e| {
+                log::error!("Failed to call games API: {}", e);
+                StatusCode::BAD_GATEWAY
+            })?;
+
+        let status = games_played.status();
+        log::info!("API response status: {}", status);
+
+        if !status.is_success() {
+            log::error!("API returned non-success status: {}", status);
+            return Err(StatusCode::BAD_GATEWAY);
+        }
+
+        let data: Value = games_played.json().await.map_err(|e| {
+            log::error!("Failed to parse API response as JSON: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        if let Some(games) = data["games"].as_array() {
+            let games_count = games.len();
+            total_games_fetched += games_count;
+            log::info!(
+                "Received {} games in this batch (total: {})",
+                games_count,
+                total_games_fetched
+            );
+
+            for game in games {
+                if let (Some(publisher), Some(post_id)) = (
+                    game["publisher_principal"].as_str(),
+                    game["post_id"].as_str(),
+                ) {
+                    lookup_pairs.push(format!(
+                        r#"STRUCT("{}" AS post_id, "{}" AS publisher)"#,
+                        post_id, publisher
+                    ));
+                } else {
+                    log::debug!(
+                        "Skipping game with missing publisher or post_id: {:?}",
+                        game
+                    );
+                }
+            }
+        } else {
+            log::warn!("No 'games' array found in API response");
+        }
+
+        if data["next"].is_null() {
+            log::info!("No more pages to fetch (next cursor is null)");
+            break;
+        } else {
+            next_cursor = Some(data["next"].clone());
+            log::debug!("Next cursor set: {:?}", next_cursor);
+        }
+    }
+
+    log::info!(
+        "Finished fetching games. Total games: {}, Valid pairs: {}",
+        total_games_fetched,
+        lookup_pairs.len()
+    );
+
+    if lookup_pairs.is_empty() {
+        log::warn!("No valid game pairs found for principal: {}", principal);
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .body(
+                json!({
+                    "principal": principal.to_string(),
+                    "video_ids_count": 0,
+                    "status": "no_games_found"
+                })
+                .to_string()
+                .into(),
+            )
+            .unwrap());
+    }
+
+    // Batch BigQuery queries to avoid massive queries
+    const BATCH_SIZE: usize = 500; // Process 500 pairs at a time
+    let mut all_video_ids: Vec<String> = Vec::new();
+
+    let total_batches = lookup_pairs.len().div_ceil(BATCH_SIZE);
+    log::info!(
+        "Processing {} lookup pairs in {} batches of up to {} pairs each",
+        lookup_pairs.len(),
+        total_batches,
+        BATCH_SIZE
+    );
+
+    for (batch_idx, chunk) in lookup_pairs.chunks(BATCH_SIZE).enumerate() {
+        log::info!(
+            "Processing batch {}/{} with {} pairs",
+            batch_idx + 1,
+            total_batches,
+            chunk.len()
+        );
+
+        let query = format!(
+            r#"
+        WITH lookup_pairs AS (
+            SELECT post_id, publisher FROM UNNEST([
+                {}
+            ])
+        )
+        SELECT DISTINCT
+            REGEXP_EXTRACT(vi.uri, r'gs://yral-videos/([a-f0-9-]+)\.mp4') AS video_id
+        FROM
+            `hot-or-not-feed-intelligence.yral_ds.video_index` vi
+        INNER JOIN
+            lookup_pairs lp
+        ON
+            vi.post_id = lp.post_id
+            AND vi.publisher_user_id = lp.publisher
+        WHERE
+            vi.uri IS NOT NULL
+        "#,
+            chunk.join(",\n                ")
+        );
+
+        log::debug!(
+            "Batch {} query length: {} characters",
+            batch_idx + 1,
+            query.len()
+        );
+
+        let request = QueryRequest {
+            query: query.clone(),
+            use_legacy_sql: false,
+            ..Default::default()
+        };
+
+        log::info!("Executing BigQuery batch {}...", batch_idx + 1);
+
+        let mut result_set: google_cloud_bigquery::query::Iterator<QueryRow> = state
+            .bigquery_client
+            .query("hot-or-not-feed-intelligence", request)
+            .await
+            .map_err(|e| {
+                log::error!("BigQuery batch {} execution failed: {:?}", batch_idx + 1, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        log::info!(
+            "BigQuery batch {} executed successfully, collecting results...",
+            batch_idx + 1
+        );
+
+        let mut batch_count = 0;
+        while let Ok(Some(row)) = result_set.next().await {
+            if let Ok(video_id) = row.column::<String>(0) {
+                all_video_ids.push(video_id.clone());
+                batch_count += 1;
+                if batch_count <= 3 && batch_idx == 0 {
+                    log::debug!("Sample video ID from batch 1: {}", video_id);
+                }
+            }
+        }
+
+        log::info!(
+            "Batch {} complete: {} video IDs found (total so far: {})",
+            batch_idx + 1,
+            batch_count,
+            all_video_ids.len()
+        );
+    }
+
+    let video_ids = all_video_ids;
+    log::info!(
+        "All BigQuery batches complete: {} total video IDs extracted",
+        video_ids.len()
+    );
+
+    if !video_ids.is_empty() {
+        let principal_str = principal.to_string();
+        log::info!(
+            "Starting Redis operations for {} video IDs",
+            video_ids.len()
+        );
+
+        let clean_key = format!(
+            "{}{}",
+            principal_str,
+            yral_ml_feed_cache::consts::USER_WATCHED_VIDEO_IDS_SET_CLEAN_SUFFIX_V2
+        );
+        log::debug!("Clean Redis key: {}", clean_key);
+
+        let nsfw_key = format!(
+            "{}{}",
+            principal_str,
+            yral_ml_feed_cache::consts::USER_WATCHED_VIDEO_IDS_SET_NSFW_SUFFIX_V2
+        );
+        log::debug!("NSFW Redis key: {}", nsfw_key);
+
+        log::info!("Adding {} video IDs to clean set...", video_ids.len());
+        match state
+            .ml_feed_cache
+            .add_watched_video_ids_to_set(&clean_key, video_ids.clone())
+            .await
+        {
+            Ok(_) => {
+                log::info!("Successfully added {} videos to clean set", video_ids.len());
+            }
+            Err(e) => {
+                log::error!("Failed to add videos to clean set: {}", e);
+            }
+        }
+
+        log::info!("Adding {} video IDs to NSFW set...", video_ids.len());
+        match state
+            .ml_feed_cache
+            .add_watched_video_ids_to_set(&nsfw_key, video_ids.clone())
+            .await
+        {
+            Ok(_) => {
+                log::info!("Successfully added {} videos to NSFW set", video_ids.len());
+            }
+            Err(e) => {
+                log::error!("Failed to add videos to NSFW set: {}", e);
+            }
+        }
+
+        log::info!(
+            "Redis operations complete for principal {} - {} video IDs processed",
+            principal_str,
+            video_ids.len()
+        );
+    } else {
+        log::info!("No video IDs to store in Redis");
+    }
+
+    let response_body = json!({
+        "principal": principal.to_string(),
+        "video_ids_count": video_ids.len(),
+        "status": "success"
+    });
+
+    log::info!("=== Completed backfill_watched_individual ===");
+    log::info!(
+        "Principal: {}, Video IDs processed: {}",
+        principal,
+        video_ids.len()
+    );
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(response_body.to_string().into())
+        .unwrap())
+}
+
 #[instrument(skip(app_state))]
 // QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
@@ -130,6 +492,11 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/start_backup_canisters_job_v2",
             post(backup_canisters_job_v2),
         )
+        .route(
+            "/backfill_watched/individual",
+            post(backfill_watched_individual),
+        )
+        .route("/backfill_watched/all", post(backfill_watched_all))
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
         .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
