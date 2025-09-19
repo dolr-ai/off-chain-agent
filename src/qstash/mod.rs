@@ -124,12 +124,88 @@ pub struct BackfillWatchedIndividual {
     principal: Principal,
 }
 
+async fn backfill_watched_all(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
+    // Get all user principals from the canisters
+    let user_principal_canister_list =
+        crate::canister::utils::get_user_principal_canister_list_v2(&state.agent)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to get user principals: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+    log::info!(
+        "Found {} user principals to backfill",
+        user_principal_canister_list.len()
+    );
+
+    // Queue individual backfill jobs for each principal via QStash
+    let mut queued_count = 0;
+    let qstash_client = state.qstash_client.clone();
+
+    for (user_principal, _canister_id) in user_principal_canister_list {
+        // Create the payload for individual backfill
+        let payload = json!({
+            "principal": user_principal.to_string()
+        });
+
+        // Queue the job to QStash
+        let off_chain_ep = crate::consts::OFF_CHAIN_AGENT_URL
+            .join("qstash/backfill_watched/individual")
+            .unwrap();
+
+        let url = qstash_client
+            .base_url
+            .join(&format!("publish/{off_chain_ep}"))
+            .unwrap();
+
+        match qstash_client
+            .client
+            .post(url)
+            .json(&payload)
+            .header("Content-Type", "application/json")
+            .header("upstash-method", "POST")
+            .header("Upstash-Retries", "0")
+            .header("upstash-delay", "1s") // Small delay between jobs
+            .send()
+            .await
+        {
+            Ok(_) => {
+                queued_count += 1;
+            }
+            Err(e) => {
+                log::error!(
+                    "Failed to queue backfill for principal {}: {}",
+                    user_principal,
+                    e
+                );
+            }
+        }
+    }
+
+    log::info!("Successfully queued {} backfill jobs", queued_count);
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(
+            json!({
+                "status": "success",
+                "queued_count": queued_count,
+                "message": format!("Queued {} user backfill jobs", queued_count)
+            })
+            .to_string()
+            .into(),
+        )
+        .unwrap())
+}
+
 async fn backfill_watched_individual(
     State(state): State<Arc<AppState>>,
     Json(BackfillWatchedIndividual { principal }): Json<BackfillWatchedIndividual>,
 ) -> Result<Response, StatusCode> {
     let mut next_cursor = None;
-    let mut games: Vec<Value> = vec![];
+    let mut lookup_pairs = Vec::new();
+
     loop {
         let games_played = reqwest::Client::new()
             .post(format!(
@@ -148,7 +224,19 @@ async fn backfill_watched_individual(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        games.extend(data["games"].as_array().unwrap().iter().cloned());
+        if let Some(games) = data["games"].as_array() {
+            for game in games {
+                if let (Some(publisher), Some(post_id)) = (
+                    game["publisher_principal"].as_str(),
+                    game["post_id"].as_str(),
+                ) {
+                    lookup_pairs.push(format!(
+                        r#"STRUCT("{}" AS post_id, "{}" AS publisher)"#,
+                        post_id, publisher
+                    ));
+                }
+            }
+        }
 
         if data["next"].is_null() {
             break;
@@ -157,25 +245,20 @@ async fn backfill_watched_individual(
         }
     }
 
-    let games_played: Vec<(String, String)> = games
-        .into_iter()
-        .filter_map(|g| {
-            let publisher = g["publisher_principal"].as_str()?.to_string();
-            let post_id = g["post_id"].as_str()?.to_string();
-            Some((publisher, post_id))
-        })
-        .collect();
-
-    // Build the BigQuery query to get video IDs from video_index table
-    let lookup_pairs: Vec<String> = games_played
-        .iter()
-        .map(|(publisher, post_id)| {
-            format!(
-                r#"STRUCT("{}" AS post_id, "{}" AS publisher)"#,
-                post_id, publisher
+    if lookup_pairs.is_empty() {
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .body(
+                json!({
+                    "principal": principal.to_string(),
+                    "video_ids_count": 0,
+                    "status": "no_games_found"
+                })
+                .to_string()
+                .into(),
             )
-        })
-        .collect();
+            .unwrap());
+    }
 
     let query = format!(
         r#"
@@ -291,6 +374,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/backfill_watched/individual",
             post(backfill_watched_individual),
         )
+        .route("/backfill_watched/all", post(backfill_watched_all))
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
         .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
