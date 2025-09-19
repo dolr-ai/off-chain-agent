@@ -202,28 +202,57 @@ async fn backfill_watched_individual(
     State(state): State<Arc<AppState>>,
     Json(BackfillWatchedIndividual { principal }): Json<BackfillWatchedIndividual>,
 ) -> Result<Response, StatusCode> {
+    log::info!("=== Starting backfill_watched_individual ===");
+    log::info!("Principal: {}", principal);
+
     let mut next_cursor = None;
     let mut lookup_pairs = Vec::new();
+    let mut total_games_fetched = 0;
+    let mut api_call_count = 0;
+
+    log::info!("Beginning to fetch games from API");
 
     loop {
+        api_call_count += 1;
+        log::info!("API call #{}, cursor: {:?}", api_call_count, next_cursor);
+
+        let url = format!("https://yral-hot-or-not.go-bazzinga.workers.dev/v4/games/{principal}");
+        log::debug!("Calling API: {}", url);
+
         let games_played = reqwest::Client::new()
-            .post(format!(
-                "https://yral-hot-or-not.go-bazzinga.workers.dev/v4/games/{principal}"
-            ))
+            .post(url)
             .json(&json!({
                 "page_size": 1000,
                 "cursor": next_cursor
             }))
             .send()
             .await
-            .map_err(|_| StatusCode::BAD_GATEWAY)?;
+            .map_err(|e| {
+                log::error!("Failed to call games API: {}", e);
+                StatusCode::BAD_GATEWAY
+            })?;
+
+        let status = games_played.status();
+        log::info!("API response status: {}", status);
+
+        if !status.is_success() {
+            log::error!("API returned non-success status: {}", status);
+            return Err(StatusCode::BAD_GATEWAY);
+        }
 
         let data: Value = games_played
             .json()
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .map_err(|e| {
+                log::error!("Failed to parse API response as JSON: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
         if let Some(games) = data["games"].as_array() {
+            let games_count = games.len();
+            total_games_fetched += games_count;
+            log::info!("Received {} games in this batch (total: {})", games_count, total_games_fetched);
+
             for game in games {
                 if let (Some(publisher), Some(post_id)) = (
                     game["publisher_principal"].as_str(),
@@ -233,20 +262,28 @@ async fn backfill_watched_individual(
                         r#"STRUCT("{}" AS post_id, "{}" AS publisher)"#,
                         post_id, publisher
                     ));
+                } else {
+                    log::debug!("Skipping game with missing publisher or post_id: {:?}", game);
                 }
             }
+        } else {
+            log::warn!("No 'games' array found in API response");
         }
 
         if data["next"].is_null() {
+            log::info!("No more pages to fetch (next cursor is null)");
             break;
         } else {
             next_cursor = Some(data["next"].clone());
+            log::debug!("Next cursor set: {:?}", next_cursor);
         }
     }
 
-    log::info!("Fetched games played");
+    log::info!("Finished fetching games. Total games: {}, Valid pairs: {}",
+              total_games_fetched, lookup_pairs.len());
 
     if lookup_pairs.is_empty() {
+        log::warn!("No valid game pairs found for principal: {}", principal);
         return Ok(Response::builder()
             .status(StatusCode::OK)
             .body(
@@ -260,6 +297,9 @@ async fn backfill_watched_individual(
             )
             .unwrap());
     }
+
+    log::info!("Building BigQuery query with {} lookup pairs", lookup_pairs.len());
+    log::debug!("First 5 lookup pairs: {:?}", &lookup_pairs[..lookup_pairs.len().min(5)]);
 
     let query = format!(
         r#"
@@ -283,78 +323,112 @@ async fn backfill_watched_individual(
         lookup_pairs.join(",\n            ")
     );
 
+    log::debug!("Query length: {} characters", query.len());
+
     let request = QueryRequest {
         query: query.clone(),
         use_legacy_sql: false,
         ..Default::default()
     };
 
+    log::info!("Executing BigQuery query...");
+
     let mut result_set: google_cloud_bigquery::query::Iterator<QueryRow> = state
         .bigquery_client
         .query("hot-or-not-feed-intelligence", request)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            log::error!("BigQuery execution failed: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    log::info!("BigQuery query executed successfully, collecting results...");
 
     // Collect just the video UUIDs
     let mut video_ids: Vec<String> = Vec::new();
+    let mut row_count = 0;
 
     while let Ok(Some(row)) = result_set.next().await {
+        row_count += 1;
         if let Ok(video_id) = row.column::<String>(0) {
-            video_ids.push(video_id);
+            video_ids.push(video_id.clone());
+            if row_count <= 5 {
+                log::debug!("Sample video ID #{}: {}", row_count, video_id);
+            }
+        } else {
+            log::debug!("Failed to extract video ID from row #{}", row_count);
         }
     }
 
-    log::info!("Bigquery post_id -> video_id mapped! {}", video_ids.len());
+    log::info!("BigQuery results: {} rows processed, {} video IDs extracted", row_count, video_ids.len());
 
     if !video_ids.is_empty() {
         let principal_str = principal.to_string();
+        log::info!("Starting Redis operations for {} video IDs", video_ids.len());
 
         let clean_key = format!(
             "{}{}",
             principal_str,
             yral_ml_feed_cache::consts::USER_WATCHED_VIDEO_IDS_SET_CLEAN_SUFFIX_V2
         );
+        log::debug!("Clean Redis key: {}", clean_key);
 
         let nsfw_key = format!(
             "{}{}",
             principal_str,
             yral_ml_feed_cache::consts::USER_WATCHED_VIDEO_IDS_SET_NSFW_SUFFIX_V2
         );
+        log::debug!("NSFW Redis key: {}", nsfw_key);
 
-        if let Err(e) = state
+        log::info!("Adding {} video IDs to clean set...", video_ids.len());
+        match state
             .ml_feed_cache
             .add_watched_video_ids_to_set(&clean_key, video_ids.clone())
             .await
         {
-            log::error!("Failed to add videos to clean set: {}", e);
+            Ok(_) => {
+                log::info!("Successfully added {} videos to clean set", video_ids.len());
+            }
+            Err(e) => {
+                log::error!("Failed to add videos to clean set: {}", e);
+            }
         }
 
-        if let Err(e) = state
+        log::info!("Adding {} video IDs to NSFW set...", video_ids.len());
+        match state
             .ml_feed_cache
             .add_watched_video_ids_to_set(&nsfw_key, video_ids.clone())
             .await
         {
-            log::error!("Failed to add videos to nsfw set: {}", e);
+            Ok(_) => {
+                log::info!("Successfully added {} videos to NSFW set", video_ids.len());
+            }
+            Err(e) => {
+                log::error!("Failed to add videos to NSFW set: {}", e);
+            }
         }
 
         log::info!(
-            "Added {} video IDs to Redis for principal {} (both clean and nsfw sets)",
-            video_ids.len(),
-            principal_str
+            "Redis operations complete for principal {} - {} video IDs processed",
+            principal_str,
+            video_ids.len()
         );
+    } else {
+        log::info!("No video IDs to store in Redis");
     }
+
+    let response_body = json!({
+        "principal": principal.to_string(),
+        "video_ids_count": video_ids.len(),
+        "status": "success"
+    });
+
+    log::info!("=== Completed backfill_watched_individual ===");
+    log::info!("Principal: {}, Video IDs processed: {}", principal, video_ids.len());
 
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(
-            json!({
-                "principal": principal.to_string(),
-                "video_ids_count": video_ids.len(),
-                "status": "success"
-            })
-            .to_string()
-            .into(),
-        )
+        .body(response_body.to_string().into())
         .unwrap())
 }
 
