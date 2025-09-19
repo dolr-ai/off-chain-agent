@@ -99,6 +99,9 @@ redis = { version = "0.29.1", features = [
 bb8 = "0.9.0"
 bb8-redis = "0.21.0"
 fasthash = { version = "0.4.0", optional = true }
+aws-sdk-s3 = { version = "1.65", features = ["behavior-version-latest"] }
+aws-config = { version = "1.5", features = ["behavior-version-latest"] }
+rustls = { version = "0.23", features = ["ring"] }
 spacetimedb-sdk = "1.2.0"
 async-channel = "2.3.1"
 num-bigint = "0.4"
@@ -106,41 +109,41 @@ sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
-    "full",
-    "user-post-service",
-] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
-    "ic",
-    "server",
-] }
-yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-
-
-# Local (Path) - uncomment to use local development versions
-# yral-canisters-client = { path = "../yral-common/canisters-client", features = [
+# yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
 #     "full",
 #     "user-post-service",
 # ] }
-# yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
-# yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
-# yral-qstash-types = { path = "../yral-common/qstash-types" }
-# yral-metrics = { path = "../yral-common/metrics" }
-# videogen-common = { path = "../yral-common/videogen-common", features = [
+# yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
+# yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
+# yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
+# yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+# videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
 #     "ic",
 #     "server",
 # ] }
-# yral-identity = { path = "../yral-common/identity" }
-# yral-canisters-common = { path = "../yral-common/canisters-common" }
-# yral-types = { path = "../yral-common/types" }
-# yral-username-gen = { path = "../yral-common/username-gen" }
+# yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+# yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+# yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+# yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+
+
+# Local (Path) - uncomment to use local development versions
+yral-canisters-client = { path = "../yral-common/canisters-client", features = [
+    "full",
+    "user-post-service",
+] }
+yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
+yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
+yral-qstash-types = { path = "../yral-common/qstash-types" }
+yral-metrics = { path = "../yral-common/metrics" }
+videogen-common = { path = "../yral-common/videogen-common", features = [
+    "ic",
+    "server",
+] }
+yral-identity = { path = "../yral-common/identity" }
+yral-canisters-common = { path = "../yral-common/canisters-common" }
+yral-types = { path = "../yral-common/types" }
+yral-username-gen = { path = "../yral-common/username-gen" }
 
 
 [build-dependencies]
