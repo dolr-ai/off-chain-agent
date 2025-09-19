@@ -4,10 +4,14 @@ use std::sync::Arc;
 
 use axum::middleware;
 use axum::{extract::State, response::Response, routing::post, Json, Router};
+use candid::Principal;
+use google_cloud_bigquery::http::job::query::QueryRequest;
+use google_cloud_bigquery::query::row::Row as QueryRow;
 use hotornot_job::start_hotornot_job_v2;
 use http::StatusCode;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
+use serde_json::{json, Value};
 use tower::ServiceBuilder;
 use tracing::instrument;
 
@@ -115,6 +119,159 @@ async fn video_deduplication_handler(
     Ok(response)
 }
 
+#[derive(Deserialize)]
+pub struct BackfillWatchedIndividual {
+    principal: Principal,
+}
+
+async fn backfill_watched_individual(
+    State(state): State<Arc<AppState>>,
+    Json(BackfillWatchedIndividual { principal }): Json<BackfillWatchedIndividual>,
+) -> Result<Response, StatusCode> {
+    let mut next_cursor = None;
+    let mut games: Vec<Value> = vec![];
+    loop {
+        let games_played = reqwest::Client::new()
+            .post(format!(
+                "https://yral-hot-or-not.go-bazzinga.workers.dev/v4/games/{principal}"
+            ))
+            .json(&json!({
+                "page_size": 1000,
+                "cursor": next_cursor
+            }))
+            .send()
+            .await
+            .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+        let data: Value = games_played
+            .json()
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        games.extend(data["games"].as_array().unwrap().iter().cloned());
+
+        if data["next"].is_null() {
+            break;
+        } else {
+            next_cursor = Some(data["next"].clone());
+        }
+    }
+
+    let games_played: Vec<(String, String)> = games
+        .into_iter()
+        .filter_map(|g| {
+            let publisher = g["publisher_principal"].as_str()?.to_string();
+            let post_id = g["post_id"].as_str()?.to_string();
+            Some((publisher, post_id))
+        })
+        .collect();
+
+    // Build the BigQuery query to get video IDs from video_index table
+    let lookup_pairs: Vec<String> = games_played
+        .iter()
+        .map(|(publisher, post_id)| {
+            format!(
+                r#"STRUCT("{}" AS post_id, "{}" AS publisher)"#,
+                post_id, publisher
+            )
+        })
+        .collect();
+
+    let query = format!(
+        r#"
+    WITH lookup_pairs AS (
+        SELECT post_id, publisher FROM UNNEST([
+            {}
+        ])
+    )
+    SELECT DISTINCT
+        REGEXP_EXTRACT(vi.uri, r'gs://yral-videos/([a-f0-9-]+)\.mp4') AS video_id
+    FROM
+        `hot-or-not-feed-intelligence.yral_ds.video_index` vi
+    INNER JOIN
+        lookup_pairs lp
+    ON
+        vi.post_id = lp.post_id
+        AND vi.publisher_user_id = lp.publisher
+    WHERE
+        vi.uri IS NOT NULL
+    "#,
+        lookup_pairs.join(",\n            ")
+    );
+
+    let request = QueryRequest {
+        query: query.clone(),
+        use_legacy_sql: false,
+        ..Default::default()
+    };
+
+    let mut result_set: google_cloud_bigquery::query::Iterator<QueryRow> = state
+        .bigquery_client
+        .query("hot-or-not-feed-intelligence", request)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Collect just the video UUIDs
+    let mut video_ids: Vec<String> = Vec::new();
+
+    while let Ok(Some(row)) = result_set.next().await {
+        if let Ok(video_id) = row.column::<String>(0) {
+            video_ids.push(video_id);
+        }
+    }
+
+    if !video_ids.is_empty() {
+        let principal_str = principal.to_string();
+
+        let clean_key = format!(
+            "{}{}",
+            principal_str,
+            yral_ml_feed_cache::consts::USER_WATCHED_VIDEO_IDS_SET_CLEAN_SUFFIX_V2
+        );
+
+        let nsfw_key = format!(
+            "{}{}",
+            principal_str,
+            yral_ml_feed_cache::consts::USER_WATCHED_VIDEO_IDS_SET_NSFW_SUFFIX_V2
+        );
+
+        if let Err(e) = state
+            .ml_feed_cache
+            .add_watched_video_ids_to_set(&clean_key, video_ids.clone())
+            .await
+        {
+            log::error!("Failed to add videos to clean set: {}", e);
+        }
+
+        if let Err(e) = state
+            .ml_feed_cache
+            .add_watched_video_ids_to_set(&nsfw_key, video_ids.clone())
+            .await
+        {
+            log::error!("Failed to add videos to nsfw set: {}", e);
+        }
+
+        log::info!(
+            "Added {} video IDs to Redis for principal {} (both clean and nsfw sets)",
+            video_ids.len(),
+            principal_str
+        );
+    }
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(
+            json!({
+                "principal": principal.to_string(),
+                "video_ids_count": video_ids.len(),
+                "status": "success"
+            })
+            .to_string()
+            .into(),
+        )
+        .unwrap())
+}
+
 #[instrument(skip(app_state))]
 // QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
@@ -129,6 +286,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/start_backup_canisters_job_v2",
             post(backup_canisters_job_v2),
+        )
+        .route(
+            "/backfill_watched/individual",
+            post(backfill_watched_individual),
         )
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
