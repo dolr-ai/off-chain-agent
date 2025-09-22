@@ -7,10 +7,13 @@ use utoipa::ToSchema;
 
 use crate::{
     app_state::AppState,
+    consts::USER_INFO_SERVICE_CANISTER_ID,
     types::DelegatedIdentityWire,
+    user::utils::get_agent_from_delegated_identity_wire,
     utils::delegated_identity::get_user_info_from_delegated_identity_wire,
     utils::s3::upload_profile_image_to_s3,
 };
+use yral_canisters_client::user_info_service::{ProfileUpdateDetails, UserInfoService};
 
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct UploadProfileImageRequest {
@@ -91,11 +94,54 @@ pub async fn handle_upload_profile_image(
         )
     })?;
 
-    tracing::info!(
-        "Successfully uploaded profile image for user {}: {}",
-        user_principal,
-        profile_image_url
-    );
+    // Update the user's profile in the User Info Service canister
+    let user_agent = get_agent_from_delegated_identity_wire(&request.delegated_identity_wire)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create user agent: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create user agent: {e}"),
+            )
+        })?;
+
+    let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &user_agent);
+
+    let update_details = ProfileUpdateDetails {
+        profile_picture_url: Some(profile_image_url.clone()),
+        bio: None,
+        website_url: None,
+    };
+
+    match user_info_service.update_profile_details(update_details).await {
+        Ok(yral_canisters_client::user_info_service::Result_::Ok) => {
+            tracing::info!(
+                "Successfully updated profile image for user {} in canister: {}",
+                user_principal,
+                profile_image_url
+            );
+        }
+        Ok(yral_canisters_client::user_info_service::Result_::Err(e)) => {
+            tracing::error!("Failed to update profile in canister: {}", e);
+            if e.contains("not authorized") || e.contains("Not authorized") {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    "Not authorized to update profile".to_string(),
+                ));
+            }
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to update profile in canister: {e}"),
+            ));
+        }
+        Err(e) => {
+            tracing::error!("Failed to update profile in canister: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to update profile in canister: {e}"),
+            ));
+        }
+    }
 
     Ok(Json(UploadProfileImageResponse {
         profile_image_url,

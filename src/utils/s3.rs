@@ -1,18 +1,14 @@
 use aws_config::{BehaviorVersion, Region};
-use aws_sdk_s3::{
-    config::Credentials,
-    primitives::ByteStream,
-    Client,
-};
+use aws_sdk_s3::{config::Credentials, primitives::ByteStream, Client};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use std::env;
 use tracing::info;
 
 // Hetzner Object Storage configuration constants
-pub const HETZNER_S3_ENDPOINT: &str = "https://fsn1.your-objectstorage.com";
-pub const HETZNER_S3_BUCKET: &str = "yral-profile-images";
-pub const HETZNER_S3_REGION: &str = "fsn1";
-pub const HETZNER_S3_PUBLIC_URL_BASE: &str = "https://yral-profile-images.fsn1.your-objectstorage.com";
+pub const HETZNER_S3_ENDPOINT: &str = "https://hel1.your-objectstorage.com";
+pub const HETZNER_S3_BUCKET: &str = "yral-profile";
+pub const HETZNER_S3_REGION: &str = "hel1";
+pub const HETZNER_S3_PUBLIC_URL_BASE: &str = "https://yral-profile.hel1.your-objectstorage.com";
 
 /// Configuration for S3 storage
 pub struct S3Config {
@@ -27,10 +23,8 @@ impl Default for S3Config {
         Self {
             endpoint: env::var("HETZNER_S3_ENDPOINT")
                 .unwrap_or_else(|_| HETZNER_S3_ENDPOINT.to_string()),
-            bucket: env::var("HETZNER_S3_BUCKET")
-                .unwrap_or_else(|_| HETZNER_S3_BUCKET.to_string()),
-            region: env::var("HETZNER_S3_REGION")
-                .unwrap_or_else(|_| HETZNER_S3_REGION.to_string()),
+            bucket: env::var("HETZNER_S3_BUCKET").unwrap_or_else(|_| HETZNER_S3_BUCKET.to_string()),
+            region: env::var("HETZNER_S3_REGION").unwrap_or_else(|_| HETZNER_S3_REGION.to_string()),
             public_url_base: env::var("HETZNER_S3_PUBLIC_URL_BASE")
                 .unwrap_or_else(|_| HETZNER_S3_PUBLIC_URL_BASE.to_string()),
         }
@@ -48,13 +42,7 @@ pub async fn create_s3_client() -> Result<Client, String> {
         .map_err(|_| "Missing HETZNER_S3_SECRET_KEY environment variable".to_string())?;
 
     // Create credentials
-    let credentials = Credentials::new(
-        access_key,
-        secret_key,
-        None,
-        None,
-        "hetzner-s3",
-    );
+    let credentials = Credentials::new(access_key, secret_key, None, None, "hetzner-s3");
 
     // Configure the S3 client for Hetzner
     let aws_config = aws_config::defaults(BehaviorVersion::latest())
@@ -104,7 +92,10 @@ pub async fn upload_profile_image_to_s3(
         .await
         .map_err(|e| format!("Failed to upload image to S3: {e}"))?;
 
-    info!("Successfully uploaded profile image for user: {}", user_principal);
+    info!(
+        "Successfully uploaded profile image for user: {}",
+        user_principal
+    );
 
     // Return the public URL of the uploaded image
     let public_url = format!("{}/{}", config.public_url_base, object_key);
@@ -135,7 +126,10 @@ pub async fn delete_profile_image_from_s3(user_principal: &str) -> Result<(), St
         .await
         .map_err(|e| format!("Failed to delete image from S3: {e}"))?;
 
-    info!("Successfully deleted profile image for user: {}", user_principal);
+    info!(
+        "Successfully deleted profile image for user: {}",
+        user_principal
+    );
 
     Ok(())
 }
