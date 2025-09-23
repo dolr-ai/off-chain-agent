@@ -131,6 +131,8 @@ impl Event {
                     .header(CONTENT_TYPE, "application/json")
                     .header("upstash-method", "POST")
                     .header("upstash-delay", "600s")
+                    .header("Upstash-Flow-Control-Key", "VIDEO_DEDUPLICATION")
+                    .header("Upstash-Flow-Control-Value", "Rate=30,Parallelism=15")
                     .send()
                     .await;
 
