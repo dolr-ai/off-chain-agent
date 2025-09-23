@@ -6,9 +6,7 @@ use tracing::instrument;
 use utoipa::ToSchema;
 
 use crate::{
-    app_state::AppState,
-    consts::USER_INFO_SERVICE_CANISTER_ID,
-    types::DelegatedIdentityWire,
+    app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, types::DelegatedIdentityWire,
     user::utils::get_agent_from_delegated_identity_wire,
     utils::delegated_identity::get_user_info_from_delegated_identity_wire,
     utils::s3::upload_profile_image_to_s3,
@@ -65,10 +63,7 @@ pub async fn handle_upload_profile_image(
 
     // Validate image data size (optional, can add more validation)
     if base64_data.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Image data is empty".to_string(),
-        ));
+        return Err((StatusCode::BAD_REQUEST, "Image data is empty".to_string()));
     }
 
     // Maximum allowed size for base64 string (e.g., ~10MB)
@@ -76,23 +71,23 @@ pub async fn handle_upload_profile_image(
     if base64_data.len() > MAX_BASE64_SIZE {
         return Err((
             StatusCode::BAD_REQUEST,
-            format!("Image data too large. Maximum size is {} bytes", MAX_BASE64_SIZE),
+            format!(
+                "Image data too large. Maximum size is {} bytes",
+                MAX_BASE64_SIZE
+            ),
         ));
     }
 
     // Upload image to S3
-    let profile_image_url = upload_profile_image_to_s3(
-        base64_data,
-        &user_principal.to_text(),
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to upload profile image: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to upload profile image: {e}"),
-        )
-    })?;
+    let profile_image_url = upload_profile_image_to_s3(base64_data, &user_principal.to_text())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upload profile image: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to upload profile image: {e}"),
+            )
+        })?;
 
     // Update the user's profile in the User Info Service canister
     let user_agent = get_agent_from_delegated_identity_wire(&request.delegated_identity_wire)
@@ -113,7 +108,10 @@ pub async fn handle_upload_profile_image(
         website_url: None,
     };
 
-    match user_info_service.update_profile_details(update_details).await {
+    match user_info_service
+        .update_profile_details(update_details)
+        .await
+    {
         Ok(yral_canisters_client::user_info_service::Result_::Ok) => {
             tracing::info!(
                 "Successfully updated profile image for user {} in canister: {}",
@@ -143,9 +141,7 @@ pub async fn handle_upload_profile_image(
         }
     }
 
-    Ok(Json(UploadProfileImageResponse {
-        profile_image_url,
-    }))
+    Ok(Json(UploadProfileImageResponse { profile_image_url }))
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
