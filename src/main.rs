@@ -45,6 +45,7 @@ mod offchain_service;
 pub mod pipeline;
 mod posts;
 mod qstash;
+mod rewards;
 mod types;
 pub mod user;
 pub mod utils;

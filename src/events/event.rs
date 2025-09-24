@@ -36,6 +36,8 @@ use yral_ml_feed_cache::types_v3::{BufferItemV3, MLFeedCacheHistoryItemV3, Plain
 
 pub mod storj;
 
+use crate::rewards::RewardEngine;
+
 #[derive(Debug)]
 pub struct Event {
     pub event: WarehouseEvent,
@@ -841,6 +843,33 @@ impl Event {
                 }
             }
         });
+    }
+
+    pub async fn process_btc_rewards(&self, app_state: &AppState) {
+        if self.event.event != "video_duration_watched" {
+            return;
+        }
+
+        // Parse the event parameters
+        let params: Result<VideoDurationWatchedPayloadV2, _> =
+            serde_json::from_str(&self.event.params);
+
+        let params = match params {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("Failed to parse video_duration_watched params for rewards: {e:?}");
+                return;
+            }
+        };
+
+        // Initialize reward engine
+        let reward_engine = RewardEngine::new(app_state.leaderboard_redis_pool.clone());
+
+        // Process the view for rewards
+        let app_state_arc = std::sync::Arc::new(app_state.clone());
+        if let Err(e) = reward_engine.process_video_view(params, &app_state_arc).await {
+            log::error!("Failed to process BTC rewards: {e:?}");
+        }
     }
 
     pub fn update_success_history_v3(&self, app_state: &AppState) {

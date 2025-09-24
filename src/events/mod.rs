@@ -170,6 +170,11 @@ async fn process_event_impl_v2(
 
     event.update_view_count_canister(&shared_state.clone());
 
+    // Process BTC rewards for video views
+    if event.event.event == "video_duration_watched" {
+        event.process_btc_rewards(&shared_state.clone()).await;
+    }
+
     #[cfg(not(feature = "local-bin"))]
     {
         use crate::events::push_notifications::dispatch_notif;
