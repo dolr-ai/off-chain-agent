@@ -58,11 +58,17 @@ pub struct AppState {
 impl AppState {
     pub async fn new(app_config: AppConfig) -> Self {
         let leaderboard_redis_pool = init_leaderboard_redis_pool().await;
-        let rewards_module = RewardsModule::new(leaderboard_redis_pool.clone());
+        let agent = init_agent().await;
+        let mut rewards_module = RewardsModule::new(leaderboard_redis_pool.clone(), agent.clone());
+
+        // Initialize the rewards module (loads Lua scripts)
+        if let Err(e) = rewards_module.initialize().await {
+            log::error!("Failed to initialize rewards module: {}", e);
+        }
 
         AppState {
             yral_metadata_client: init_yral_metadata_client(&app_config),
-            agent: init_agent().await,
+            agent,
             #[cfg(not(feature = "local-bin"))]
             auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,

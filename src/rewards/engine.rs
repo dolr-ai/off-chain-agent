@@ -29,13 +29,13 @@ pub struct RewardEngine {
 }
 
 impl RewardEngine {
-    pub fn new(redis_pool: RedisPool) -> Self {
-        let mut view_tracker = ViewTracker::new(redis_pool.clone());
+    pub fn new(redis_pool: RedisPool, admin_agent: ic_agent::Agent) -> Self {
+        let view_tracker = ViewTracker::new(redis_pool.clone());
         let user_verification = UserVerification::new(redis_pool.clone());
         let history_tracker = HistoryTracker::new(redis_pool.clone());
         let fraud_detector = FraudDetector::new(redis_pool.clone());
         let btc_converter = BtcConverter::new();
-        let wallet = WalletIntegration::new();
+        let wallet = WalletIntegration::new(admin_agent);
         Self {
             redis_pool,
             view_tracker,
@@ -47,8 +47,8 @@ impl RewardEngine {
         }
     }
 
-    pub fn with_config(redis_pool: RedisPool, config: RewardConfig) -> Self {
-        let mut view_tracker = ViewTracker::new(redis_pool.clone());
+    pub fn with_config(redis_pool: RedisPool, admin_agent: ic_agent::Agent, config: RewardConfig) -> Self {
+        let view_tracker = ViewTracker::new(redis_pool.clone());
         let user_verification = UserVerification::new(redis_pool.clone());
         let history_tracker = HistoryTracker::new(redis_pool.clone());
         let fraud_detector = FraudDetector::with_config(
@@ -57,7 +57,7 @@ impl RewardEngine {
             config.shadow_ban_duration,
         );
         let btc_converter = BtcConverter::new();
-        let wallet = WalletIntegration::new();
+        let wallet = WalletIntegration::new(admin_agent);
         // Initialize config in Redis if provided
         tokio::spawn({
             let redis_pool = redis_pool.clone();

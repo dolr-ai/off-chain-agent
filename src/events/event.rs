@@ -863,7 +863,7 @@ impl Event {
         };
 
         // Initialize reward engine
-        let reward_engine = RewardEngine::new(app_state.leaderboard_redis_pool.clone());
+        let reward_engine = RewardEngine::new(app_state.leaderboard_redis_pool.clone(), app_state.agent.clone());
 
         // Process the view for rewards
         let app_state_arc = std::sync::Arc::new(app_state.clone());

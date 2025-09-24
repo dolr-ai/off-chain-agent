@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
-use candid::Principal;
+use candid::{Nat, Principal};
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use yral_canisters_common::utils::token::{CkBtcOperations, TokenOperations};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BtcTransaction {
@@ -25,13 +27,14 @@ pub enum TransactionStatus {
 
 #[derive(Clone)]
 pub struct WalletIntegration {
-    // TODO: Add actual wallet integration fields
-    // For now, this is a placeholder implementation
+    ckbtc_ops: CkBtcOperations,
 }
 
 impl WalletIntegration {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(admin_agent: ic_agent::Agent) -> Self {
+        Self {
+            ckbtc_ops: CkBtcOperations::new(admin_agent),
+        }
     }
 
     /// Queue a BTC reward transaction for processing
@@ -43,60 +46,53 @@ impl WalletIntegration {
         video_id: &str,
         milestone: u64,
     ) -> Result<String> {
-        // Create transaction record
-        let transaction = BtcTransaction {
-            creator_id,
-            video_id: video_id.to_string(),
-            milestone,
-            amount_btc,
-            amount_inr,
-            timestamp: chrono::Utc::now().timestamp(),
-            tx_id: None,
-            status: TransactionStatus::Pending,
-        };
+        // Convert BTC to satoshis (1 BTC = 100,000,000 sats)
+        let amount_sats = (amount_btc * 100_000_000.0) as u64;
 
-        // Create transaction memo
-        let memo = json!({
+        // Create transaction memo as JSON string
+        let memo_json = json!({
+            "type": "video_view_reward",
             "video_id": video_id,
             "milestone": milestone,
-            "timestamp": transaction.timestamp,
             "amount_inr": amount_inr,
-        })
-        .to_string();
+            "timestamp": chrono::Utc::now().timestamp(),
+        });
 
         log::info!(
-            "Queuing BTC reward for creator {}: {} BTC (₹{}) for video {} milestone {}",
-            creator_id,
+            "Transferring {} sats ({} BTC, ₹{}) to creator {} for video {} milestone {}",
+            amount_sats,
             amount_btc,
             amount_inr,
+            creator_id,
             video_id,
             milestone
         );
 
-        // TODO: Implement actual wallet integration
-        // This would involve:
-        // 1. Calling the Yral wallet canister to initiate BTC transfer
-        // 2. Getting the transaction ID back
-        // 3. Storing the transaction details
+        // Transfer ckBTC using add_balance (which transfers from admin to user)
+        match self.ckbtc_ops.add_balance(creator_id, amount_sats).await {
+            Ok(_) => {
+                // Generate transaction ID based on current timestamp
+                let tx_id = format!("ckbtc_tx_{}_{}", creator_id, chrono::Utc::now().timestamp());
 
-        // For now, generate a mock transaction ID
-        let tx_id = format!(
-            "mock_tx_{}_{}_{}",
-            creator_id,
-            video_id,
-            chrono::Utc::now().timestamp()
-        );
+                log::info!(
+                    "Successfully transferred {} sats to creator {} (tx_id: {})",
+                    amount_sats,
+                    creator_id,
+                    tx_id
+                );
 
-        // In production, this would call the actual wallet canister
-        // Example:
-        // let wallet_canister = WalletCanister(wallet_canister_id, &agent);
-        // let tx_result = wallet_canister.transfer_btc(
-        //     creator_id,
-        //     amount_btc,
-        //     memo
-        // ).await?;
-
-        Ok(tx_id)
+                Ok(tx_id)
+            }
+            Err(e) => {
+                log::error!(
+                    "Failed to transfer {} sats to creator {}: {}",
+                    amount_sats,
+                    creator_id,
+                    e
+                );
+                Err(anyhow::anyhow!("ckBTC transfer failed: {}", e))
+            }
+        }
     }
 
     /// Process pending transactions
@@ -120,42 +116,52 @@ impl WalletIntegration {
         Ok(TransactionStatus::Completed)
     }
 
-    /// Credit BTC to creator's wallet
+    /// Credit BTC to creator's wallet (same as queue_btc_reward but with custom memo)
     pub async fn credit_btc_to_wallet(
         &self,
         creator_id: Principal,
         amount_btc: f64,
         memo: String,
     ) -> Result<String> {
+        // Convert BTC to satoshis
+        let amount_sats = (amount_btc * 100_000_000.0) as u64;
+
         log::info!(
-            "Crediting {} BTC to creator {} wallet with memo: {}",
+            "Crediting {} sats ({} BTC) to creator {} with memo: {}",
+            amount_sats,
             amount_btc,
             creator_id,
             memo
         );
 
-        // TODO: Implement actual wallet credit
-        // This would involve calling the Yral wallet canister
+        // Transfer ckBTC
+        self.ckbtc_ops.add_balance(creator_id, amount_sats).await
+            .map_err(|e| anyhow::anyhow!("ckBTC transfer failed: {}", e))?;
 
-        // Mock transaction ID
-        let tx_id = format!("btc_tx_{}", chrono::Utc::now().timestamp());
-
+        let tx_id = format!("ckbtc_tx_{}", chrono::Utc::now().timestamp());
         Ok(tx_id)
     }
 
-    /// Verify wallet address exists
+    /// Verify wallet address exists (all principals can receive ckBTC)
     pub async fn verify_wallet_exists(&self, creator_id: Principal) -> Result<bool> {
-        // TODO: Check if creator has a BTC wallet in Yral
-        // For now, assume all creators have wallets
+        // All valid principals can receive ckBTC on the IC
         log::debug!("Verifying wallet existence for creator {}", creator_id);
         Ok(true)
     }
 
-    /// Get wallet balance
+    /// Get wallet balance in BTC
     pub async fn get_wallet_balance(&self, creator_id: Principal) -> Result<f64> {
-        // TODO: Query actual wallet balance
         log::debug!("Getting wallet balance for creator {}", creator_id);
-        Ok(0.0)
+
+        // Get balance in smallest units (e8s)
+        let balance = self.ckbtc_ops.load_balance(creator_id).await
+            .map_err(|e| anyhow::anyhow!("Failed to load balance: {}", e))?;
+
+        // Convert from e8s (satoshis) to BTC
+        // balance.e8s is the amount in satoshis
+        let btc_amount = balance.e8s.0.to_f64().unwrap_or(0.0) / 100_000_000.0;
+
+        Ok(btc_amount)
     }
 }
 

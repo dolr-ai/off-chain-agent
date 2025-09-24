@@ -24,9 +24,9 @@ pub struct RewardsModule {
 }
 
 impl RewardsModule {
-    pub fn new(redis_pool: RedisPool) -> Self {
+    pub fn new(redis_pool: RedisPool, admin_agent: ic_agent::Agent) -> Self {
         let view_tracker = ViewTracker::new(redis_pool.clone());
-        let reward_engine = RewardEngine::new(redis_pool.clone());
+        let reward_engine = RewardEngine::new(redis_pool.clone(), admin_agent);
 
         Self {
             view_tracker,
