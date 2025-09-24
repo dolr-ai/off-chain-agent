@@ -38,6 +38,8 @@ impl RewardsModule {
     pub async fn initialize(&mut self) -> Result<()> {
         // Load Lua scripts into Redis
         self.view_tracker.load_lua_scripts().await?;
+        // Initialize reward engine (loads Lua scripts)
+        self.reward_engine.initialize().await?;
         Ok(())
     }
 }

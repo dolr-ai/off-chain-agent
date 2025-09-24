@@ -3,7 +3,7 @@ use crate::{
     events::types::VideoDurationWatchedPayloadV2,
     rewards::{
         btc_conversion::BtcConverter,
-        config::{ConfigManager, RewardConfig},
+        config::{get_config, update_config as update_config_fn, RewardConfig},
         fraud_detection::{FraudCheck, FraudDetector},
         history::{HistoryTracker, RewardRecord, ViewRecord},
         user_verification::UserVerification,
@@ -26,7 +26,6 @@ pub struct RewardEngine {
     fraud_detector: FraudDetector,
     btc_converter: BtcConverter,
     wallet: WalletIntegration,
-    config_manager: ConfigManager,
 }
 
 impl RewardEngine {
@@ -37,8 +36,6 @@ impl RewardEngine {
         let fraud_detector = FraudDetector::new(redis_pool.clone());
         let btc_converter = BtcConverter::new();
         let wallet = WalletIntegration::new();
-        let config_manager = ConfigManager::new(None);
-
         Self {
             redis_pool,
             view_tracker,
@@ -47,7 +44,6 @@ impl RewardEngine {
             fraud_detector,
             btc_converter,
             wallet,
-            config_manager,
         }
     }
 
@@ -62,7 +58,15 @@ impl RewardEngine {
         );
         let btc_converter = BtcConverter::new();
         let wallet = WalletIntegration::new();
-        let config_manager = ConfigManager::new(Some(config));
+        // Initialize config in Redis if provided
+        tokio::spawn({
+            let redis_pool = redis_pool.clone();
+            async move {
+                if let Err(e) = update_config_fn(&redis_pool, config).await {
+                    log::error!("Failed to initialize config in Redis: {}", e);
+                }
+            }
+        });
 
         Self {
             redis_pool,
@@ -72,7 +76,6 @@ impl RewardEngine {
             fraud_detector,
             btc_converter,
             wallet,
-            config_manager,
         }
     }
 
@@ -95,7 +98,12 @@ impl RewardEngine {
             return Ok(());
         }
 
-        let config = self.config_manager.get_config().await;
+        let config = get_config(&self.redis_pool).await
+            .map_err(|e| {
+                log::error!("Failed to get config: {}", e);
+                e
+            })
+            .unwrap_or_default();
         if event.absolute_watched < config.min_watch_duration {
             log::debug!(
                 "Skipping view with insufficient watch duration: {} < {}",
@@ -127,11 +135,10 @@ impl RewardEngine {
             return Ok(());
         }
 
-        // 4. ATOMIC: Count the view
-        let config_version = self.config_manager.get_config_version().await;
+        // 4. ATOMIC: Count the view (config version is now checked in Lua script)
         let view_count = self
             .view_tracker
-            .track_view(video_id, &event.user_id, config_version)
+            .track_view(video_id, &event.user_id)
             .await?;
 
         if let Some(count) = view_count {
@@ -292,12 +299,17 @@ impl RewardEngine {
 
     /// Get current configuration
     pub async fn get_config(&self) -> RewardConfig {
-        self.config_manager.get_config().await
+        get_config(&self.redis_pool)
+            .await
+            .unwrap_or_else(|e| {
+                log::error!("Failed to get config: {}", e);
+                RewardConfig::default()
+            })
     }
 
     /// Update configuration
     pub async fn update_config(&self, new_config: RewardConfig) -> Result<()> {
-        self.config_manager.update_config(new_config).await?;
+        update_config_fn(&self.redis_pool, new_config).await?;
         log::info!("Reward configuration updated");
         Ok(())
     }

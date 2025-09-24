@@ -6,26 +6,30 @@ use sha1::{Digest, Sha1};
 
 const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     -- Atomic operation for view counting with config change handling
-    local views_set = KEYS[1]  -- rewards:views:{video_id}
-    local count_key = KEYS[2]  -- rewards:view_count:{video_id}
-    local config_version_key = KEYS[3]  -- rewards:config_version:{video_id}
+    -- Using HSET to store both count and config_version in single hash
+    local views_set = KEYS[1]  -- rewards:views:{video_id} (set of user IDs)
+    local video_hash = KEYS[2]  -- rewards:video:{video_id} (hash with count & config_version)
 
     local user_id = ARGV[1]
-    local current_config_version = ARGV[2]
 
-    -- Check if config changed
-    local stored_version = redis.call('GET', config_version_key)
-    if stored_version ~= current_config_version then
-        -- Config changed, reset counter but preserve set
-        redis.call('SET', count_key, 0)
-        redis.call('SET', config_version_key, current_config_version)
+    -- Get current global config version from Redis
+    local current_global_version = redis.call('GET', 'rewards:config:version') or '1'
+
+    -- Get video's stored config version from hash
+    local video_config_version = redis.call('HGET', video_hash, 'config_version') or '0'
+
+    -- If config changed for THIS video, reset its counter
+    if video_config_version ~= current_global_version then
+        -- Reset counter to 0 and update config version
+        redis.call('HSET', video_hash, 'count', 0, 'config_version', current_global_version)
+        -- Note: We preserve the views set for deduplication
     end
 
     -- Check if user already viewed (critical check)
     local added = redis.call('SADD', views_set, user_id)
     if added == 1 then
-        -- New view, increment counter
-        return redis.call('INCR', count_key)
+        -- New view, increment counter in hash and return new value
+        return redis.call('HINCRBY', video_hash, 'count', 1)
     else
         return nil  -- Duplicate view
     end
@@ -80,26 +84,22 @@ impl ViewTracker {
         &self,
         video_id: &str,
         user_id: &Principal,
-        config_version: u64,
     ) -> Result<Option<u64>> {
         let mut conn = self.pool.get().await?;
 
         // Keys for the Lua script
         let views_set_key = format!("rewards:views:{}", video_id);
-        let count_key = format!("rewards:view_count:{}", video_id);
-        let config_version_key = format!("rewards:config_version:{}", video_id);
+        let video_hash_key = format!("rewards:video:{}", video_id);
 
         // Try to use the loaded script SHA, fallback to EVAL if not loaded
         let result: Option<u64> = if let Some(sha) = &self.script_sha {
             // Use EVALSHA for better performance
             let evalsha_result = redis::cmd("EVALSHA")
                 .arg(sha)
-                .arg(3) // number of keys
+                .arg(2) // number of keys (reduced from 3 to 2)
                 .arg(&views_set_key)
-                .arg(&count_key)
-                .arg(&config_version_key)
+                .arg(&video_hash_key)
                 .arg(user_id.to_string())
-                .arg(config_version.to_string())
                 .query_async(&mut *conn)
                 .await;
 
@@ -110,12 +110,10 @@ impl ViewTracker {
                     log::warn!("EVALSHA failed, falling back to EVAL: {}", e);
                     redis::cmd("EVAL")
                         .arg(LUA_ATOMIC_VIEW_SCRIPT)
-                        .arg(3)
+                        .arg(2)
                         .arg(&views_set_key)
-                        .arg(&count_key)
-                        .arg(&config_version_key)
+                        .arg(&video_hash_key)
                         .arg(user_id.to_string())
-                        .arg(config_version.to_string())
                         .query_async(&mut *conn)
                         .await
                         .context("Failed to execute view tracking script")?
@@ -125,12 +123,10 @@ impl ViewTracker {
             // Script not loaded, use EVAL
             redis::cmd("EVAL")
                 .arg(LUA_ATOMIC_VIEW_SCRIPT)
-                .arg(3)
+                .arg(2)
                 .arg(&views_set_key)
-                .arg(&count_key)
-                .arg(&config_version_key)
+                .arg(&video_hash_key)
                 .arg(user_id.to_string())
-                .arg(config_version.to_string())
                 .query_async(&mut *conn)
                 .await
                 .context("Failed to execute view tracking script")?
@@ -141,22 +137,22 @@ impl ViewTracker {
 
     pub async fn get_view_count(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let count_key = format!("rewards:view_count:{}", video_id);
-        let count: Option<u64> = conn.get(&count_key).await?;
-        Ok(count.unwrap_or(0))
+        let video_hash_key = format!("rewards:video:{}", video_id);
+        let count: Option<String> = conn.hget(&video_hash_key, "count").await?;
+        Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn get_last_milestone(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let milestone_key = format!("rewards:last_milestone:{}", video_id);
-        let milestone: Option<u64> = conn.get(&milestone_key).await?;
-        Ok(milestone.unwrap_or(0))
+        let video_hash_key = format!("rewards:video:{}", video_id);
+        let milestone: Option<String> = conn.hget(&video_hash_key, "last_milestone").await?;
+        Ok(milestone.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn set_last_milestone(&self, video_id: &str, milestone: u64) -> Result<()> {
         let mut conn = self.pool.get().await?;
-        let milestone_key = format!("rewards:last_milestone:{}", video_id);
-        conn.set(&milestone_key, milestone).await?;
+        let video_hash_key = format!("rewards:video:{}", video_id);
+        conn.hset(&video_hash_key, "last_milestone", milestone).await?;
         Ok(())
     }
 }

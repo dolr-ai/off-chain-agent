@@ -1,7 +1,7 @@
-use anyhow::Result;
+use crate::types::RedisPool;
+use anyhow::{Context, Result};
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -27,32 +27,75 @@ impl Default for RewardConfig {
     }
 }
 
-#[derive(Clone)]
-pub struct ConfigManager {
-    config: Arc<RwLock<RewardConfig>>,
-}
+/// Get the current reward configuration from Redis
+pub async fn get_config(redis_pool: &RedisPool) -> Result<RewardConfig> {
+    let mut conn = redis_pool.get().await?;
+    let config_str: Option<String> = conn
+        .get("rewards:config")
+        .await
+        .context("Failed to get config from Redis")?;
 
-impl ConfigManager {
-    pub fn new(initial_config: Option<RewardConfig>) -> Self {
-        Self {
-            config: Arc::new(RwLock::new(initial_config.unwrap_or_default())),
+    match config_str {
+        Some(s) => serde_json::from_str(&s).context("Failed to deserialize config"),
+        None => {
+            // If no config exists, initialize with default
+            let default_config = RewardConfig::default();
+            initialize_config(redis_pool, &default_config).await?;
+            Ok(default_config)
         }
     }
+}
 
-    pub async fn get_config(&self) -> RewardConfig {
-        self.config.read().await.clone()
-    }
+/// Update the reward configuration in Redis
+pub async fn update_config(redis_pool: &RedisPool, new_config: RewardConfig) -> Result<()> {
+    let mut conn = redis_pool.get().await?;
 
-    pub async fn update_config(&self, new_config: RewardConfig) -> Result<()> {
-        let mut config = self.config.write().await;
-        // Increment version on config change
-        let mut updated_config = new_config;
-        updated_config.config_version = config.config_version + 1;
-        *config = updated_config;
-        Ok(())
-    }
+    // Atomically increment the global config version
+    let version: u64 = conn
+        .incr("rewards:config:version", 1)
+        .await
+        .context("Failed to increment config version")?;
 
-    pub async fn get_config_version(&self) -> u64 {
-        self.config.read().await.config_version
-    }
+    // Update config with new version
+    let mut config = new_config;
+    config.config_version = version;
+
+    let config_json = serde_json::to_string(&config)?;
+    conn.set("rewards:config", config_json)
+        .await
+        .context("Failed to store config in Redis")?;
+
+    log::info!("Updated reward config to version {}: {:?}", version, config);
+    Ok(())
+}
+
+/// Get the current config version from Redis
+pub async fn get_config_version(redis_pool: &RedisPool) -> Result<u64> {
+    let mut conn = redis_pool.get().await?;
+    let version: Option<u64> = conn
+        .get("rewards:config:version")
+        .await
+        .context("Failed to get config version")?;
+    Ok(version.unwrap_or(1))
+}
+
+/// Initialize config in Redis if it doesn't exist
+async fn initialize_config(redis_pool: &RedisPool, config: &RewardConfig) -> Result<()> {
+    let mut conn = redis_pool.get().await?;
+
+    // Set initial version if not exists
+    let _: bool = conn
+        .set_nx("rewards:config:version", config.config_version)
+        .await
+        .context("Failed to initialize config version")?;
+
+    // Set config
+    let config_json = serde_json::to_string(config)?;
+    let _: bool = conn
+        .set_nx("rewards:config", config_json)
+        .await
+        .context("Failed to initialize config")?;
+
+    log::info!("Initialized reward config with defaults: {:?}", config);
+    Ok(())
 }
