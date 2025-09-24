@@ -1,4 +1,4 @@
-use crate::types::RedisPool;
+use crate::{consts::GOOGLE_CHAT_REPORT_SPACE_URL, offchain_service::send_message_gchat, types::RedisPool};
 use anyhow::Result;
 use candid::Principal;
 use chrono::Utc;
@@ -142,34 +142,82 @@ impl FraudDetector {
     }
 }
 
-/// Send fraud alert to Google Chat (or other monitoring system)
+/// Send fraud alert to Google Chat
 fn send_fraud_alert(creator_id: String, reward_count: usize) {
     tokio::spawn(async move {
-        // TODO: Implement actual Google Chat webhook integration
-        // For now, just log the alert
         log::error!(
             "FRAUD ALERT: Creator {} received {} rewards in short time window",
             creator_id,
             reward_count
         );
 
-        // Example Google Chat webhook payload
-        let payload = json!({
-            "text": format!(
-                "⚠️ *Fraud Alert*\nCreator: `{}`\nRewards in 10 minutes: {}\nAction: Shadow banned for 1 hour",
-                creator_id,
-                reward_count
-            )
+        // Create Google Chat message with card format for better visibility
+        let data = json!({
+            "cardsV2": [{
+                "card": {
+                    "header": {
+                        "title": "⚠️ Fraud Alert - Reward System",
+                        "subtitle": "Suspicious activity detected",
+                        "imageUrl": "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/warning/default/48px.svg",
+                        "imageType": "CIRCLE"
+                    },
+                    "sections": [{
+                        "header": "Alert Details",
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "topLabel": "Creator Principal",
+                                    "text": format!("<b>{}</b>", creator_id),
+                                    "startIcon": {
+                                        "knownIcon": "PERSON"
+                                    }
+                                }
+                            },
+                            {
+                                "decoratedText": {
+                                    "topLabel": "Rewards in Time Window",
+                                    "text": format!("<b>{} rewards</b> in 10 minutes", reward_count),
+                                    "startIcon": {
+                                        "knownIcon": "CLOCK"
+                                    }
+                                }
+                            },
+                            {
+                                "decoratedText": {
+                                    "topLabel": "Action Taken",
+                                    "text": "<b><font color=\"#FF0000\">Shadow banned for 1 hour</font></b>",
+                                    "startIcon": {
+                                        "knownIcon": "BOOKMARK"
+                                    }
+                                }
+                            },
+                            {
+                                "decoratedText": {
+                                    "topLabel": "Timestamp",
+                                    "text": format!("{}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")),
+                                    "startIcon": {
+                                        "knownIcon": "INVITE"
+                                    }
+                                }
+                            }
+                        ]
+                    }],
+                    "fixedFooter": {
+                        "primaryButton": {
+                            "text": "View Creator",
+                            "url": format!("https://yral.com/@{}", creator_id),
+                            "type": "OPEN_LINK"
+                        }
+                    }
+                }
+            }]
         });
 
-        // TODO: Send to actual webhook URL
-        // Example:
-        // let webhook_url = std::env::var("GOOGLE_CHAT_WEBHOOK_URL").ok();
-        // if let Some(url) = webhook_url {
-        //     let client = reqwest::Client::new();
-        //     let _ = client.post(&url).json(&payload).send().await;
-        // }
-
-        log::debug!("Fraud alert payload: {}", payload);
+        // Send to Google Chat
+        if let Err(e) = send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, data).await {
+            log::error!("Failed to send fraud alert to Google Chat: {}", e);
+        } else {
+            log::info!("Fraud alert sent to Google Chat for creator {}", creator_id);
+        }
     });
 }
