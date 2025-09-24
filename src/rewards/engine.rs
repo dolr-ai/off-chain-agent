@@ -47,7 +47,11 @@ impl RewardEngine {
         }
     }
 
-    pub fn with_config(redis_pool: RedisPool, admin_agent: ic_agent::Agent, config: RewardConfig) -> Self {
+    pub fn with_config(
+        redis_pool: RedisPool,
+        admin_agent: ic_agent::Agent,
+        config: RewardConfig,
+    ) -> Self {
         let view_tracker = ViewTracker::new(redis_pool.clone());
         let user_verification = UserVerification::new(redis_pool.clone());
         let history_tracker = HistoryTracker::new(redis_pool.clone());
@@ -98,7 +102,8 @@ impl RewardEngine {
             return Ok(());
         }
 
-        let config = get_config(&self.redis_pool).await
+        let config = get_config(&self.redis_pool)
+            .await
             .map_err(|e| {
                 log::error!("Failed to get config: {}", e);
                 e
@@ -130,8 +135,15 @@ impl RewardEngine {
         }
 
         // 3. Check if creator is shadow banned
-        if self.fraud_detector.is_shadow_banned(publisher_user_id).await? {
-            log::debug!("Creator {} is shadow banned, skipping reward", publisher_user_id);
+        if self
+            .fraud_detector
+            .is_shadow_banned(publisher_user_id)
+            .await?
+        {
+            log::debug!(
+                "Creator {} is shadow banned, skipping reward",
+                publisher_user_id
+            );
             return Ok(());
         }
 
@@ -150,13 +162,15 @@ impl RewardEngine {
             );
 
             // 5. NON-ATOMIC: Store history (fire and forget)
-            self.history_tracker.record_view(ViewRecord {
-                user_id: event.user_id.to_string(),
-                video_id: video_id.clone(),
-                timestamp: Utc::now().timestamp(),
-                duration_watched: event.absolute_watched,
-                percentage_watched: event.percentage_watched,
-            }).await;
+            self.history_tracker
+                .record_view(ViewRecord {
+                    user_id: event.user_id.to_string(),
+                    video_id: video_id.clone(),
+                    timestamp: Utc::now().timestamp(),
+                    duration_watched: event.absolute_watched,
+                    percentage_watched: event.percentage_watched,
+                })
+                .await;
 
             // 6. Check for milestone
             if count % config.view_milestone == 0 {
@@ -181,9 +195,15 @@ impl RewardEngine {
             }
 
             // 7. Fraud detection (async, non-blocking)
-            let fraud_check = self.fraud_detector.check_fraud_patterns(*publisher_user_id).await;
+            let fraud_check = self
+                .fraud_detector
+                .check_fraud_patterns(*publisher_user_id)
+                .await;
             if fraud_check == FraudCheck::Suspicious {
-                log::warn!("Suspicious activity detected for creator {}", publisher_user_id);
+                log::warn!(
+                    "Suspicious activity detected for creator {}",
+                    publisher_user_id
+                );
             }
         } else {
             log::debug!(
@@ -274,7 +294,11 @@ impl RewardEngine {
                 .await;
             }
             Err(e) => {
-                log::error!("Failed to queue BTC reward for creator {}: {}", creator_id, e);
+                log::error!(
+                    "Failed to queue BTC reward for creator {}: {}",
+                    creator_id,
+                    e
+                );
                 return Err(e);
             }
         }
@@ -283,6 +307,7 @@ impl RewardEngine {
     }
 
     /// Send notification to creator about reward
+    #[allow(clippy::too_many_arguments)]
     async fn send_reward_notification(
         &self,
         creator_id: &Principal,
@@ -320,12 +345,10 @@ impl RewardEngine {
 
     /// Get current configuration
     pub async fn get_config(&self) -> RewardConfig {
-        get_config(&self.redis_pool)
-            .await
-            .unwrap_or_else(|e| {
-                log::error!("Failed to get config: {}", e);
-                RewardConfig::default()
-            })
+        get_config(&self.redis_pool).await.unwrap_or_else(|e| {
+            log::error!("Failed to get config: {}", e);
+            RewardConfig::default()
+        })
     }
 
     /// Update configuration

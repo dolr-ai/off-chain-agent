@@ -1,8 +1,4 @@
-use crate::{
-    app_state::AppState,
-    consts::USER_INFO_SERVICE_CANISTER_ID,
-    types::RedisPool,
-};
+use crate::{app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, types::RedisPool};
 use anyhow::Result;
 use candid::Principal;
 use redis::AsyncCommands;
@@ -33,7 +29,11 @@ impl UserVerification {
         let cached: Option<String> = conn.get(&cache_key).await?;
 
         if let Some(cached_value) = cached {
-            log::debug!("User registration cache hit for {}: {}", principal, cached_value);
+            log::debug!(
+                "User registration cache hit for {}: {}",
+                principal,
+                cached_value
+            );
             return Ok(cached_value == "true");
         }
 
@@ -48,7 +48,11 @@ impl UserVerification {
                 let value = if is_registered { "true" } else { "false" };
                 // Set with 1 hour TTL (3600 seconds)
                 let _ = conn.set_ex::<_, _, ()>(&cache_key_clone, value, 3600).await;
-                log::debug!("Cached user registration status for {}: {}", principal, value);
+                log::debug!(
+                    "Cached user registration status for {}: {}",
+                    principal,
+                    value
+                );
             }
         });
 
@@ -73,7 +77,10 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
 
     match result {
         yral_canisters_client::user_info_service::Result2::Ok(session_type) => {
-            matches!(session_type, yral_canisters_client::user_info_service::SessionType::RegisteredSession)
+            matches!(
+                session_type,
+                yral_canisters_client::user_info_service::SessionType::RegisteredSession
+            )
         }
         yral_canisters_client::user_info_service::Result2::Err(e) => {
             if e.contains("User not found") {

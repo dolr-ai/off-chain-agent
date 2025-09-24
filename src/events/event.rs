@@ -863,11 +863,17 @@ impl Event {
         };
 
         // Initialize reward engine
-        let reward_engine = RewardEngine::new(app_state.leaderboard_redis_pool.clone(), app_state.agent.clone());
+        let reward_engine = RewardEngine::new(
+            app_state.leaderboard_redis_pool.clone(),
+            app_state.agent.clone(),
+        );
 
         // Process the view for rewards
         let app_state_arc = std::sync::Arc::new(app_state.clone());
-        if let Err(e) = reward_engine.process_video_view(params, &app_state_arc).await {
+        if let Err(e) = reward_engine
+            .process_video_view(params, &app_state_arc)
+            .await
+        {
             log::error!("Failed to process BTC rewards: {e:?}");
         }
     }

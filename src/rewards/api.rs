@@ -15,7 +15,7 @@ use candid::Principal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
-use utoipa_axum::router::{OpenApiRouter, UtoipaMethodRouterExt};
+use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -23,7 +23,7 @@ pub struct PaginationParams {
     #[serde(default = "default_limit")]
     pub limit: usize,
     #[serde(default)]
-    pub offset: usize,
+    pub _offset: usize,
 }
 
 fn default_limit() -> usize {
@@ -119,9 +119,8 @@ async fn get_user_view_history(
     Path(user_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<ViewHistoryResponse>, (StatusCode, String)> {
-    let principal = Principal::from_text(&user_id).map_err(|e| {
-        (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e))
-    })?;
+    let principal = Principal::from_text(&user_id)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
     let history_tracker = HistoryTracker::new(state.leaderboard_redis_pool.clone());
 
@@ -156,9 +155,8 @@ async fn get_user_reward_history(
     Path(user_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<RewardHistoryResponse>, (StatusCode, String)> {
-    let principal = Principal::from_text(&user_id).map_err(|e| {
-        (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e))
-    })?;
+    let principal = Principal::from_text(&user_id)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
     let history_tracker = HistoryTracker::new(state.leaderboard_redis_pool.clone());
 
@@ -193,9 +191,8 @@ async fn get_creator_reward_history(
     Path(creator_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<RewardHistoryResponse>, (StatusCode, String)> {
-    let principal = Principal::from_text(&creator_id).map_err(|e| {
-        (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e))
-    })?;
+    let principal = Principal::from_text(&creator_id)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
     let history_tracker = HistoryTracker::new(state.leaderboard_redis_pool.clone());
 
@@ -225,7 +222,7 @@ async fn get_creator_reward_history(
     )
 )]
 async fn get_video_stats(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Path(video_id): Path<String>,
 ) -> Result<Json<VideoStatsResponse>, (StatusCode, String)> {
     // TODO: This would use the RewardEngine to get stats
@@ -250,7 +247,7 @@ async fn get_video_stats(
     )
 )]
 async fn get_reward_config(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> Result<Json<ConfigResponse>, (StatusCode, String)> {
     // TODO: Get config from RewardEngine
     // For now, return default config
@@ -278,7 +275,12 @@ pub async fn update_reward_config(
     log::info!("Updating reward configuration: {:?}", new_config);
 
     // Update the configuration through the rewards module
-    if let Err(e) = state.rewards_module.reward_engine.update_config(new_config).await {
+    if let Err(e) = state
+        .rewards_module
+        .reward_engine
+        .update_config(new_config)
+        .await
+    {
         log::error!("Failed to update reward configuration: {}", e);
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,

@@ -61,7 +61,7 @@ pub async fn update_config(redis_pool: &RedisPool, new_config: RewardConfig) -> 
     config.config_version = version;
 
     let config_json = serde_json::to_string(&config)?;
-    conn.set("rewards:config", config_json)
+    conn.set::<_, _, ()>("rewards:config", config_json)
         .await
         .context("Failed to store config in Redis")?;
 
@@ -70,7 +70,7 @@ pub async fn update_config(redis_pool: &RedisPool, new_config: RewardConfig) -> 
 }
 
 /// Get the current config version from Redis
-pub async fn get_config_version(redis_pool: &RedisPool) -> Result<u64> {
+pub async fn _get_config_version(redis_pool: &RedisPool) -> Result<u64> {
     let mut conn = redis_pool.get().await?;
     let version: Option<u64> = conn
         .get("rewards:config:version")
@@ -187,7 +187,9 @@ mod tests {
             config_version: 0, // Will be overridden
         };
 
-        update_config(&test_config.redis_pool, new_config).await.unwrap();
+        update_config(&test_config.redis_pool, new_config)
+            .await
+            .unwrap();
 
         // Verify the config was updated
         let retrieved_config = get_config(&test_config.redis_pool).await.unwrap();
@@ -221,7 +223,9 @@ mod tests {
                 reward_amount_inr: 10.0 + i as f64,
                 ..Default::default()
             };
-            update_config(&test_config.redis_pool, config).await.unwrap();
+            update_config(&test_config.redis_pool, config)
+                .await
+                .unwrap();
         }
 
         // Version should have incremented by 3
@@ -247,7 +251,9 @@ mod tests {
             config_version: 1,
         };
 
-        update_config(&test_config.redis_pool, config.clone()).await.unwrap();
+        update_config(&test_config.redis_pool, config.clone())
+            .await
+            .unwrap();
 
         let retrieved = get_config(&test_config.redis_pool).await.unwrap();
         assert_eq!(retrieved.reward_amount_inr, config.reward_amount_inr);

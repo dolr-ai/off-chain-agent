@@ -1,4 +1,6 @@
-use crate::{consts::GOOGLE_CHAT_REPORT_SPACE_URL, offchain_service::send_message_gchat, types::RedisPool};
+use crate::{
+    consts::GOOGLE_CHAT_REPORT_SPACE_URL, offchain_service::send_message_gchat, types::RedisPool,
+};
 use anyhow::Result;
 use candid::Principal;
 use chrono::Utc;
@@ -33,11 +35,7 @@ impl FraudDetector {
         }
     }
 
-    pub fn with_config(
-        redis_pool: RedisPool,
-        threshold: usize,
-        shadow_ban_duration: u64,
-    ) -> Self {
+    pub fn with_config(redis_pool: RedisPool, threshold: usize, shadow_ban_duration: u64) -> Self {
         Self {
             redis_pool,
             threshold,
@@ -68,10 +66,7 @@ impl FraudDetector {
                 // Get recent timestamps
                 if let Ok(recent_timestamps) = conn.lrange::<_, Vec<i64>>(&key, 0, -1).await {
                     let cutoff = current_timestamp - time_window;
-                    let recent_count = recent_timestamps
-                        .iter()
-                        .filter(|&&ts| ts > cutoff)
-                        .count();
+                    let recent_count = recent_timestamps.iter().filter(|&&ts| ts > cutoff).count();
 
                     log::debug!(
                         "Creator {} has {} rewards in last {} seconds",
@@ -124,19 +119,24 @@ impl FraudDetector {
     }
 
     /// Manually shadow ban a creator
-    pub async fn shadow_ban(&self, creator_id: &Principal, duration_seconds: u64) -> Result<()> {
+    pub async fn _shadow_ban(&self, creator_id: &Principal, duration_seconds: u64) -> Result<()> {
         let mut conn = self.redis_pool.get().await?;
         let ban_key = format!("rewards:shadow_ban:{}", creator_id);
-        conn.set_ex(&ban_key, "1", duration_seconds).await?;
-        log::info!("Manually shadow banned creator {} for {} seconds", creator_id, duration_seconds);
+        conn.set_ex::<_, _, ()>(&ban_key, "1", duration_seconds)
+            .await?;
+        log::info!(
+            "Manually shadow banned creator {} for {} seconds",
+            creator_id,
+            duration_seconds
+        );
         Ok(())
     }
 
     /// Remove shadow ban for a creator
-    pub async fn remove_shadow_ban(&self, creator_id: &Principal) -> Result<()> {
+    pub async fn _remove_shadow_ban(&self, creator_id: &Principal) -> Result<()> {
         let mut conn = self.redis_pool.get().await?;
         let ban_key = format!("rewards:shadow_ban:{}", creator_id);
-        conn.del(&ban_key).await?;
+        conn.del::<_, ()>(&ban_key).await?;
         log::info!("Removed shadow ban for creator {}", creator_id);
         Ok(())
     }
@@ -308,10 +308,18 @@ mod tests {
         let creator = test_detector.test_principal("ban1");
 
         // Manually shadow ban
-        test_detector.detector.shadow_ban(&creator, 60).await.unwrap();
+        test_detector
+            .detector
+            .shadow_ban(&creator, 60)
+            .await
+            .unwrap();
 
         // Check if shadow banned
-        let is_banned = test_detector.detector.is_shadow_banned(&creator).await.unwrap();
+        let is_banned = test_detector
+            .detector
+            .is_shadow_banned(&creator)
+            .await
+            .unwrap();
         assert!(is_banned);
 
         // Check returns suspicious
@@ -327,12 +335,28 @@ mod tests {
         let creator = test_detector.test_principal("ban2");
 
         // Shadow ban
-        test_detector.detector.shadow_ban(&creator, 60).await.unwrap();
-        assert!(test_detector.detector.is_shadow_banned(&creator).await.unwrap());
+        test_detector
+            .detector
+            .shadow_ban(&creator, 60)
+            .await
+            .unwrap();
+        assert!(test_detector
+            .detector
+            .is_shadow_banned(&creator)
+            .await
+            .unwrap());
 
         // Remove shadow ban
-        test_detector.detector.remove_shadow_ban(&creator).await.unwrap();
-        assert!(!test_detector.detector.is_shadow_banned(&creator).await.unwrap());
+        test_detector
+            .detector
+            .remove_shadow_ban(&creator)
+            .await
+            .unwrap();
+        assert!(!test_detector
+            .detector
+            .is_shadow_banned(&creator)
+            .await
+            .unwrap());
 
         test_detector.cleanup().await.unwrap();
     }
@@ -374,9 +398,7 @@ mod tests {
         let mut handles = vec![];
         for creator in creators {
             let detector = test_detector.detector.clone();
-            let handle = tokio::spawn(async move {
-                detector.check_fraud_patterns(creator).await
-            });
+            let handle = tokio::spawn(async move { detector.check_fraud_patterns(creator).await });
             handles.push(handle);
         }
 
@@ -394,14 +416,26 @@ mod tests {
         let creator = test_detector.test_principal("expire");
 
         // Shadow ban for 1 second
-        test_detector.detector.shadow_ban(&creator, 1).await.unwrap();
-        assert!(test_detector.detector.is_shadow_banned(&creator).await.unwrap());
+        test_detector
+            .detector
+            .shadow_ban(&creator, 1)
+            .await
+            .unwrap();
+        assert!(test_detector
+            .detector
+            .is_shadow_banned(&creator)
+            .await
+            .unwrap());
 
         // Wait for expiry
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         // Should no longer be banned
-        assert!(!test_detector.detector.is_shadow_banned(&creator).await.unwrap());
+        assert!(!test_detector
+            .detector
+            .is_shadow_banned(&creator)
+            .await
+            .unwrap());
 
         test_detector.cleanup().await.unwrap();
     }

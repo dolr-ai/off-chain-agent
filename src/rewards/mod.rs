@@ -8,13 +8,11 @@ pub mod user_verification;
 pub mod view_tracking;
 pub mod wallet;
 
-pub use config::RewardConfig;
 pub use engine::RewardEngine;
 pub use view_tracking::ViewTracker;
 
 use crate::types::RedisPool;
 use anyhow::Result;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RewardsModule {

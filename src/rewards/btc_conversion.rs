@@ -29,7 +29,8 @@ struct CachedRate {
     timestamp: i64,
 }
 
-static RATE_CACHE: Lazy<Arc<RwLock<Option<CachedRate>>>> = Lazy::new(|| Arc::new(RwLock::new(None)));
+static RATE_CACHE: Lazy<Arc<RwLock<Option<CachedRate>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(None)));
 
 #[derive(Clone)]
 pub struct BtcConverter {
@@ -124,15 +125,23 @@ impl BtcConverter {
     }
 
     /// Store rate in Redis for distributed caching (optional)
-    pub async fn cache_rate_in_redis(&self, redis_pool: &crate::types::RedisPool, rate: f64) -> Result<()> {
+    pub async fn _cache_rate_in_redis(
+        &self,
+        redis_pool: &crate::types::RedisPool,
+        rate: f64,
+    ) -> Result<()> {
         let mut conn = redis_pool.get().await?;
         let key = "rewards:btc_inr_rate";
-        conn.set_ex(key, rate.to_string(), CACHE_DURATION_SECS as u64).await?;
+        conn.set_ex::<_, _, ()>(key, rate.to_string(), CACHE_DURATION_SECS as u64)
+            .await?;
         Ok(())
     }
 
     /// Get cached rate from Redis (optional)
-    pub async fn get_cached_rate_from_redis(&self, redis_pool: &crate::types::RedisPool) -> Result<Option<f64>> {
+    pub async fn _get_cached_rate_from_redis(
+        &self,
+        redis_pool: &crate::types::RedisPool,
+    ) -> Result<Option<f64>> {
         let mut conn = redis_pool.get().await?;
         let key = "rewards:btc_inr_rate";
         let rate: Option<String> = conn.get(key).await?;
@@ -141,18 +150,18 @@ impl BtcConverter {
 }
 
 /// Convenience function to convert INR to BTC
-pub async fn convert_inr_to_btc(inr_amount: f64) -> Result<f64> {
+pub async fn _convert_inr_to_btc(inr_amount: f64) -> Result<f64> {
     let converter = BtcConverter::new();
     converter.convert_inr_to_btc(inr_amount).await
 }
 
 /// Format BTC amount for display (8 decimal places)
-pub fn format_btc(btc_amount: f64) -> String {
+pub fn _format_btc(btc_amount: f64) -> String {
     format!("{:.8}", btc_amount)
 }
 
 /// Format INR amount for display (2 decimal places)
-pub fn format_inr(inr_amount: f64) -> String {
+pub fn _format_inr(inr_amount: f64) -> String {
     format!("{:.2}", inr_amount)
 }
 

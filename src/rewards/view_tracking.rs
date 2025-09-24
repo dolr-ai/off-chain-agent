@@ -81,11 +81,7 @@ impl ViewTracker {
         Ok(sha)
     }
 
-    pub async fn track_view(
-        &self,
-        video_id: &str,
-        user_id: &Principal,
-    ) -> Result<Option<u64>> {
+    pub async fn track_view(&self, video_id: &str, user_id: &Principal) -> Result<Option<u64>> {
         let mut conn = self.pool.get().await?;
 
         // Keys for the Lua script
@@ -153,7 +149,8 @@ impl ViewTracker {
     pub async fn set_last_milestone(&self, video_id: &str, milestone: u64) -> Result<()> {
         let mut conn = self.pool.get().await?;
         let video_hash_key = format!("rewards:video:{}", video_id);
-        conn.hset(&video_hash_key, "last_milestone", milestone).await?;
+        conn.hset::<_, _, _, ()>(&video_hash_key, "last_milestone", milestone)
+            .await?;
         Ok(())
     }
 }
@@ -186,7 +183,10 @@ mod tests {
 
             let key_prefix = test_key_prefix();
             let mut tracker = ViewTracker::new(pool);
-            tracker.load_lua_scripts().await.expect("Failed to load Lua scripts");
+            tracker
+                .load_lua_scripts()
+                .await
+                .expect("Failed to load Lua scripts");
 
             Self {
                 tracker,
@@ -239,7 +239,11 @@ mod tests {
         let video_id = test_tracker.test_video_id("video1");
         let user_id = Principal::from_text("aaaaa-aa").unwrap();
 
-        let count = test_tracker.tracker.track_view(&video_id, &user_id).await.unwrap();
+        let count = test_tracker
+            .tracker
+            .track_view(&video_id, &user_id)
+            .await
+            .unwrap();
         assert_eq!(count, Some(1));
 
         test_tracker.cleanup().await.unwrap();
@@ -251,10 +255,18 @@ mod tests {
         let video_id = test_tracker.test_video_id("video2");
         let user_id = Principal::from_text("aaaaa-aa").unwrap();
 
-        let count1 = test_tracker.tracker.track_view(&video_id, &user_id).await.unwrap();
+        let count1 = test_tracker
+            .tracker
+            .track_view(&video_id, &user_id)
+            .await
+            .unwrap();
         assert_eq!(count1, Some(1));
 
-        let count2 = test_tracker.tracker.track_view(&video_id, &user_id).await.unwrap();
+        let count2 = test_tracker
+            .tracker
+            .track_view(&video_id, &user_id)
+            .await
+            .unwrap();
         assert_eq!(count2, None);
 
         test_tracker.cleanup().await.unwrap();
@@ -269,16 +281,32 @@ mod tests {
         let user2 = Principal::self_authenticating("user2");
         let user3 = Principal::self_authenticating("user3");
 
-        let count1 = test_tracker.tracker.track_view(&video_id, &user1).await.unwrap();
+        let count1 = test_tracker
+            .tracker
+            .track_view(&video_id, &user1)
+            .await
+            .unwrap();
         assert_eq!(count1, Some(1));
 
-        let count2 = test_tracker.tracker.track_view(&video_id, &user2).await.unwrap();
+        let count2 = test_tracker
+            .tracker
+            .track_view(&video_id, &user2)
+            .await
+            .unwrap();
         assert_eq!(count2, Some(2));
 
-        let count3 = test_tracker.tracker.track_view(&video_id, &user3).await.unwrap();
+        let count3 = test_tracker
+            .tracker
+            .track_view(&video_id, &user3)
+            .await
+            .unwrap();
         assert_eq!(count3, Some(3));
 
-        let total_count = test_tracker.tracker.get_view_count(&video_id).await.unwrap();
+        let total_count = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
         assert_eq!(total_count, 3);
 
         test_tracker.cleanup().await.unwrap();
@@ -291,20 +319,43 @@ mod tests {
         let user1 = Principal::self_authenticating("reset_user1");
         let user2 = Principal::self_authenticating("reset_user2");
 
-        test_tracker.tracker.track_view(&video_id, &user1).await.unwrap();
-        test_tracker.tracker.track_view(&video_id, &user2).await.unwrap();
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user1)
+            .await
+            .unwrap();
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user2)
+            .await
+            .unwrap();
 
-        let count_before = test_tracker.tracker.get_view_count(&video_id).await.unwrap();
+        let count_before = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
         assert_eq!(count_before, 2);
 
         let mut conn = test_tracker.tracker.pool.get().await.unwrap();
-        let _: () = conn.set("rewards:config:version", "2").await.unwrap();
+        let _: () = conn
+            .set::<_, _, ()>("rewards:config:version", "2")
+            .await
+            .unwrap();
 
         // After config change, both users should be able to view again
-        let count_after_reset = test_tracker.tracker.track_view(&video_id, &user1).await.unwrap();
+        let count_after_reset = test_tracker
+            .tracker
+            .track_view(&video_id, &user1)
+            .await
+            .unwrap();
         assert_eq!(count_after_reset, Some(1)); // Counter reset to 1
 
-        let count_user2_after = test_tracker.tracker.track_view(&video_id, &user2).await.unwrap();
+        let count_user2_after = test_tracker
+            .tracker
+            .track_view(&video_id, &user2)
+            .await
+            .unwrap();
         assert_eq!(count_user2_after, Some(2)); // User2 can also view again
 
         test_tracker.cleanup().await.unwrap();
@@ -315,16 +366,32 @@ mod tests {
         let test_tracker = TestViewTracker::new().await;
         let video_id = test_tracker.test_video_id("video5");
 
-        let count = test_tracker.tracker.get_view_count(&video_id).await.unwrap();
+        let count = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
         assert_eq!(count, 0);
 
         let user1 = Principal::self_authenticating("count_user1");
         let user2 = Principal::self_authenticating("count_user2");
 
-        test_tracker.tracker.track_view(&video_id, &user1).await.unwrap();
-        test_tracker.tracker.track_view(&video_id, &user2).await.unwrap();
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user1)
+            .await
+            .unwrap();
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user2)
+            .await
+            .unwrap();
 
-        let count = test_tracker.tracker.get_view_count(&video_id).await.unwrap();
+        let count = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
         assert_eq!(count, 2);
 
         test_tracker.cleanup().await.unwrap();
@@ -335,12 +402,24 @@ mod tests {
         let test_tracker = TestViewTracker::new().await;
         let video_id = test_tracker.test_video_id("video6");
 
-        let milestone = test_tracker.tracker.get_last_milestone(&video_id).await.unwrap();
+        let milestone = test_tracker
+            .tracker
+            .get_last_milestone(&video_id)
+            .await
+            .unwrap();
         assert_eq!(milestone, 0);
 
-        test_tracker.tracker.set_last_milestone(&video_id, 5).await.unwrap();
+        test_tracker
+            .tracker
+            .set_last_milestone(&video_id, 5)
+            .await
+            .unwrap();
 
-        let milestone = test_tracker.tracker.get_last_milestone(&video_id).await.unwrap();
+        let milestone = test_tracker
+            .tracker
+            .get_last_milestone(&video_id)
+            .await
+            .unwrap();
         assert_eq!(milestone, 5);
 
         test_tracker.cleanup().await.unwrap();
@@ -359,9 +438,7 @@ mod tests {
         for user in users {
             let tracker = test_tracker.tracker.clone();
             let vid = video_id.clone();
-            let handle = tokio::spawn(async move {
-                tracker.track_view(&vid, &user).await
-            });
+            let handle = tokio::spawn(async move { tracker.track_view(&vid, &user).await });
             handles.push(handle);
         }
 
@@ -374,7 +451,11 @@ mod tests {
 
         assert_eq!(successful_views, 10);
 
-        let final_count = test_tracker.tracker.get_view_count(&video_id).await.unwrap();
+        let final_count = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
         assert_eq!(final_count, 10);
 
         test_tracker.cleanup().await.unwrap();

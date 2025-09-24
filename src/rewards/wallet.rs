@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
-use candid::{Nat, Principal};
+use anyhow::Result;
+use candid::Principal;
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -50,7 +50,7 @@ impl WalletIntegration {
         let amount_sats = (amount_btc * 100_000_000.0) as u64;
 
         // Create transaction memo as JSON string
-        let memo_json = json!({
+        let _memo_json = json!({
             "type": "video_view_reward",
             "video_id": video_id,
             "milestone": milestone,
@@ -96,7 +96,7 @@ impl WalletIntegration {
     }
 
     /// Process pending transactions
-    pub async fn process_pending_transactions(&self) -> Result<Vec<String>> {
+    pub async fn _process_pending_transactions(&self) -> Result<Vec<String>> {
         // TODO: Implement batch processing of pending transactions
         // This would:
         // 1. Query pending transactions from storage
@@ -108,7 +108,7 @@ impl WalletIntegration {
     }
 
     /// Get transaction status
-    pub async fn get_transaction_status(&self, tx_id: &str) -> Result<TransactionStatus> {
+    pub async fn _get_transaction_status(&self, tx_id: &str) -> Result<TransactionStatus> {
         // TODO: Query actual transaction status from wallet/blockchain
         log::debug!("Getting status for transaction {}", tx_id);
 
@@ -117,7 +117,7 @@ impl WalletIntegration {
     }
 
     /// Credit BTC to creator's wallet (same as queue_btc_reward but with custom memo)
-    pub async fn credit_btc_to_wallet(
+    pub async fn _credit_btc_to_wallet(
         &self,
         creator_id: Principal,
         amount_btc: f64,
@@ -135,7 +135,9 @@ impl WalletIntegration {
         );
 
         // Transfer ckBTC
-        self.ckbtc_ops.add_balance(creator_id, amount_sats).await
+        self.ckbtc_ops
+            .add_balance(creator_id, amount_sats)
+            .await
             .map_err(|e| anyhow::anyhow!("ckBTC transfer failed: {}", e))?;
 
         let tx_id = format!("ckbtc_tx_{}", chrono::Utc::now().timestamp());
@@ -143,18 +145,21 @@ impl WalletIntegration {
     }
 
     /// Verify wallet address exists (all principals can receive ckBTC)
-    pub async fn verify_wallet_exists(&self, creator_id: Principal) -> Result<bool> {
+    pub async fn _verify_wallet_exists(&self, creator_id: Principal) -> Result<bool> {
         // All valid principals can receive ckBTC on the IC
         log::debug!("Verifying wallet existence for creator {}", creator_id);
         Ok(true)
     }
 
     /// Get wallet balance in BTC
-    pub async fn get_wallet_balance(&self, creator_id: Principal) -> Result<f64> {
+    pub async fn _get_wallet_balance(&self, creator_id: Principal) -> Result<f64> {
         log::debug!("Getting wallet balance for creator {}", creator_id);
 
         // Get balance in smallest units (e8s)
-        let balance = self.ckbtc_ops.load_balance(creator_id).await
+        let balance = self
+            .ckbtc_ops
+            .load_balance(creator_id)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to load balance: {}", e))?;
 
         // Convert from e8s (satoshis) to BTC
@@ -166,7 +171,7 @@ impl WalletIntegration {
 }
 
 /// Helper function to format transaction memo
-pub fn create_transaction_memo(video_id: &str, milestone: u64, timestamp: i64) -> String {
+pub fn _create_transaction_memo(video_id: &str, milestone: u64, timestamp: i64) -> String {
     json!({
         "type": "video_view_reward",
         "video_id": video_id,
@@ -182,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_transaction_memo() {
-        let memo = create_transaction_memo("video_123", 100, 1234567890);
+        let memo = _create_transaction_memo("video_123", 100, 1234567890);
         assert!(memo.contains("video_123"));
         assert!(memo.contains("100"));
         assert!(memo.contains("1234567890"));

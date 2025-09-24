@@ -1060,18 +1060,19 @@ impl EventPayload {
                     })),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
-                            icon: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
-                            image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
                             ..Default::default()
                         }),
                         ..Default::default()
                     }),
                     webpush: Some(WebpushConfig {
                         fcm_options: Some(WebpushFcmOptions {
-                            link: Some(format!(
-                                "https://yral.com/video/{}",
-                                payload.video_id
-                            )),
+                            link: Some(format!("https://yral.com/video/{}", payload.video_id)),
                             ..Default::default()
                         }),
                         ..Default::default()

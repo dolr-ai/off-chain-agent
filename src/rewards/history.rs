@@ -56,7 +56,9 @@ impl HistoryTracker {
                 })
                 .to_string();
 
-                let _ = conn.lpush::<_, _, ()>(&video_history_key, &video_json).await;
+                let _ = conn
+                    .lpush::<_, _, ()>(&video_history_key, &video_json)
+                    .await;
                 let _ = conn.ltrim::<_, ()>(&video_history_key, 0, 9999).await; // Keep last 10k
 
                 // Store user view history
@@ -111,11 +113,7 @@ impl HistoryTracker {
     }
 
     /// Get video view history
-    pub async fn get_video_views(
-        &self,
-        video_id: &str,
-        limit: usize,
-    ) -> Result<Vec<ViewRecord>> {
+    pub async fn get_video_views(&self, video_id: &str, limit: usize) -> Result<Vec<ViewRecord>> {
         let mut conn = self.redis_pool.get().await?;
         let key = format!("rewards:video:{}:view_history", video_id);
 
@@ -203,7 +201,7 @@ impl HistoryTracker {
     }
 
     /// Update a reward record with transaction ID
-    pub async fn update_reward_tx_id(
+    pub async fn _update_reward_tx_id(
         &self,
         creator_id: &Principal,
         video_id: &str,
