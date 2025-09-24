@@ -17,6 +17,7 @@ use candid::Principal;
 use chrono::Utc;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct RewardEngine {
     redis_pool: RedisPool,
     view_tracker: ViewTracker,

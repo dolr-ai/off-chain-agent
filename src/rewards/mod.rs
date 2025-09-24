@@ -16,6 +16,7 @@ use crate::types::RedisPool;
 use anyhow::Result;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct RewardsModule {
     pub view_tracker: ViewTracker,
     pub reward_engine: RewardEngine,

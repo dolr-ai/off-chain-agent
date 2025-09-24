@@ -26,6 +26,7 @@ pub struct RewardRecord {
     pub view_count: u64,
 }
 
+#[derive(Clone)]
 pub struct HistoryTracker {
     redis_pool: RedisPool,
 }

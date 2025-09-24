@@ -27,6 +27,7 @@ impl Default for RewardConfig {
     }
 }
 
+#[derive(Clone)]
 pub struct ConfigManager {
     config: Arc<RwLock<RewardConfig>>,
 }

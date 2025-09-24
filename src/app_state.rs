@@ -5,6 +5,7 @@ use crate::events::push_notifications::NotificationClient;
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
+use crate::rewards::RewardsModule;
 use crate::types::RedisPool;
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
@@ -50,11 +51,15 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_redis: YralAuthRedis,
     pub leaderboard_redis_pool: RedisPool,
+    pub rewards_module: RewardsModule,
     pub config: AppConfig,
 }
 
 impl AppState {
     pub async fn new(app_config: AppConfig) -> Self {
+        let leaderboard_redis_pool = init_leaderboard_redis_pool().await;
+        let rewards_module = RewardsModule::new(leaderboard_redis_pool.clone());
+
         AppState {
             yral_metadata_client: init_yral_metadata_client(&app_config),
             agent: init_agent().await,
@@ -82,7 +87,8 @@ impl AppState {
             ),
             #[cfg(not(feature = "local-bin"))]
             yral_auth_redis: YralAuthRedis::init(&app_config).await,
-            leaderboard_redis_pool: init_leaderboard_redis_pool().await,
+            leaderboard_redis_pool,
+            rewards_module,
             config: app_config,
         }
     }

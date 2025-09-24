@@ -11,6 +11,7 @@ use yral_canisters_client::{
     individual_user_template::IndividualUserTemplate, user_info_service::UserInfoService,
 };
 
+#[derive(Clone)]
 pub struct UserVerification {
     redis_pool: RedisPool,
 }

@@ -23,6 +23,7 @@ pub enum TransactionStatus {
     Failed,
 }
 
+#[derive(Clone)]
 pub struct WalletIntegration {
     // TODO: Add actual wallet integration fields
     // For now, this is a placeholder implementation

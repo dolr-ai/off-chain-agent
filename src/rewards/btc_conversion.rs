@@ -31,6 +31,7 @@ struct CachedRate {
 
 static RATE_CACHE: Lazy<Arc<RwLock<Option<CachedRate>>>> = Lazy::new(|| Arc::new(RwLock::new(None)));
 
+#[derive(Clone)]
 pub struct BtcConverter {
     client: reqwest::Client,
 }

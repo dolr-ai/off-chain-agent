@@ -15,6 +15,7 @@ pub enum FraudCheck {
     Suspicious,
 }
 
+#[derive(Clone)]
 pub struct FraudDetector {
     redis_pool: RedisPool,
     threshold: usize,

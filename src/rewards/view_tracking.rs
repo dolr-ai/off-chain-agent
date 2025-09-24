@@ -38,6 +38,7 @@ fn calculate_script_sha(script: &str) -> String {
     hex::encode(result)
 }
 
+#[derive(Clone)]
 pub struct ViewTracker {
     pool: RedisPool,
     script_sha: Option<String>,

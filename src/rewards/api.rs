@@ -271,15 +271,20 @@ async fn get_reward_config(
         (status = 500, description = "Internal server error"),
     )
 )]
-async fn update_reward_config(
+pub async fn update_reward_config(
     State(state): State<Arc<AppState>>,
-    // TODO: Add authentication middleware
     Json(new_config): Json<RewardConfig>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // TODO: Update config through RewardEngine
-    // This endpoint should be protected with admin authentication
-
     log::info!("Updating reward configuration: {:?}", new_config);
+
+    // Update the configuration through the rewards module
+    if let Err(e) = state.rewards_module.reward_engine.update_config(new_config).await {
+        log::error!("Failed to update reward configuration: {}", e);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to update configuration: {}", e),
+        ));
+    }
 
     Ok(StatusCode::OK)
 }
