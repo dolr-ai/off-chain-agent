@@ -87,6 +87,10 @@ async fn main_impl() -> Result<()> {
             leaderboard::leaderboard_router(shared_state.clone()),
         )
         .nest(
+            "/api/v1/rewards",
+            rewards::api::rewards_router(shared_state.clone()),
+        )
+        .nest(
             "/api/v2/videogen",
             videogen::videogen_router_v2(shared_state.clone()),
         )
