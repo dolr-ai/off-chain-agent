@@ -775,6 +775,24 @@ pub struct TournamentEndedWinnerPayload {
     pub total_participants: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RewardEarnedPayload {
+    #[serde(rename = "creator_id")]
+    pub creator_id: Principal,
+    #[serde(rename = "video_id")]
+    pub video_id: String,
+    #[serde(rename = "milestone")]
+    pub milestone: u64,
+    #[serde(rename = "reward_btc")]
+    pub reward_btc: f64,
+    #[serde(rename = "reward_inr")]
+    pub reward_inr: f64,
+    #[serde(rename = "view_count")]
+    pub view_count: u64,
+    #[serde(rename = "timestamp")]
+    pub timestamp: i64,
+}
+
 // ----------------------------------------------------------------------------------
 // Unified wrapper enum so callers can work with a single return type
 // ----------------------------------------------------------------------------------
@@ -809,6 +827,7 @@ pub enum EventPayload {
     SatsWithdrawn(SatsWithdrawnPayload),
     TournamentStarted(TournamentStartedPayload),
     TournamentEndedWinner(TournamentEndedWinnerPayload),
+    RewardEarned(RewardEarnedPayload),
 }
 
 // ----------------------------------------------------------------------------------
@@ -1016,6 +1035,57 @@ impl EventPayload {
                     .await;
             }
 
+            EventPayload::RewardEarned(payload) => {
+                let title = "🎉 Reward Earned!";
+                let body = format!(
+                    "Congratulations! You've earned ₹{:.2} ({:.8} BTC) for reaching {} views on your video!",
+                    payload.reward_inr,
+                    payload.reward_btc,
+                    payload.view_count
+                );
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "payload": serde_json::to_string(self).unwrap(),
+                        "type": "reward_earned",
+                        "video_id": payload.video_id,
+                        "milestone": payload.milestone
+                    })),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
+                            image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(format!(
+                                "https://yral.com/video/{}",
+                                payload.video_id
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: None,
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, payload.creator_id)
+                    .await;
+            }
+
             _ => {}
         }
     }
@@ -1083,6 +1153,7 @@ pub fn deserialize_event_payload(
         "tournament_ended_winner" => Ok(EventPayload::TournamentEndedWinner(
             serde_json::from_value(value)?,
         )),
+        "reward_earned" => Ok(EventPayload::RewardEarned(serde_json::from_value(value)?)),
         _ => Err(serde_json::Error::unknown_field(event_name, &[])),
     }
 }

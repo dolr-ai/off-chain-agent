@@ -1,6 +1,6 @@
 use crate::{
     app_state::AppState,
-    events::types::VideoDurationWatchedPayloadV2,
+    events::types::{EventPayload, RewardEarnedPayload, VideoDurationWatchedPayloadV2},
     rewards::{
         btc_conversion::BtcConverter,
         config::{get_config, update_config as update_config_fn, RewardConfig},
@@ -175,6 +175,7 @@ impl RewardEngine {
                     count,
                     milestone_number,
                     &config,
+                    app_state,
                 )
                 .await?;
             }
@@ -203,6 +204,7 @@ impl RewardEngine {
         view_count: u64,
         milestone_number: u64,
         config: &RewardConfig,
+        app_state: &Arc<AppState>,
     ) -> Result<()> {
         // Convert INR to BTC
         let btc_amount = self
@@ -259,9 +261,17 @@ impl RewardEngine {
                     .set_last_milestone(video_id, milestone_number)
                     .await?;
 
-                // TODO: Send notification to creator
-                self.send_reward_notification(creator_id, config.reward_amount_inr, milestone_number)
-                    .await;
+                // Send notification to creator
+                self.send_reward_notification(
+                    creator_id,
+                    video_id,
+                    milestone_number,
+                    btc_amount,
+                    config.reward_amount_inr,
+                    view_count,
+                    app_state,
+                )
+                .await;
             }
             Err(e) => {
                 log::error!("Failed to queue BTC reward for creator {}: {}", creator_id, e);
@@ -276,25 +286,36 @@ impl RewardEngine {
     async fn send_reward_notification(
         &self,
         creator_id: &Principal,
-        reward_inr: f64,
+        video_id: &str,
         milestone: u64,
+        reward_btc: f64,
+        reward_inr: f64,
+        view_count: u64,
+        app_state: &Arc<AppState>,
     ) {
-        // TODO: Implement actual notification sending
-        log::info!(
-            "Sending reward notification to creator {}: ₹{} for milestone {}",
-            creator_id,
+        // Create the payload for the notification
+        let payload = RewardEarnedPayload {
+            creator_id: *creator_id,
+            video_id: video_id.to_string(),
+            milestone,
+            reward_btc,
             reward_inr,
+            view_count,
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+
+        // Create the event and send notification
+        let event = EventPayload::RewardEarned(payload);
+        event.send_notification(app_state).await;
+
+        log::info!(
+            "Sent reward notification to creator {} for video {} (₹{:.2}, {:.8} BTC, milestone {})",
+            creator_id,
+            video_id,
+            reward_inr,
+            reward_btc,
             milestone
         );
-
-        // This would integrate with the existing push notification system
-        // Example:
-        // let notification = NotificationPayload {
-        //     title: "Reward Earned!".to_string(),
-        //     body: format!("You earned ₹{} worth of BTC for reaching {} views!", reward_inr, milestone * 100),
-        //     ...
-        // };
-        // notification_client.send(creator_id, notification).await;
     }
 
     /// Get current configuration
