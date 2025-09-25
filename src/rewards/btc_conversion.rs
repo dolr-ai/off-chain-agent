@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use once_cell::sync::Lazy;
-use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -124,60 +123,5 @@ impl BtcConverter {
         Ok(inr_data.last)
     }
 
-    /// Store rate in Redis for distributed caching (optional)
-    pub async fn _cache_rate_in_redis(
-        &self,
-        redis_pool: &crate::types::RedisPool,
-        rate: f64,
-    ) -> Result<()> {
-        let mut conn = redis_pool.get().await?;
-        let key = "rewards:btc_inr_rate";
-        conn.set_ex::<_, _, ()>(key, rate.to_string(), CACHE_DURATION_SECS as u64)
-            .await?;
-        Ok(())
-    }
-
-    /// Get cached rate from Redis (optional)
-    pub async fn _get_cached_rate_from_redis(
-        &self,
-        redis_pool: &crate::types::RedisPool,
-    ) -> Result<Option<f64>> {
-        let mut conn = redis_pool.get().await?;
-        let key = "rewards:btc_inr_rate";
-        let rate: Option<String> = conn.get(key).await?;
-        Ok(rate.and_then(|r| r.parse().ok()))
-    }
 }
 
-/// Convenience function to convert INR to BTC
-pub async fn _convert_inr_to_btc(inr_amount: f64) -> Result<f64> {
-    let converter = BtcConverter::new();
-    converter.convert_inr_to_btc(inr_amount).await
-}
-
-/// Format BTC amount for display (8 decimal places)
-pub fn _format_btc(btc_amount: f64) -> String {
-    format!("{:.8}", btc_amount)
-}
-
-/// Format INR amount for display (2 decimal places)
-pub fn _format_inr(inr_amount: f64) -> String {
-    format!("{:.2}", inr_amount)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_btc_formatting() {
-        assert_eq!(format_btc(0.00001234), "0.00001234");
-        assert_eq!(format_btc(1.0), "1.00000000");
-    }
-
-    #[test]
-    fn test_inr_formatting() {
-        assert_eq!(format_inr(10.0), "10.00");
-        assert_eq!(format_inr(99.999), "100.00");
-    }
-}

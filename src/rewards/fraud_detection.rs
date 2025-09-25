@@ -118,28 +118,6 @@ impl FraudDetector {
         Ok(is_banned)
     }
 
-    /// Manually shadow ban a creator
-    pub async fn _shadow_ban(&self, creator_id: &Principal, duration_seconds: u64) -> Result<()> {
-        let mut conn = self.redis_pool.get().await?;
-        let ban_key = format!("rewards:shadow_ban:{}", creator_id);
-        conn.set_ex::<_, _, ()>(&ban_key, "1", duration_seconds)
-            .await?;
-        log::info!(
-            "Manually shadow banned creator {} for {} seconds",
-            creator_id,
-            duration_seconds
-        );
-        Ok(())
-    }
-
-    /// Remove shadow ban for a creator
-    pub async fn _remove_shadow_ban(&self, creator_id: &Principal) -> Result<()> {
-        let mut conn = self.redis_pool.get().await?;
-        let ban_key = format!("rewards:shadow_ban:{}", creator_id);
-        conn.del::<_, ()>(&ban_key).await?;
-        log::info!("Removed shadow ban for creator {}", creator_id);
-        Ok(())
-    }
 }
 
 /// Send fraud alert to Google Chat
@@ -229,6 +207,7 @@ mod tests {
 
     struct TestFraudDetector {
         detector: FraudDetector,
+        #[allow(dead_code)]
         test_prefix: String,
     }
 
@@ -302,64 +281,6 @@ mod tests {
         test_detector.cleanup().await.unwrap();
     }
 
-    #[tokio::test]
-    async fn test_shadow_ban() {
-        let test_detector = TestFraudDetector::new().await;
-        let creator = test_detector.test_principal("ban1");
-
-        // Manually shadow ban
-        test_detector
-            .detector
-            .shadow_ban(&creator, 60)
-            .await
-            .unwrap();
-
-        // Check if shadow banned
-        let is_banned = test_detector
-            .detector
-            .is_shadow_banned(&creator)
-            .await
-            .unwrap();
-        assert!(is_banned);
-
-        // Check returns suspicious
-        let result = test_detector.detector.check_fraud_patterns(creator).await;
-        assert_eq!(result, FraudCheck::Suspicious);
-
-        test_detector.cleanup().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_remove_shadow_ban() {
-        let test_detector = TestFraudDetector::new().await;
-        let creator = test_detector.test_principal("ban2");
-
-        // Shadow ban
-        test_detector
-            .detector
-            .shadow_ban(&creator, 60)
-            .await
-            .unwrap();
-        assert!(test_detector
-            .detector
-            .is_shadow_banned(&creator)
-            .await
-            .unwrap());
-
-        // Remove shadow ban
-        test_detector
-            .detector
-            .remove_shadow_ban(&creator)
-            .await
-            .unwrap();
-        assert!(!test_detector
-            .detector
-            .is_shadow_banned(&creator)
-            .await
-            .unwrap());
-
-        test_detector.cleanup().await.unwrap();
-    }
 
     #[tokio::test]
     async fn test_fraud_detection_threshold() {
@@ -410,33 +331,4 @@ mod tests {
         test_detector.cleanup().await.unwrap();
     }
 
-    #[tokio::test]
-    async fn test_shadow_ban_expiry() {
-        let test_detector = TestFraudDetector::new().await;
-        let creator = test_detector.test_principal("expire");
-
-        // Shadow ban for 1 second
-        test_detector
-            .detector
-            .shadow_ban(&creator, 1)
-            .await
-            .unwrap();
-        assert!(test_detector
-            .detector
-            .is_shadow_banned(&creator)
-            .await
-            .unwrap());
-
-        // Wait for expiry
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-        // Should no longer be banned
-        assert!(!test_detector
-            .detector
-            .is_shadow_banned(&creator)
-            .await
-            .unwrap());
-
-        test_detector.cleanup().await.unwrap();
-    }
 }

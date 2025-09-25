@@ -1,6 +1,5 @@
 use anyhow::Result;
 use candid::Principal;
-use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use yral_canisters_common::utils::token::{CkBtcOperations, TokenOperations};
@@ -103,26 +102,3 @@ impl WalletIntegration {
     }
 }
 
-/// Helper function to format transaction memo
-pub fn _create_transaction_memo(video_id: &str, milestone: u64, timestamp: i64) -> String {
-    json!({
-        "type": "video_view_reward",
-        "video_id": video_id,
-        "milestone": milestone,
-        "timestamp": timestamp,
-    })
-    .to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_transaction_memo() {
-        let memo = _create_transaction_memo("video_123", 100, 1234567890);
-        assert!(memo.contains("video_123"));
-        assert!(memo.contains("100"));
-        assert!(memo.contains("1234567890"));
-    }
-}

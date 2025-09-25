@@ -70,7 +70,8 @@ pub async fn update_config(redis_pool: &RedisPool, new_config: RewardConfig) -> 
 }
 
 /// Get the current config version from Redis
-pub async fn _get_config_version(redis_pool: &RedisPool) -> Result<u64> {
+#[cfg(test)]
+pub async fn get_config_version(redis_pool: &RedisPool) -> Result<u64> {
     let mut conn = redis_pool.get().await?;
     let version: Option<u64> = conn
         .get("rewards:config:version")
@@ -103,7 +104,6 @@ async fn initialize_config(redis_pool: &RedisPool, config: &RewardConfig) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
 
     struct TestConfig {
         redis_pool: RedisPool,
