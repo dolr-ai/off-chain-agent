@@ -50,13 +50,16 @@ impl WalletIntegration {
         let amount_sats = (amount_btc * 100_000_000.0) as u64;
 
         // Create transaction memo as JSON string
-        let _memo_json = json!({
+        let memo_json = json!({
             "type": "video_view_reward",
             "video_id": video_id,
             "milestone": milestone,
             "amount_inr": amount_inr,
             "timestamp": chrono::Utc::now().timestamp(),
         });
+
+        // Convert memo to bytes for the transaction
+        let memo_bytes = memo_json.to_string().into_bytes();
 
         log::info!(
             "Transferring {} sats ({} BTC, ₹{}) to creator {} for video {} milestone {}",
@@ -68,8 +71,12 @@ impl WalletIntegration {
             milestone
         );
 
-        // Transfer ckBTC using add_balance (which transfers from admin to user)
-        match self.ckbtc_ops.add_balance(creator_id, amount_sats).await {
+        // Transfer ckBTC using add_balance_with_memo (which transfers from admin to user)
+        match self
+            .ckbtc_ops
+            .add_balance_with_memo(creator_id, amount_sats, Some(memo_bytes))
+            .await
+        {
             Ok(_) => {
                 // Generate transaction ID based on current timestamp
                 let tx_id = format!("ckbtc_tx_{}_{}", creator_id, chrono::Utc::now().timestamp());
@@ -93,80 +100,6 @@ impl WalletIntegration {
                 Err(anyhow::anyhow!("ckBTC transfer failed: {}", e))
             }
         }
-    }
-
-    /// Process pending transactions
-    pub async fn _process_pending_transactions(&self) -> Result<Vec<String>> {
-        // TODO: Implement batch processing of pending transactions
-        // This would:
-        // 1. Query pending transactions from storage
-        // 2. Process them in batches
-        // 3. Update their status
-
-        log::debug!("Processing pending BTC transactions");
-        Ok(vec![])
-    }
-
-    /// Get transaction status
-    pub async fn _get_transaction_status(&self, tx_id: &str) -> Result<TransactionStatus> {
-        // TODO: Query actual transaction status from wallet/blockchain
-        log::debug!("Getting status for transaction {}", tx_id);
-
-        // Mock implementation
-        Ok(TransactionStatus::Completed)
-    }
-
-    /// Credit BTC to creator's wallet (same as queue_btc_reward but with custom memo)
-    pub async fn _credit_btc_to_wallet(
-        &self,
-        creator_id: Principal,
-        amount_btc: f64,
-        memo: String,
-    ) -> Result<String> {
-        // Convert BTC to satoshis
-        let amount_sats = (amount_btc * 100_000_000.0) as u64;
-
-        log::info!(
-            "Crediting {} sats ({} BTC) to creator {} with memo: {}",
-            amount_sats,
-            amount_btc,
-            creator_id,
-            memo
-        );
-
-        // Transfer ckBTC
-        self.ckbtc_ops
-            .add_balance(creator_id, amount_sats)
-            .await
-            .map_err(|e| anyhow::anyhow!("ckBTC transfer failed: {}", e))?;
-
-        let tx_id = format!("ckbtc_tx_{}", chrono::Utc::now().timestamp());
-        Ok(tx_id)
-    }
-
-    /// Verify wallet address exists (all principals can receive ckBTC)
-    pub async fn _verify_wallet_exists(&self, creator_id: Principal) -> Result<bool> {
-        // All valid principals can receive ckBTC on the IC
-        log::debug!("Verifying wallet existence for creator {}", creator_id);
-        Ok(true)
-    }
-
-    /// Get wallet balance in BTC
-    pub async fn _get_wallet_balance(&self, creator_id: Principal) -> Result<f64> {
-        log::debug!("Getting wallet balance for creator {}", creator_id);
-
-        // Get balance in smallest units (e8s)
-        let balance = self
-            .ckbtc_ops
-            .load_balance(creator_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to load balance: {}", e))?;
-
-        // Convert from e8s (satoshis) to BTC
-        // balance.e8s is the amount in satoshis
-        let btc_amount = balance.e8s.0.to_f64().unwrap_or(0.0) / 100_000_000.0;
-
-        Ok(btc_amount)
     }
 }
 

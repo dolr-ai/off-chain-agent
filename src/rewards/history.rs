@@ -199,24 +199,4 @@ impl HistoryTracker {
 
         Ok(records)
     }
-
-    /// Update a reward record with transaction ID
-    pub async fn _update_reward_tx_id(
-        &self,
-        creator_id: &Principal,
-        video_id: &str,
-        milestone: u64,
-        tx_id: String,
-    ) -> Result<()> {
-        // This is a best-effort update, we don't need to be atomic here
-        // In practice, we might want to store tx_id separately or include it when creating the record
-        log::info!(
-            "Updated reward tx_id for creator {} video {} milestone {}: {}",
-            creator_id,
-            video_id,
-            milestone,
-            tx_id
-        );
-        Ok(())
-    }
 }
