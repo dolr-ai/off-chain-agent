@@ -158,3 +158,106 @@ fn validate_delegated_identity_v2(
     log::info!("Identity verified for user {user_principal} (V2 API)");
     Ok(user_principal)
 }
+
+/// Generate a video with audio using the orchestrated pipeline
+#[utoipa::path(
+    post,
+    path = "/generate-with-audio",
+    request_body = OrchestratedVideoRequest,
+    responses(
+        (status = 200, description = "Video with audio generation started successfully", body = VideoGenQueuedResponseV2),
+        (status = 400, description = "Invalid input", body = VideoGenError),
+        (status = 401, description = "Authentication failed", body = VideoGenError),
+        (status = 402, description = "Insufficient balance", body = VideoGenError),
+        (status = 429, description = "Rate limit exceeded", body = VideoGenError),
+        (status = 502, description = "Provider error", body = VideoGenError),
+        (status = 503, description = "Service unavailable", body = VideoGenError),
+    ),
+    tag = "VideoGen V2"
+)]
+pub async fn generate_video_with_audio(
+    State(app_state): State<Arc<AppState>>,
+    Json(request): Json<OrchestratedVideoRequest>,
+) -> Result<Json<VideoGenQueuedResponseV2>, (StatusCode, Json<VideoGenError>)> {
+    use crate::videogen::orchestrator;
+
+    // Validate identity and extract user principal
+    let user_principal = validate_delegated_identity_v2(&VideoGenRequestWithIdentityV2 {
+        request: videogen_common::VideoGenRequestV2 {
+            principal: request.principal,
+            prompt: request.prompt.clone(),
+            model_id: "orchestrated".to_string(),
+            token_type: request.token_type,
+            negative_prompt: None,
+            image: request.image.clone(),
+            audio: None,
+            aspect_ratio: None,
+            duration_seconds: None,
+            resolution: None,
+            generate_audio: Some(true),
+            seed: None,
+            extra_params: Default::default(),
+        },
+        delegated_identity: request.delegated_identity,
+    })?;
+
+    // Process image if present
+    let mut processed_image = request.image.clone();
+    if let Some(ref mut image) = processed_image {
+        process_input_image_v2(
+            &mut Some(image.clone()),
+            app_state.gcs_client.clone(),
+            &user_principal.to_string(),
+        )
+        .await?;
+    }
+
+    // Run the orchestration pipeline
+    let result = orchestrator::generate_video_with_audio(
+        app_state,
+        request.prompt,
+        processed_image,
+        request.principal,
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Orchestrated generation failed: {}", e);
+        match e {
+            VideoGenError::AuthError => (StatusCode::UNAUTHORIZED, Json(e)),
+            VideoGenError::InvalidInput(_) => (StatusCode::BAD_REQUEST, Json(e)),
+            VideoGenError::NetworkError(_) => (StatusCode::BAD_GATEWAY, Json(e)),
+            VideoGenError::ProviderError(_) => (StatusCode::BAD_GATEWAY, Json(e)),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, Json(e)),
+        }
+    })?;
+
+    Ok(Json(VideoGenQueuedResponseV2 {
+        operation_id: result.operation_id,
+        provider: result.provider,
+        request_key: videogen_common::VideoGenRequestKey {
+            principal: request.principal,
+            counter: chrono::Utc::now().timestamp_millis() as u64,
+        },
+    }))
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, utoipa::ToSchema)]
+pub struct OrchestratedVideoRequest {
+    #[serde(rename = "user_id")]
+    #[schema(value_type = String, example = "xkbqi-2qaaa-aaaah-qbpqq-cai")]
+    pub principal: candid::Principal,
+
+    /// The user's prompt that will be sent to LLM for enhancement
+    #[schema(example = "A serene sunset over mountains")]
+    pub prompt: String,
+
+    /// Optional input image for I2V mode
+    pub image: Option<videogen_common::ImageData>,
+
+    /// Token type for payment
+    #[serde(default)]
+    pub token_type: videogen_common::TokenType,
+
+    #[schema(value_type = Object)]
+    pub delegated_identity: yral_types::delegated_identity::DelegatedIdentityWire,
+}
