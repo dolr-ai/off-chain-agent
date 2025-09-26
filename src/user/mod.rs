@@ -1,4 +1,5 @@
 pub mod delete_user;
+pub mod follow;
 pub mod profile_image;
 pub mod utils;
 
@@ -15,5 +16,6 @@ pub fn user_router(state: Arc<AppState>) -> OpenApiRouter {
             profile_image::handle_upload_profile_image,
             profile_image::handle_delete_profile_image
         ))
+        .routes(routes!(follow::handle_follow_user))
         .with_state(state)
 }

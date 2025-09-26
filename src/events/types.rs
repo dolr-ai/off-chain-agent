@@ -780,6 +780,14 @@ pub struct TournamentEndedWinnerPayload {
 // ----------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FollowUserPayload {
+    #[serde(rename = "follower_principal_id")]
+    pub follower_principal_id: Principal,
+    #[serde(rename = "followee_principal_id")]
+    pub followee_principal_id: Principal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum EventPayload {
     VideoDurationWatched(VideoDurationWatchedPayloadV2),
@@ -809,6 +817,7 @@ pub enum EventPayload {
     SatsWithdrawn(SatsWithdrawnPayload),
     TournamentStarted(TournamentStartedPayload),
     TournamentEndedWinner(TournamentEndedWinnerPayload),
+    FollowUser(FollowUserPayload),
 }
 
 // ----------------------------------------------------------------------------------
@@ -1016,6 +1025,48 @@ impl EventPayload {
                     .await;
             }
 
+            EventPayload::FollowUser(payload) => {
+                let title = "New Follower";
+                let body = format!("Someone started following you");
+                let followee_principal_id = payload.followee_principal_id;
+
+                log::info!(
+                    "Sending follow notification to user {}",
+                    followee_principal_id,
+                );
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "payload": serde_json::to_string(self).unwrap()
+                    })),
+                    android: None,
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(format!(
+                                "https://yral.com/@{}",
+                                payload.follower_principal_id.to_text()
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: None,
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, followee_principal_id)
+                    .await;
+            }
+
             _ => {}
         }
     }
@@ -1083,6 +1134,7 @@ pub fn deserialize_event_payload(
         "tournament_ended_winner" => Ok(EventPayload::TournamentEndedWinner(
             serde_json::from_value(value)?,
         )),
+        "follow_user" => Ok(EventPayload::FollowUser(serde_json::from_value(value)?)),
         _ => Err(serde_json::Error::unknown_field(event_name, &[])),
     }
 }
