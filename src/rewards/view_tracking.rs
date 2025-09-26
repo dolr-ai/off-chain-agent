@@ -5,6 +5,7 @@ use redis::AsyncCommands;
 use sha1::{Digest, Sha1};
 
 const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
+    --!df flags=allow-undeclared-keys
     -- Atomic operation for view counting with config change handling
     -- Using HSET to store both count and config_version in single hash
     local views_set = KEYS[1]  -- rewards:views:{video_id} (set of user IDs)
