@@ -147,11 +147,18 @@ impl QStashClient {
             "video_info": video_info,
         });
 
+        // Add jitter (0-300ms)
+        let now = chrono::Utc::now();
+        let jitter_ms = now.nanosecond() % 301;
+
         self.client
             .post(url)
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
+            .header("upstash-delay", format!("{}ms", jitter_ms))
+            .header("Upstash-Flow-Control-Key", "VIDEO_FRAMES_PROCESSING")
+            .header("Upstash-Flow-Control-Value", "Rate=50,Parallelism=20")
             .send()
             .await?;
 
@@ -174,11 +181,18 @@ impl QStashClient {
             "video_info": video_info,
         });
 
+        // Add jitter (0-500ms)
+        let now = chrono::Utc::now();
+        let jitter_ms = now.nanosecond() % 501;
+
         self.client
             .post(url)
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
+            .header("upstash-delay", format!("{}ms", jitter_ms))
+            .header("Upstash-Flow-Control-Key", "VIDEO_NSFW_DETECTION")
+            .header("Upstash-Flow-Control-Value", "Rate=30,Parallelism=15")
             .header("Upstash-Retries", "5")
             .send()
             .await?;
@@ -220,6 +234,8 @@ impl QStashClient {
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
             .header("upstash-delay", format!("{delay_seconds}s"))
+            .header("Upstash-Flow-Control-Key", "VIDEO_NSFW_DETECTION_V2")
+            .header("Upstash-Flow-Control-Value", "Rate=20,Parallelism=10")
             .header("Upstash-Retries", "5")
             .send()
             .await?;

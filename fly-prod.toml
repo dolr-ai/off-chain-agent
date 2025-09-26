@@ -28,9 +28,9 @@ port = 443
 
 [services.concurrency]
 hard_limit = 10000
-soft_limit = 500
+soft_limit = 50
 
 [[vm]]
-memory = '8gb'
-cpu_kind = 'shared'
+memory = '16gb'
+cpu_kind = 'performance'
 cpus = 8
