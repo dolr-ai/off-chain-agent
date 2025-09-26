@@ -1,7 +1,9 @@
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_s3::{config::Credentials, primitives::ByteStream, Client};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use image::{DynamicImage, ImageFormat};
 use std::env;
+use std::io::Cursor;
 use tracing::info;
 
 // Hetzner Object Storage configuration constants
@@ -55,6 +57,46 @@ pub async fn create_s3_client() -> Result<Client, String> {
     Ok(Client::new(&aws_config))
 }
 
+/// Process and optimize image data
+fn process_image(image_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    // Load the image
+    let img = image::load_from_memory(&image_bytes)
+        .map_err(|e| format!("Failed to load image: {e}"))?;
+
+    // Check dimensions and resize if needed
+    const MAX_SIZE: u32 = 1000;
+    let (width, height) = (img.width(), img.height());
+
+    let processed_img = if width > MAX_SIZE || height > MAX_SIZE {
+        // Calculate new dimensions maintaining aspect ratio
+        let ratio = (MAX_SIZE as f32 / width.max(height) as f32).min(1.0);
+        let new_width = (width as f32 * ratio) as u32;
+        let new_height = (height as f32 * ratio) as u32;
+
+        info!(
+            "Resizing image from {}x{} to {}x{}",
+            width, height, new_width, new_height
+        );
+
+        img.resize(new_width, new_height, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
+
+    // Convert to RGB8 (remove alpha channel if present) and encode as JPEG
+    let rgb_img = DynamicImage::ImageRgb8(processed_img.to_rgb8());
+
+    // Encode as JPEG with 85% quality
+    let mut output = Vec::new();
+    let mut cursor = Cursor::new(&mut output);
+
+    rgb_img
+        .write_to(&mut cursor, ImageFormat::Jpeg)
+        .map_err(|e| format!("Failed to encode image as JPEG: {e}"))?;
+
+    Ok(output)
+}
+
 /// Upload a profile image to S3 and return the public URL
 pub async fn upload_profile_image_to_s3(
     image_data_base64: &str,
@@ -67,23 +109,38 @@ pub async fn upload_profile_image_to_s3(
         .decode(image_data_base64)
         .map_err(|e| format!("Failed to decode base64 image: {e}"))?;
 
+    // Process and optimize the image
+    let processed_bytes = process_image(image_bytes)?;
+
+    info!(
+        "Processed image size: {} bytes (~{}KB)",
+        processed_bytes.len(),
+        processed_bytes.len() / 1024
+    );
+
     // Create S3 client
     let client = create_s3_client().await?;
 
-    // Use user principal as the object key with .jpg extension
-    let object_key = format!("users/{}/profile.jpg", user_principal);
+    // Use timestamp to prevent caching issues
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Failed to get timestamp: {e}"))?
+        .as_secs();
+
+    // Use user principal and timestamp for unique object key
+    let object_key = format!("users/{}/profile-{}.jpg", user_principal, timestamp);
 
     info!(
         "Uploading profile image to S3: {}/{}",
         config.bucket, object_key
     );
 
-    // Upload the image to S3
+    // Upload the processed image to S3
     let put_request = client
         .put_object()
         .bucket(&config.bucket)
         .key(&object_key)
-        .body(ByteStream::from(image_bytes))
+        .body(ByteStream::from(processed_bytes))
         .content_type("image/jpeg")
         .acl(aws_sdk_s3::types::ObjectCannedAcl::PublicRead);
 
@@ -102,32 +159,43 @@ pub async fn upload_profile_image_to_s3(
     Ok(public_url)
 }
 
-/// Delete a profile image from S3
+/// Delete old profile images from S3 for a user
+/// Since we now use timestamp-based names, we list and delete all profile images for the user
 pub async fn delete_profile_image_from_s3(user_principal: &str) -> Result<(), String> {
     let config = S3Config::default();
 
     // Create S3 client
     let client = create_s3_client().await?;
 
-    // Use user principal as the object key
-    let object_key = format!("users/{}/profile.jpg", user_principal);
+    // List all profile images for this user
+    let prefix = format!("users/{}/profile-", user_principal);
 
-    info!(
-        "Deleting profile image from S3: {}/{}",
-        config.bucket, object_key
-    );
-
-    // Delete the image from S3
-    client
-        .delete_object()
+    let list_response = client
+        .list_objects_v2()
         .bucket(&config.bucket)
-        .key(&object_key)
+        .prefix(&prefix)
         .send()
         .await
-        .map_err(|e| format!("Failed to delete image from S3: {e}"))?;
+        .map_err(|e| format!("Failed to list objects from S3: {e}"))?;
+
+    // Delete all found profile images for this user
+    let objects = list_response.contents();
+    for object in objects {
+        if let Some(key) = object.key() {
+            info!("Deleting old profile image from S3: {}/{}", config.bucket, key);
+
+            client
+                .delete_object()
+                .bucket(&config.bucket)
+                .key(key)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to delete image from S3: {e}"))?;
+        }
+    }
 
     info!(
-        "Successfully deleted profile image for user: {}",
+        "Successfully deleted profile images for user: {}",
         user_principal
     );
 

@@ -18,6 +18,7 @@ pub struct FollowUserRequest {
     pub delegated_identity_wire: DelegatedIdentityWire,
     #[schema(value_type = String)]
     pub target_principal: Principal,
+    pub follower_username: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
@@ -88,6 +89,7 @@ pub async fn handle_follow_user(
             // 4. Send notification event
             let follow_payload = FollowUserPayload {
                 follower_principal_id: follower_principal,
+                follower_username: request.follower_username,
                 followee_principal_id: request.target_principal,
             };
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
@@ -61,20 +62,32 @@ pub async fn handle_upload_profile_image(
         &request.image_data
     };
 
-    // Validate image data size (optional, can add more validation)
+    // Validate image data size
     if base64_data.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "Image data is empty".to_string()));
     }
 
-    // Maximum allowed size for base64 string (e.g., ~10MB)
-    const MAX_BASE64_SIZE: usize = 14 * 1024 * 1024; // ~10MB when decoded
+    // Maximum allowed size for base64 string (~5MB when decoded)
+    const MAX_BASE64_SIZE: usize = 7 * 1024 * 1024; // ~5MB when decoded
     if base64_data.len() > MAX_BASE64_SIZE {
+        let size_mb = base64_data.len() / (1024 * 1024);
         return Err((
             StatusCode::BAD_REQUEST,
             format!(
-                "Image data too large. Maximum size is {} bytes",
-                MAX_BASE64_SIZE
+                "Image too large: {}MB. Maximum allowed size is 5MB",
+                size_mb
             ),
+        ));
+    }
+
+    // Validate that it's actually base64 data
+    if base64::engine::general_purpose::STANDARD
+        .decode(base64_data)
+        .is_err()
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Invalid image data format. Please upload a valid image".to_string(),
         ));
     }
 

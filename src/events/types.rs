@@ -783,6 +783,8 @@ pub struct TournamentEndedWinnerPayload {
 pub struct FollowUserPayload {
     #[serde(rename = "follower_principal_id")]
     pub follower_principal_id: Principal,
+    #[serde(rename = "follower_username")]
+    pub follower_username: Option<String>,
     #[serde(rename = "followee_principal_id")]
     pub followee_principal_id: Principal,
 }
@@ -1027,18 +1029,27 @@ impl EventPayload {
 
             EventPayload::FollowUser(payload) => {
                 let title = "New Follower";
-                let body = format!("Someone started following you");
+                let body = match &payload.follower_username {
+                    Some(username) => format!("{} started following you", username),
+                    None => format!("{} started following you", payload.follower_principal_id.to_text()),
+                };
                 let followee_principal_id = payload.followee_principal_id;
 
+                let profile_url = format!(
+                    "https://yral.com/@{}",
+                    payload.follower_principal_id.to_text()
+                );
+
                 log::info!(
-                    "Sending follow notification to user {}",
+                    "Sending follow notification to user {} from {}",
                     followee_principal_id,
+                    payload.follower_username.as_deref().unwrap_or(&payload.follower_principal_id.to_text())
                 );
 
                 let notif_payload = SendNotificationReq {
                     notification: Some(NotificationPayload {
                         title: Some(title.to_string()),
-                        body: Some(body),
+                        body: Some(body.clone()),
                         image: Some(
                             "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
                         ),
@@ -1046,18 +1057,44 @@ impl EventPayload {
                     data: Some(json!({
                         "payload": serde_json::to_string(self).unwrap()
                     })),
-                    android: None,
-                    webpush: Some(WebpushConfig {
-                        fcm_options: Some(WebpushFcmOptions {
-                            link: Some(format!(
-                                "https://yral.com/@{}",
-                                payload.follower_principal_id.to_text()
-                            )),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
                             ..Default::default()
                         }),
                         ..Default::default()
                     }),
-                    apns: None,
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(profile_url.clone()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body,
+                                },
+                                "sound": "default",
+                            },
+                            "url": profile_url
+                        })),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 };
 
