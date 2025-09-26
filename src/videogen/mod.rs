@@ -1,6 +1,7 @@
 pub mod handlers;
 pub mod handlers_v2;
 pub mod models;
+pub mod orchestrator;
 pub mod qstash_callback;
 pub mod qstash_process;
 pub mod qstash_types;
