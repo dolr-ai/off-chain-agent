@@ -36,6 +36,24 @@ pub async fn process_video_generation(
         VideoGenInput::IntTest(_) => {
             crate::videogen::models::inttest::generate(request.input, &state).await
         }
+        VideoGenInput::TalkingHead(_) => {
+            // TalkingHead model not yet implemented in qstash processing
+            Err(VideoGenError::InvalidInput(
+                "TalkingHead model not supported in qstash processing".to_string(),
+            ))
+        }
+        VideoGenInput::Wan22(_) => {
+            crate::videogen::models::wan2_2::generate(request.input, &state).await
+        }
+        VideoGenInput::LlmHandler(_) => {
+            // LLM Handler returns a different response type, not directly usable here
+            Err(VideoGenError::InvalidInput(
+                "LLM Handler should not be processed through qstash".to_string(),
+            ))
+        }
+        VideoGenInput::StableAudio(_) => {
+            crate::videogen::models::stable_audio::generate(request.input, &state).await
+        }
     };
 
     // Prepare callback data
