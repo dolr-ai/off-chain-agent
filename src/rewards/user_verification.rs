@@ -47,6 +47,11 @@ impl UserVerification {
             if let Ok(mut conn) = redis_pool.get().await {
                 let value = if is_registered { "true" } else { "false" };
                 // Set with 1 hour TTL (60 seconds)
+                log::info!(
+                    "Caching user registration status for {}: {}",
+                    principal.to_text(),
+                    value
+                );
                 if let Err(e) = conn.set_ex::<_, _, ()>(&cache_key_clone, value, 60).await {
                     log::error!(
                         "Failed to cache user registration status for {}: {}",
@@ -107,7 +112,18 @@ async fn check_individual_canister_registration(
     user_principal: Principal,
     app_state: &Arc<AppState>,
 ) -> bool {
-    let individual_template = IndividualUserTemplate(user_principal, &app_state.agent);
+    let canister_id = match app_state
+        .get_individual_canister_by_user_principal(user_principal)
+        .await
+    {
+        Ok(id) => id,
+        Err(e) => {
+            log::debug!("Failed to get individual canister for principal {user_principal}: {e}");
+            return false;
+        }
+    };
+
+    let individual_template = IndividualUserTemplate(canister_id, &app_state.agent);
 
     match individual_template.get_session_type().await {
         Ok(result) => match result {

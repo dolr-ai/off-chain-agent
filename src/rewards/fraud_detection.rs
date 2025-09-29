@@ -78,9 +78,12 @@ impl FraudDetector {
                     if recent_count > threshold {
                         // Shadow ban the creator
                         let ban_key = format!("rewards:shadow_ban:{}", creator_id_str);
-                        let _ = conn
+                        if let Err(e) = conn
                             .set_ex::<_, _, ()>(&ban_key, "1", shadow_ban_duration)
-                            .await;
+                            .await
+                        {
+                            log::error!("Failed to shadow ban creator {}: {}", creator_id_str, e);
+                        }
 
                         log::warn!(
                             "Shadow banned creator {} for {} seconds due to {} rewards in {} seconds",
