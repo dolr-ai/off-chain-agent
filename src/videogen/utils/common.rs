@@ -10,10 +10,14 @@ use videogen_common::{
     VideoGenRequestWithIdentity, VideoGenerator,
 };
 
-use super::qstash_types::QstashVideoGenRequest;
-use super::token_operations::add_token_balance;
-use crate::app_state::AppState;
-use crate::consts::OFF_CHAIN_AGENT_URL;
+use crate::{
+    app_state::AppState,
+    videogen::{
+        qstash_types, rate_limit,
+        token_operations::{self, add_token_balance},
+    },
+};
+use crate::{consts::OFF_CHAIN_AGENT_URL, videogen::QstashVideoGenRequest};
 
 /// Metadata extracted from a video generation request
 pub struct RequestMetadata {
@@ -64,7 +68,7 @@ pub fn extract_request_metadata(request: &VideoGenRequest) -> RequestMetadata {
         "VIDEOGEN"
     };
     let provider = request.input.provider();
-    let cost = super::token_operations::get_model_cost(model_id, &token_type);
+    let cost = token_operations::get_model_cost(model_id, &token_type);
 
     RequestMetadata {
         model_id: model_id.to_string(),
@@ -234,7 +238,7 @@ pub async fn process_video_generation(
     };
 
     // Get cost for the model
-    let cost = super::token_operations::get_model_cost(model_id, &token_type);
+    let cost = token_operations::get_model_cost(model_id, &token_type);
 
     // Determine payment amount for rate limit
     let payment_amount = if matches!(token_type, TokenType::Free) {
@@ -244,7 +248,7 @@ pub async fn process_video_generation(
     };
 
     // Verify rate limit
-    let request_key = super::rate_limit::verify_rate_limit_and_create_request_v1(
+    let request_key = rate_limit::verify_rate_limit_and_create_request_v1(
         user_principal,
         model_id,
         prompt,
@@ -272,7 +276,7 @@ pub async fn process_video_generation(
     let jwt_token = get_hon_worker_jwt_token()?;
 
     // Deduct balance with automatic cleanup on failure
-    let deducted_amount = super::token_operations::deduct_balance_with_cleanup(
+    let deducted_amount = token_operations::deduct_balance_with_cleanup(
         user_principal,
         cost,
         &token_type,
@@ -285,7 +289,7 @@ pub async fn process_video_generation(
     .await?;
 
     // Prepare Qstash request
-    let qstash_request = super::qstash_types::QstashVideoGenRequest {
+    let qstash_request = qstash_types::QstashVideoGenRequest {
         user_principal,
         input: video_gen_input,
         request_key: request_key.clone(),

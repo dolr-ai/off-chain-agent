@@ -39,6 +39,9 @@ pub async fn process_video_generation(
         VideoGenInput::Wan22(_) => {
             crate::videogen::models::wan2_2::generate(request.input, &state).await
         }
+        VideoGenInput::StableAudio(_) => {
+            crate::videogen::models::stable_audio::generate(request.input, &state).await
+        }
         _ => Err(VideoGenError::UnsupportedModel(
             request.input.model_id().to_string(),
         )),

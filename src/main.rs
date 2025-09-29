@@ -6,6 +6,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
+use candid::Principal;
 use config::AppConfig;
 use events::event::storj::enqueue_storj_backfill_item;
 use http::header::CONTENT_TYPE;
@@ -29,6 +30,7 @@ use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsSer
 use crate::events::{warehouse_events, WarehouseEventsService};
 use crate::offchain_service::off_chain::off_chain_server::OffChainServer;
 use crate::offchain_service::{off_chain, OffChainService};
+use crate::videogen::utils::stitch_video_audio_and_upload;
 use error::*;
 
 mod app_state;
@@ -65,6 +67,17 @@ async fn main_impl() -> Result<()> {
     let conf = AppConfig::load()?;
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
+
+    let res = stitch_video_audio_and_upload(
+        shared_state.gcs_client.clone(),
+        "https://storage.googleapis.com/falserverless/example_inputs/ffmpeg-video.mp4",
+        "https://storage.googleapis.com/falserverless/example_inputs/ffmpeg-audio.wav",
+        Principal::anonymous(),
+        None,
+    )
+    .await?;
+
+    println!("Stitched video URL: {}", res);
 
     let sentry_tower_layer = ServiceBuilder::new()
         .layer(NewSentryLayer::new_from_top())
