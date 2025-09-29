@@ -1036,13 +1036,8 @@ impl EventPayload {
             }
 
             EventPayload::RewardEarned(payload) => {
-                let title = "🎉 Reward Earned!";
-                let body = format!(
-                    "Congratulations! You've earned ₹{:.2} ({:.8} BTC) for reaching {} views on your video!",
-                    payload.reward_inr,
-                    payload.reward_btc,
-                    payload.view_count
-                );
+                let title = "Bitcoin Credited";
+                let body = "Congrats! Your video views have earned you Bitcoin. See your balance in the wallet.";
 
                 let notif_payload = SendNotificationReq {
                     notification: Some(NotificationPayload {
@@ -1054,7 +1049,7 @@ impl EventPayload {
                     }),
                     data: Some(json!({
                         "payload": serde_json::to_string(self).unwrap(),
-                        "type": "reward_earned",
+                        "type": "btc_views_rewards",
                         "video_id": payload.video_id,
                         "milestone": payload.milestone
                     })),
@@ -1072,12 +1067,36 @@ impl EventPayload {
                     }),
                     webpush: Some(WebpushConfig {
                         fcm_options: Some(WebpushFcmOptions {
-                            link: Some(format!("https://yral.com/video/{}", payload.video_id)),
+                            link: Some(format!(
+                                "https://yral.com/wallet/{}",
+                                payload.creator_id.to_text()
+                            )),
                             ..Default::default()
                         }),
                         ..Default::default()
                     }),
-                    apns: None,
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body.to_string(),
+                                },
+                                "sound": "default",
+                            },
+                            "url": format!(
+                                "https://yral.com/wallet/{}",
+                                payload.creator_id.to_text()
+                            )
+                        })),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 };
 

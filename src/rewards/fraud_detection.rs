@@ -1,10 +1,11 @@
-use crate::{
-    consts::GOOGLE_CHAT_REPORT_SPACE_URL, offchain_service::send_message_gchat, types::RedisPool,
-};
+use std::env;
+
+use crate::types::RedisPool;
 use anyhow::Result;
 use candid::Principal;
 use chrono::Utc;
 use redis::AsyncCommands;
+use reqwest::Client;
 use serde_json::json;
 
 const DEFAULT_FRAUD_THRESHOLD: usize = 5; // 5 rewards in time window
@@ -131,73 +132,46 @@ fn send_fraud_alert(creator_id: String, reward_count: usize) {
             reward_count
         );
 
-        // Create Google Chat message with card format for better visibility
+        // Google Chat webhook URL with authentication
+        let btc_rewards_webhook_url = env::var("BTC_REWARDS_GCHAT_WEBHOOK_URL")
+            .expect("BTC_REWARDS_GCHAT_WEBHOOK_URL must be set");
+
+        // Create simple text message for Google Chat
+        let message = format!(
+            "⚠️ FRAUD ALERT - Reward System\n\nCreator: {}\nRewards: {} in 60 minutes\nAction: Shadow banned for 5 hours\nTime: {}\n\nView creator: https://yral.com/@{}",
+            creator_id,
+            reward_count,
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+            creator_id
+        );
+
         let data = json!({
-            "cardsV2": [{
-                "card": {
-                    "header": {
-                        "title": "⚠️ Fraud Alert - Reward System",
-                        "subtitle": "Suspicious activity detected",
-                        "imageUrl": "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/warning/default/48px.svg",
-                        "imageType": "CIRCLE"
-                    },
-                    "sections": [{
-                        "header": "Alert Details",
-                        "widgets": [
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Creator Principal",
-                                    "text": format!("<b>{}</b>", creator_id),
-                                    "startIcon": {
-                                        "knownIcon": "PERSON"
-                                    }
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Rewards in Time Window",
-                                    "text": format!("<b>{} rewards</b> in 10 minutes", reward_count),
-                                    "startIcon": {
-                                        "knownIcon": "CLOCK"
-                                    }
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Action Taken",
-                                    "text": "<b><font color=\"#FF0000\">Shadow banned for 1 hour</font></b>",
-                                    "startIcon": {
-                                        "knownIcon": "BOOKMARK"
-                                    }
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Timestamp",
-                                    "text": format!("{}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")),
-                                    "startIcon": {
-                                        "knownIcon": "INVITE"
-                                    }
-                                }
-                            }
-                        ]
-                    }],
-                    "fixedFooter": {
-                        "primaryButton": {
-                            "text": "View Creator",
-                            "url": format!("https://yral.com/@{}", creator_id),
-                            "type": "OPEN_LINK"
-                        }
-                    }
-                }
-            }]
+            "text": message
         });
 
-        // Send to Google Chat
-        if let Err(e) = send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, data).await {
-            log::error!("Failed to send fraud alert to Google Chat: {}", e);
-        } else {
-            log::info!("Fraud alert sent to Google Chat for creator {}", creator_id);
+        // Send to Google Chat webhook
+        let client = Client::new();
+        match client
+            .post(btc_rewards_webhook_url)
+            .header("Content-Type", "application/json")
+            .json(&data)
+            .send()
+            .await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    log::info!("Fraud alert sent to Google Chat for creator {}", creator_id);
+                } else {
+                    log::error!(
+                        "Failed to send fraud alert to Google Chat: HTTP {} - {}",
+                        response.status(),
+                        response.text().await.unwrap_or_default()
+                    );
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to send fraud alert to Google Chat: {}", e);
+            }
         }
     });
 }
@@ -330,5 +304,27 @@ mod tests {
         }
 
         test_detector.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_send_fraud_alert() {
+        // This test verifies that send_fraud_alert function executes without panicking
+        // Note: This will actually send a test alert to Google Chat webhook
+        let test_creator_id = "test-creator-12345".to_string();
+        let test_reward_count = 10;
+
+        // Call send_fraud_alert (spawns async task)
+        send_fraud_alert(test_creator_id.clone(), test_reward_count);
+
+        // Wait a bit to ensure the async task completes
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        // If we reach here without panic, the test passes
+        // The actual alert will be sent to Google Chat
+        log::info!(
+            "Test alert sent for creator {} with {} rewards",
+            test_creator_id,
+            test_reward_count
+        );
     }
 }

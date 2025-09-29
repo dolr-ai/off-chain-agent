@@ -62,7 +62,6 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_user_view_history))
         .routes(routes!(get_user_reward_history))
         .routes(routes!(get_creator_reward_history))
-        .routes(routes!(get_video_stats))
         .routes(routes!(get_reward_config))
         .routes(routes!(update_reward_config))
         .with_state(state)
@@ -207,34 +206,6 @@ async fn get_creator_reward_history(
     let total = rewards.len();
 
     Ok(Json(RewardHistoryResponse { rewards, total }))
-}
-
-#[utoipa::path(
-    get,
-    path = "/video/{video_id}/stats",
-    params(
-        ("video_id" = String, Path, description = "Video ID"),
-    ),
-    tag = "rewards",
-    responses(
-        (status = 200, description = "Video stats retrieved", body = VideoStatsResponse),
-        (status = 500, description = "Internal server error"),
-    )
-)]
-async fn get_video_stats(
-    State(_state): State<Arc<AppState>>,
-    Path(video_id): Path<String>,
-) -> Result<Json<VideoStatsResponse>, (StatusCode, String)> {
-    // TODO: This would use the RewardEngine to get stats
-    // For now, return mock data
-
-    Ok(Json(VideoStatsResponse {
-        video_id,
-        view_count: 0,
-        last_milestone: 0,
-        next_milestone: 100,
-        views_to_next_milestone: 100,
-    }))
 }
 
 #[utoipa::path(
