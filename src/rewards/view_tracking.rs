@@ -23,8 +23,7 @@ const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     if video_config_version ~= current_global_version then
         -- Reset counter to 0 and update config version
         redis.call('HSET', video_hash, 'count', 0, 'config_version', current_global_version)
-        -- Clear the views set to allow all users to view again
-        redis.call('DEL', views_set)
+        -- Note: We do NOT delete the views_set, so users who already viewed cannot view again
     end
 
     -- Check if user already viewed (critical check)
@@ -319,6 +318,7 @@ mod tests {
         let video_id = test_tracker.test_video_id("video4");
         let user1 = Principal::self_authenticating("reset_user1");
         let user2 = Principal::self_authenticating("reset_user2");
+        let user3 = Principal::self_authenticating("reset_user3"); // New user after config change
 
         test_tracker
             .tracker
@@ -344,20 +344,28 @@ mod tests {
             .await
             .unwrap();
 
-        // After config change, both users should be able to view again
+        // After config change, users who already viewed should NOT be able to view again
         let count_after_reset = test_tracker
             .tracker
             .track_view(&video_id, &user1)
             .await
             .unwrap();
-        assert_eq!(count_after_reset, Some(1)); // Counter reset to 1
+        assert_eq!(count_after_reset, None); // User1 already viewed, cannot view again
 
         let count_user2_after = test_tracker
             .tracker
             .track_view(&video_id, &user2)
             .await
             .unwrap();
-        assert_eq!(count_user2_after, Some(2)); // User2 can also view again
+        assert_eq!(count_user2_after, None); // User2 already viewed, cannot view again
+
+        // New user should be able to view and counter starts from 1 (after reset)
+        let count_user3 = test_tracker
+            .tracker
+            .track_view(&video_id, &user3)
+            .await
+            .unwrap();
+        assert_eq!(count_user3, Some(1)); // New user can view, counter is 1 after reset
 
         test_tracker.cleanup().await.unwrap();
     }
