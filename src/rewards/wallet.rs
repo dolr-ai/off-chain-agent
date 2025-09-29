@@ -55,7 +55,7 @@ impl WalletIntegration {
         }
 
         // Create transaction memo as JSON string
-        let memo_json = json!({
+        let _memo_json = json!({
             "type": "video_view_reward",
             "video_id": video_id,
             "milestone": milestone,
@@ -64,7 +64,7 @@ impl WalletIntegration {
         });
 
         // Convert memo to bytes for the transaction
-        let memo_bytes = memo_json.to_string().into_bytes();
+        let memo_bytes = "BTC_VIEWS".to_string().into_bytes();
 
         log::info!(
             "Transferring {} sats ({} BTC, ₹{}) to creator {} for video {} milestone {}",
