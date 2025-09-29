@@ -130,7 +130,23 @@ impl RewardEngine {
             .is_registered_user(event.user_id, app_state)
             .await?
         {
-            log::debug!("Skipping view from unregistered user {}", event.user_id);
+            log::debug!(
+                "Skipping view from unregistered user {}",
+                event.user_id.to_text()
+            );
+            return Ok(());
+        }
+
+        // 2. Verify publisher registration (with caching)
+        if !self
+            .user_verification
+            .is_registered_user(*publisher_user_id, app_state)
+            .await?
+        {
+            log::debug!(
+                "Skipping view from unregistered publisher user {}",
+                publisher_user_id.to_text()
+            );
             return Ok(());
         }
 

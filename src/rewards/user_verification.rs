@@ -46,8 +46,14 @@ impl UserVerification {
         tokio::spawn(async move {
             if let Ok(mut conn) = redis_pool.get().await {
                 let value = if is_registered { "true" } else { "false" };
-                // Set with 1 hour TTL (3600 seconds)
-                let _ = conn.set_ex::<_, _, ()>(&cache_key_clone, value, 3600).await;
+                // Set with 1 hour TTL (60 seconds)
+                if let Err(e) = conn.set_ex::<_, _, ()>(&cache_key_clone, value, 60).await {
+                    log::error!(
+                        "Failed to cache user registration status for {}: {}",
+                        principal,
+                        e
+                    );
+                }
                 log::debug!(
                     "Cached user registration status for {}: {}",
                     principal,
