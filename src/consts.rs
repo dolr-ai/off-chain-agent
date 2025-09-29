@@ -100,7 +100,6 @@ pub const LUMALABS_API_URL: &str = "https://api.lumalabs.ai/dream-machine/v1";
 pub const LUMALABS_IMAGE_BUCKET: &str = "videogen_tmp_image_store";
 
 // WAN 2.2 Constants
-pub const RUNPOD_WAN2_2_ENDPOINT: &str = "wan-2-2-t2v-720";
 pub const RUNPOD_WAN2_2_T2V_ENDPOINT: &str = "wan-2-2-t2v-720";
 pub const RUNPOD_WAN2_2_I2V_ENDPOINT: &str = "wan-2-2-i2v-720";
 

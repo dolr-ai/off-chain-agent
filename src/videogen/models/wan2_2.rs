@@ -4,9 +4,7 @@ use tracing::{error, info};
 use videogen_common::{ImageData, VideoGenError, VideoGenInput, VideoGenResponse};
 
 use crate::app_state::AppState;
-use crate::consts::{
-    RUNPOD_WAN2_2_ENDPOINT, RUNPOD_WAN2_2_I2V_ENDPOINT, RUNPOD_WAN2_2_T2V_ENDPOINT,
-};
+use crate::consts::{RUNPOD_WAN2_2_I2V_ENDPOINT, RUNPOD_WAN2_2_T2V_ENDPOINT};
 use crate::utils::gcs::maybe_upload_image_to_gcs;
 
 #[derive(Serialize)]
@@ -116,12 +114,7 @@ pub async fn generate(
     let endpoint = if model.is_i2v {
         RUNPOD_WAN2_2_I2V_ENDPOINT
     } else {
-        // Use T2V endpoint or fallback to generic endpoint
-        if cfg!(feature = "use_separate_endpoints") {
-            RUNPOD_WAN2_2_T2V_ENDPOINT
-        } else {
-            RUNPOD_WAN2_2_ENDPOINT
-        }
+        RUNPOD_WAN2_2_T2V_ENDPOINT
     };
 
     // Build request with updated parameters
