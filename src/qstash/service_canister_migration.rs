@@ -1,0 +1,210 @@
+use std::{error::Error, sync::Arc};
+
+use axum::{debug_handler, extract::State, response::IntoResponse, Json};
+use candid::Principal;
+use chrono::naive::serde::ts_milliseconds::serialize;
+use futures::future::join_all;
+use http::{ StatusCode};
+use redis::AsyncCommands;
+use serde::{Deserialize, Serialize};
+use yral_canisters_client::{ic::USER_INFO_SERVICE_ID, individual_user_template::{self, GetPostsOfUserProfileError, IndividualUserTemplate, MigrationInfo, PostDetailsForFrontend, Result6}, user_info_service::{Result_, UserInfoService}};
+
+use crate::{app_state::AppState, qstash::service_canister_migration, types::RedisPool};
+
+
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, PartialOrd, Debug)]
+pub struct MigrateIndividualUserRequest {
+    user_canister: Principal,
+    user_principal: Principal,
+}
+
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct MigrationStatus {
+    pub individual_user_canister: Principal,
+    pub migrated: bool
+}
+
+impl MigrationStatus {
+    fn new(individual_user_canister: Principal) -> Self {
+        MigrationStatus {individual_user_canister, migrated: false }
+    }
+}
+
+
+#[derive(Clone, Debug)]
+pub struct ServiceCanisterMigrationRedis {
+    pool: RedisPool,
+}
+
+impl ServiceCanisterMigrationRedis {
+    fn new(pool: RedisPool) -> Self {
+
+        Self {
+            pool,
+        }
+
+    }
+
+    pub async fn set_migrated_info_for_user(&self, user_principal: Principal, migration_info: MigrationStatus) -> Result<(), Box<dyn Error>> {
+        let mut conn = self.pool.get().await?;
+        conn.set::<_, _, ()>(user_principal.to_text(), serde_json::to_string(&migration_info)?).await?;
+
+        Ok(())
+    }
+
+    pub async fn get_migration_info_for_user(&self, user_principal: Principal) -> Result<Option<MigrationStatus>, Box<dyn Error>> {
+        let mut conn = self.pool.get().await?;
+        let migration_info_str_opt: Option<String> = conn.get(user_principal.to_text()).await?;
+
+        match migration_info_str_opt {
+            Some(data_str) => {
+                let migration_status: MigrationStatus = serde_json::from_str(&data_str)?;
+                Ok(Some(migration_status))
+            }
+            None => {
+                Ok(None)
+            }
+        }
+    }
+}
+
+
+pub async fn update_the_metadata_mapping(State(state): State<Arc<AppState>>, Json(request): Json<MigrateIndividualUserRequest>) -> Result<impl IntoResponse, (StatusCode, String)> {
+    //TODO: call metadata to update the yral metadata mapping
+
+    Ok(())
+}
+
+
+
+
+pub async fn migrate_individual_user_to_service_canister(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<MigrateIndividualUserRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+
+   let user_info_canister = UserInfoService(USER_INFO_SERVICE_ID, &state.agent);
+
+   let accept_new_registration_res = user_info_canister.accept_new_user_registration(request.user_principal).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+   if let Result_::Err(e) = accept_new_registration_res {
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, e))
+   }
+
+   let service_canister_migration_redis = ServiceCanisterMigrationRedis::new(state.service_cansister_migration_redis_pool.clone());
+
+    service_canister_migration_redis.set_migrated_info_for_user(request.user_principal, MigrationStatus {
+        migrated: false,
+        individual_user_canister: request.user_canister
+   }).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+   state.qstash_client.transfer_all_posts_to_service_canister(&request).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+   Ok(())
+
+}
+
+
+pub async fn transfer_all_posts_for_the_individual_user(State(state): State<Arc<AppState>>, Json(request): Json<MigrateIndividualUserRequest>) -> Result<impl IntoResponse, (StatusCode, String)>{
+
+    let individual_user_template = IndividualUserTemplate(request.user_canister, &state.agent);
+
+    let mut posts_left = true;
+
+    let mut start_index = 0;
+
+    let service_canister_migration_redis = ServiceCanisterMigrationRedis::new(state.service_cansister_migration_redis_pool.clone());
+    service_canister_migration_redis.set_migrated_info_for_user(request.user_principal, MigrationStatus::new(request.user_canister)).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+
+    while posts_left {
+
+        let  posts_res = individual_user_template.get_posts_of_this_user_profile_with_pagination_cursor(start_index, 100)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        match posts_res {
+            Result6::Ok(posts) => {
+
+
+                let transfer_posts_requests = posts.iter().map(|post_details| async {
+                    process_post_for_transfer(state.service_cansister_migration_redis_pool.clone(), post_details.id, request.user_canister, request.user_principal).await.map_err(|e| e.to_string())
+                });
+
+
+
+                let result = join_all(transfer_posts_requests).await;
+
+                if let Some(Err(e)) = result.get(0) {
+                    log::error!("failed to transfer post {e}")
+                }
+
+            },
+            Result6::Err(e) => {
+                if matches!(e, GetPostsOfUserProfileError::ReachedEndOfItemsList) {
+                    posts_left = false;
+                } else {
+                        log::error!("failed to transfer post error from canister {:?}", e);
+                     
+                     break;
+                }
+            }
+        }
+
+        start_index += 100;
+    }
+    
+    Ok(())
+
+}
+
+
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SyncPostToPostServiceRequest {
+    user_principal: Principal,
+    canister_id: Principal,
+    post_id: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
+pub struct TransferPostRequest {
+    post_id: u64,
+    canister_id: Principal,
+    user_principal: Principal
+}
+
+
+
+
+
+
+pub async fn process_post_for_transfer(redis_pool: RedisPool, post_id: u64, canister_id: Principal, user_principal: Principal) -> Result<(), Box<dyn Error>> {
+
+
+        //TOOD add authorization
+        let request_payload = SyncPostToPostServiceRequest {
+            user_principal: user_principal,
+            canister_id: canister_id,
+            post_id: post_id
+        };
+
+        let response_result = reqwest::Client::new().post( "https://yral-upload-video.go-bazzinga.workers.dev/sync_post_to_post_canister").json(&request_payload).send().await;
+
+        match response_result {
+            Err(e) =>  {
+                return Err(e.into())
+            },
+            Ok(response) => {
+                if response.status().is_success() {
+                    Ok(())
+                } else {
+                    let response_error = response.text().await?;
+
+                    Err(response_error.into())
+                }
+            }
+        }
+
+}
+
+
