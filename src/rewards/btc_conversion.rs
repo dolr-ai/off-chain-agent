@@ -122,6 +122,4 @@ impl BtcConverter {
         // Use the 'last' price for INR
         Ok(inr_data.last)
     }
-
 }
-

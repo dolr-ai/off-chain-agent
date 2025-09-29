@@ -117,7 +117,6 @@ impl FraudDetector {
         let is_banned: bool = conn.exists(&ban_key).await?;
         Ok(is_banned)
     }
-
 }
 
 /// Send fraud alert to Google Chat
@@ -281,7 +280,6 @@ mod tests {
         test_detector.cleanup().await.unwrap();
     }
 
-
     #[tokio::test]
     async fn test_fraud_detection_threshold() {
         let test_detector = TestFraudDetector::new().await;
@@ -330,5 +328,4 @@ mod tests {
 
         test_detector.cleanup().await.unwrap();
     }
-
 }
