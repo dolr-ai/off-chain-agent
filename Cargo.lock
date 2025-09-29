@@ -5645,7 +5645,7 @@ dependencies = [
  "utoipa-swagger-ui",
  "uuid",
  "videogen-common",
- "yral-canisters-client",
+ "yral-canisters-client 0.1.0",
  "yral-canisters-common",
  "yral-identity",
  "yral-metadata-client 0.1.0 (git+https://github.com/yral-dapp/yral-metadata.git)",
@@ -9485,6 +9485,25 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "candid_parser",
+ "convert_case 0.6.0",
+ "ic-agent",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "syn 2.0.104",
+ "tokio",
+]
+
+[[package]]
+name = "yral-canisters-client"
+version = "0.1.0"
 source = "git+https://github.com/yral-dapp/yral-common?branch=master#0e1b43c3955f1cd61c7fd9f11f7735713c2da717"
 dependencies = [
  "anyhow",
@@ -9530,7 +9549,7 @@ dependencies = [
  "tracing",
  "url",
  "web-time",
- "yral-canisters-client",
+ "yral-canisters-client 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=master)",
  "yral-identity",
  "yral-metadata-client 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
  "yral-metadata-types 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
@@ -9630,7 +9649,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
- "yral-canisters-client",
+ "yral-canisters-client 0.1.0 (git+https://github.com/yral-dapp/yral-common?branch=master)",
  "yral-identity",
 ]
 
