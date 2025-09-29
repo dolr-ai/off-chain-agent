@@ -199,27 +199,36 @@ impl RewardEngine {
                 );
 
                 // Process the reward
-                self.process_milestone(
-                    video_id,
-                    publisher_user_id,
-                    count,
-                    milestone_number,
-                    &config,
-                    app_state,
-                )
-                .await?;
-            }
-
-            // 7. Fraud detection (async, non-blocking)
-            let fraud_check = self
-                .fraud_detector
-                .check_fraud_patterns(*publisher_user_id)
-                .await;
-            if fraud_check == FraudCheck::Suspicious {
-                log::warn!(
-                    "Suspicious activity detected for creator {}",
-                    publisher_user_id
-                );
+                if (self
+                    .process_milestone(
+                        video_id,
+                        publisher_user_id,
+                        count,
+                        milestone_number,
+                        &config,
+                        app_state,
+                    )
+                    .await)
+                    .is_ok()
+                {
+                    // 7. Fraud detection (async, non-blocking)
+                    let fraud_check = self
+                        .fraud_detector
+                        .check_fraud_patterns(*publisher_user_id)
+                        .await;
+                    if fraud_check == FraudCheck::Suspicious {
+                        log::warn!(
+                            "Suspicious activity detected for creator {}",
+                            publisher_user_id
+                        );
+                    }
+                } else {
+                    log::error!(
+                        "Failed to process milestone reward for video {} by user {}",
+                        video_id,
+                        publisher_user_id
+                    );
+                }
             }
         } else {
             log::debug!(

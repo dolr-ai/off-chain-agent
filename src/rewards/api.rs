@@ -247,14 +247,12 @@ async fn get_video_stats(
     )
 )]
 async fn get_reward_config(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<ConfigResponse>, (StatusCode, String)> {
-    // TODO: Get config from RewardEngine
-    // For now, return default config
+    // Get config from RewardEngine (fetches from Redis)
+    let config = state.rewards_module.reward_engine.get_config().await;
 
-    Ok(Json(ConfigResponse {
-        config: RewardConfig::default(),
-    }))
+    Ok(Json(ConfigResponse { config }))
 }
 
 #[utoipa::path(

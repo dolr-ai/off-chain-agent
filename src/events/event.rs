@@ -36,8 +36,6 @@ use yral_ml_feed_cache::types_v3::{BufferItemV3, MLFeedCacheHistoryItemV3, Plain
 
 pub mod storj;
 
-use crate::rewards::RewardEngine;
-
 #[derive(Debug)]
 pub struct Event {
     pub event: WarehouseEvent,
@@ -863,10 +861,7 @@ impl Event {
         };
 
         // Initialize reward engine
-        let reward_engine = RewardEngine::new(
-            app_state.leaderboard_redis_pool.clone(), // being reused for btc rewards
-            app_state.agent.clone(),
-        );
+        let reward_engine = app_state.rewards_module.reward_engine.clone();
 
         // Process the view for rewards
         let app_state_arc = std::sync::Arc::new(app_state.clone());
