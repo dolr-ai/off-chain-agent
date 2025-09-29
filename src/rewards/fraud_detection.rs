@@ -8,8 +8,8 @@ use redis::AsyncCommands;
 use serde_json::json;
 
 const DEFAULT_FRAUD_THRESHOLD: usize = 5; // 5 rewards in time window
-const DEFAULT_TIME_WINDOW: i64 = 600; // 10 minutes
-const DEFAULT_SHADOW_BAN_DURATION: u64 = 3600; // 1 hour
+const DEFAULT_TIME_WINDOW: i64 = 60 * 60; // 60 minutes
+const DEFAULT_SHADOW_BAN_DURATION: u64 = 3600 * 5; // 5 hours
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FraudCheck {

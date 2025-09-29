@@ -864,7 +864,7 @@ impl Event {
 
         // Initialize reward engine
         let reward_engine = RewardEngine::new(
-            app_state.leaderboard_redis_pool.clone(),
+            app_state.leaderboard_redis_pool.clone(), // being reused for btc rewards
             app_state.agent.clone(),
         );
 

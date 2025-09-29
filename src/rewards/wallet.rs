@@ -29,6 +29,8 @@ pub struct WalletIntegration {
     ckbtc_ops: CkBtcOperations,
 }
 
+const MAX_AMOUNT_SATS_BTC_VIEWS: u64 = 4000;
+
 impl WalletIntegration {
     pub fn new(admin_agent: ic_agent::Agent) -> Self {
         Self {
@@ -47,6 +49,10 @@ impl WalletIntegration {
     ) -> Result<String> {
         // Convert BTC to satoshis (1 BTC = 100,000,000 sats)
         let amount_sats = (amount_btc * 100_000_000.0) as u64;
+
+        if amount_sats > MAX_AMOUNT_SATS_BTC_VIEWS {
+            return Err(anyhow::anyhow!("Amount exceeds maximum allowed"));
+        }
 
         // Create transaction memo as JSON string
         let memo_json = json!({

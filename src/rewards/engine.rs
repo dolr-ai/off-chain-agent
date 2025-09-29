@@ -173,7 +173,7 @@ impl RewardEngine {
                 .await;
 
             // 6. Check for milestone
-            if count % config.view_milestone == 0 {
+            if count != 0 && count % config.view_milestone == 0 {
                 let milestone_number = count / config.view_milestone;
                 log::info!(
                     "Milestone {} reached for video {} (view count: {})",
