@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::{path, ToSchema};
 use yral_canisters_client::daily_missions::{ClaimRewardRequest, DailyMissions};
-use yral_canisters_common::utils::token::{SatsOperations, TokenOperations, TokenOperationsProvider};
+use yral_canisters_common::utils::token::{
+    SatsOperations, TokenOperations, TokenOperationsProvider,
+};
 
 use crate::app_state::AppState;
 use crate::consts::DAILY_MISSIONS_CANISTER_ID;
@@ -27,12 +29,13 @@ pub struct FulfillClaimRequest {
     request_body = FulfillClaimRequest,
     summary = "Fulfill a daily mission claim",
     description = "Fulfill a daily mission claim for a user using delegated identity and transfer tokens to user's wallet",
-    responses = (
-        (200, description = "Claim fulfilled and tokens transferred"),
-        (400, description = "Invalid request"),
-        (401, description = "Authentication failed"),
-        (404, description = "User not found"),
-        (500, description = "Internal server error"),
+    tag = "daily-missions",
+    responses(
+        (status = 200, description = "Claim fulfilled and tokens transferred"),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Authentication failed"),
+        (status = 404, description = "User not found"),
+        (status = 500, description = "Internal server error"),
     )
 )]
 pub async fn fulfill_claim(
@@ -40,30 +43,29 @@ pub async fn fulfill_claim(
     Json(request): Json<FulfillClaimRequest>,
 ) -> impl IntoResponse {
     // Extract user info from delegated identity
-    let user_info = match get_user_info_from_delegated_identity_wire(
-        &state,
-        request.delegated_identity_wire,
-    )
-    .await
-    {
-        Ok(info) => info,
-        Err(e) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "error": format!("Authentication failed: {}", e)
-                })),
-            )
-                .into_response();
-        }
-    };
+    let user_info =
+        match get_user_info_from_delegated_identity_wire(&state, request.delegated_identity_wire)
+            .await
+        {
+            Ok(info) => info,
+            Err(e) => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({
+                        "error": format!("Authentication failed: {}", e)
+                    })),
+                )
+                    .into_response();
+            }
+        };
 
     let user_principal = user_info.user_principal;
     let user_canister = user_info.user_canister;
 
-    
+    // Create the daily missions canister client
     let daily_missions_client = DailyMissions(*DAILY_MISSIONS_CANISTER_ID, &state.agent);
-    
+
+    // Create claim reward request
     let claim_request = ClaimRewardRequest {
         reward_id: request.reward_id.clone(),
     };
@@ -78,7 +80,7 @@ pub async fn fulfill_claim(
                     user_principal,
                     response.message
                 );
-                
+
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(json!({
@@ -97,7 +99,7 @@ pub async fn fulfill_claim(
                 user_principal,
                 e
             );
-            
+
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -116,7 +118,7 @@ pub async fn fulfill_claim(
             // Using YRAL tokens for daily mission rewards - you can change this if needed
             let jwt_token = std::env::var("YRAL_HON_WORKER_JWT").ok();
             let token_ops = TokenOperationsProvider::Sats(SatsOperations::new(jwt_token));
-            
+
             match token_ops.add_balance(user_principal, reward_amount).await {
                 Ok(_) => {
                     log::info!(
@@ -162,7 +164,7 @@ pub async fn fulfill_claim(
         user_principal,
         claim_response.message
     );
-    
+
     (
         StatusCode::OK,
         Json(json!({
