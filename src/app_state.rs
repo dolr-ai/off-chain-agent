@@ -53,6 +53,7 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_redis: YralAuthRedis,
     pub leaderboard_redis_pool: RedisPool,
+    pub service_cansister_migration_redis_pool: RedisPool,
     pub config: AppConfig,
 }
 
@@ -88,6 +89,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             yral_auth_redis: YralAuthRedis::init(&app_config).await,
             leaderboard_redis_pool: init_leaderboard_redis_pool().await,
+            service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool().await,
             config: app_config,
         }
     }
@@ -280,6 +282,15 @@ pub async fn init_canisters_ctx() -> WrappedContextCanisters {
 async fn init_leaderboard_redis_pool() -> RedisPool {
     let redis_url =
         std::env::var("LEADERBOARD_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
+
+    let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
+        .expect("failed to open connection to redis");
+    RedisPool::builder().build(manager).await.unwrap()
+}
+
+async fn    init_service_canister_migration_redis_pool() -> RedisPool {
+    let redis_url =
+        std::env::var("SERVICE_CANISTER_MIGRATION_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
 
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
