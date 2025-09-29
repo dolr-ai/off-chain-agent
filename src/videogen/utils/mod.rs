@@ -5,6 +5,4 @@ pub mod video_audio_stitch;
 pub use common::*;
 
 // Re-export video stitching functions
-pub use video_audio_stitch::{
-    stitch_local_video_audio_and_upload, stitch_video_audio_and_upload,
-};
+pub use video_audio_stitch::{stitch_local_video_audio_and_upload, stitch_video_audio_and_upload};

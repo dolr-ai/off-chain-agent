@@ -4,7 +4,9 @@ use tracing::{error, info};
 use videogen_common::{ImageData, VideoGenError, VideoGenInput, VideoGenResponse};
 
 use crate::app_state::AppState;
-use crate::consts::{RUNPOD_WAN2_2_I2V_ENDPOINT, RUNPOD_WAN2_2_T2V_ENDPOINT, RUNPOD_WAN2_2_ENDPOINT};
+use crate::consts::{
+    RUNPOD_WAN2_2_ENDPOINT, RUNPOD_WAN2_2_I2V_ENDPOINT, RUNPOD_WAN2_2_T2V_ENDPOINT,
+};
 use crate::utils::gcs::maybe_upload_image_to_gcs;
 
 #[derive(Serialize)]
@@ -21,21 +23,21 @@ struct Wan22Input {
     image: Option<String>,
 
     // Parameters per requirements
-    size: String,                      // "720*1280"
-    duration: u32,                     // 5
-    num_inference_steps: u32,          // 40 (updated from 80)
-    guidance: u32,                     // 5
-    seed: i32,                         // -1
+    size: String,             // "720*1280"
+    duration: u32,            // 5
+    num_inference_steps: u32, // 40 (updated from 80)
+    guidance: u32,            // 5
+    seed: i32,                // -1
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    negative_prompt: Option<String>,   // ""
+    negative_prompt: Option<String>, // ""
 
-    temperature: f32,                  // 0.7
-    flow_shift: u32,                   // 5
-    max_tokens: u32,                   // 256
+    temperature: f32, // 0.7
+    flow_shift: u32,  // 5
+    max_tokens: u32,  // 256
 
-    enable_prompt_optimization: bool,  // true
-    enable_safety_checker: bool,       // true
+    enable_prompt_optimization: bool, // true
+    enable_safety_checker: bool,      // true
 }
 
 #[derive(Deserialize)]

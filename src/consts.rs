@@ -108,4 +108,5 @@ pub const RUNPOD_WAN2_2_I2V_ENDPOINT: &str = "wan-2-2-i2v-720";
 pub const LLM_HANDLER_URL: &str = "https://video-gen-llm-handler-router.fly.dev";
 
 // Stable Audio Constants
-pub const STABLE_AUDIO_URL: &str = "https://api.replicate.com/v1/models/stability-ai/stable-audio-2.5/predictions";
+pub const STABLE_AUDIO_URL: &str =
+    "https://api.replicate.com/v1/models/stability-ai/stable-audio-2.5/predictions";

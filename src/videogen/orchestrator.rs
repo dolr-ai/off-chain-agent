@@ -2,8 +2,8 @@ use candid::Principal;
 use std::sync::Arc;
 use tracing::{error, info};
 use videogen_common::{
-    ImageData, VideoGenError, VideoGenInput, VideoGenResponse,
     models::{LlmHandlerModel, StableAudioModel, Wan22Model},
+    ImageData, VideoGenError, VideoGenInput, VideoGenResponse,
 };
 
 use crate::app_state::AppState;
@@ -106,7 +106,10 @@ pub async fn generate_video_with_audio(
     info!("Successfully generated video with audio: {}", stitched_url);
 
     Ok(VideoGenResponse {
-        operation_id: format!("{}_{}", video_response.operation_id, audio_response.operation_id),
+        operation_id: format!(
+            "{}_{}",
+            video_response.operation_id, audio_response.operation_id
+        ),
         video_url: stitched_url,
         provider: "orchestrated_wan2_2_stable_audio".to_string(),
     })
