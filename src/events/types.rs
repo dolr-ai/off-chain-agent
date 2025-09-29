@@ -1048,11 +1048,7 @@ impl EventPayload {
                         ),
                     }),
                     data: Some(json!({
-                        "payload": serde_json::to_string(self).unwrap(),
-                        "type": "btc_views_rewards",
-                        "video_id": payload.video_id,
-                        "milestone": payload.milestone
-                    })),
+                        "payload": serde_json::to_string(self).unwrap() })),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
