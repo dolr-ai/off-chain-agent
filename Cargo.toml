@@ -102,7 +102,7 @@ num-bigint = "0.4"
 sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
-# Remote (Git) - uncomment to use remote versions
+Remote (Git) - uncomment to use remote versions
 yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
     "full",
     "user-post-service",

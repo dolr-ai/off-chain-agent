@@ -36,6 +36,7 @@ mod auth;
 pub mod canister;
 mod config;
 mod consts;
+pub mod daily_missions;
 mod duplicate_video;
 mod error;
 mod events;
@@ -84,6 +85,10 @@ async fn main_impl() -> Result<()> {
         .nest(
             "/api/v1/leaderboard",
             leaderboard::leaderboard_router(shared_state.clone()),
+        )
+        .nest(
+            "/api/v1/daily-missions",
+            daily_missions::daily_missions_router(shared_state.clone()),
         )
         .nest(
             "/api/v2/videogen",
