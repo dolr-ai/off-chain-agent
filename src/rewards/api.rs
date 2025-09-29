@@ -63,7 +63,6 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_user_reward_history))
         .routes(routes!(get_creator_reward_history))
         .routes(routes!(get_reward_config))
-        .routes(routes!(update_reward_config))
         .with_state(state)
 }
 
@@ -226,17 +225,6 @@ async fn get_reward_config(
     Ok(Json(ConfigResponse { config }))
 }
 
-#[utoipa::path(
-    post,
-    path = "/admin/config",
-    request_body = RewardConfig,
-    tag = "rewards",
-    responses(
-        (status = 200, description = "Configuration updated"),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Internal server error"),
-    )
-)]
 pub async fn update_reward_config(
     State(state): State<Arc<AppState>>,
     Json(new_config): Json<RewardConfig>,
