@@ -138,7 +138,7 @@ fn send_fraud_alert(creator_id: String, reward_count: usize) {
 
         // Create simple text message for Google Chat
         let message = format!(
-            "⚠️ FRAUD ALERT - Reward System\n\nCreator: {}\nRewards: {} in 60 minutes\nAction: Shadow banned for 5 hours\nTime: {}\n\nView creator: https://yral.com/@{}",
+            "⚠️ FRAUD ALERT - Reward System\n\nCreator: {}\nRewards: {} in 60 minutes\nAction: Shadow banned for 5 hours\nTime: {}\n\nView creator: https://yral.com/profile/{}/posts",
             creator_id,
             reward_count,
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
