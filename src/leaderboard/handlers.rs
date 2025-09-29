@@ -16,6 +16,9 @@ use chrono::{DateTime, TimeZone};
 use chrono_tz::Tz;
 use serde::Deserialize;
 
+// Conversion rate: 1 USD = 886 SATS (ckBTC satoshis)
+const USD_TO_CKBTC_SATS_RATE: f64 = 886.0;
+
 // Timezone API response structure
 #[derive(Debug, Deserialize)]
 struct TimezoneApiResponse {
@@ -344,6 +347,31 @@ pub async fn get_leaderboard_handler(
         }
     };
 
+    // Check if tournament has saved results (was finalized) when tournament is completed
+    let saved_results = if tournament.status == TournamentStatus::Completed {
+        match redis.get_tournament_results(&tournament_id).await {
+            Ok(results) => results,
+            Err(e) => {
+                log::warn!("Failed to get saved tournament results: {:?}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // If tournament was finalized, create rewards map from saved results
+    let rewards_map: std::collections::HashMap<Principal, u64> =
+        if let Some(ref results) = saved_results {
+            results
+                .user_results
+                .iter()
+                .filter_map(|entry| entry.reward.map(|r| (entry.principal_id, r)))
+                .collect()
+        } else {
+            std::collections::HashMap::new()
+        };
+
     // Get total participants first (needed for rank calculation in ascending order)
     let total_participants = redis
         .get_total_participants(&tournament_id)
@@ -409,10 +437,24 @@ pub async fn get_leaderboard_handler(
                     random_username_from_principal(principal, 15)
                 });
 
-                // For rewards, always use the "real" rank (1 = top prize)
-                let reward_rank = match sort_order {
-                    SortOrder::Desc => rank,                         // Same as display rank
-                    SortOrder::Asc => total_participants - rank + 1, // Convert back to real rank
+                // For rewards, check if we have saved results from a finalized tournament
+                let reward = if tournament.status == TournamentStatus::Completed {
+                    // Use saved reward if exists (for winners), None for others
+                    let saved_reward = rewards_map.get(&principal).copied();
+                    // Convert CKBTC rewards from sats to USD for display (only for saved rewards)
+                    if tournament.prize_token == TokenType::CKBTC {
+                        saved_reward.map(|r| (r as f64 / USD_TO_CKBTC_SATS_RATE) as u64)
+                    } else {
+                        saved_reward
+                    }
+                } else {
+                    // Tournament still active - calculate potential reward
+                    // Always use the "real" rank (1 = top prize)
+                    let reward_rank = match sort_order {
+                        SortOrder::Desc => rank,                         // Same as display rank
+                        SortOrder::Asc => total_participants - rank + 1, // Convert back to real rank
+                    };
+                    calculate_reward(reward_rank, tournament.prize_pool as u64)
                 };
 
                 Some(LeaderboardEntry {
@@ -420,7 +462,7 @@ pub async fn get_leaderboard_handler(
                     username,
                     score: *score,
                     rank, // Display rank (reversed for ascending)
-                    reward: calculate_reward(reward_rank, tournament.prize_pool as u64), // Use real rank for rewards
+                    reward,
                 })
             } else {
                 None
@@ -485,13 +527,28 @@ pub async fn get_leaderboard_handler(
 
             if user_rank > 0 {
                 // User is in the tournament
+                // Determine reward based on tournament status
+                let user_reward = if tournament.status == TournamentStatus::Completed {
+                    // Use saved reward if exists
+                    let saved_reward = rewards_map.get(&user_principal).copied();
+                    // Convert CKBTC rewards from sats to USD for display (only for saved rewards)
+                    if tournament.prize_token == TokenType::CKBTC {
+                        saved_reward.map(|r| (r as f64 / USD_TO_CKBTC_SATS_RATE) as u64)
+                    } else {
+                        saved_reward
+                    }
+                } else {
+                    // Tournament still active - calculate potential reward
+                    calculate_reward(user_rank, tournament.prize_pool as u64)
+                };
+
                 Some(serde_json::json!({
                     "principal_id": user_principal.to_string(),
                     "username": username,
                     "rank": user_rank,
                     "score": user_score,
                     "percentile": ((total_participants - user_rank + 1) as f32 / total_participants as f32 * 100.0),
-                    "reward": calculate_reward(user_rank, tournament.prize_pool as u64),
+                    "reward": user_reward,
                 }))
             } else {
                 // User is not in the tournament - return with rank = total_participants + 1, score = 0
@@ -532,6 +589,7 @@ pub async fn get_leaderboard_handler(
             client_timezone: Some(timezone_str.clone()),
             client_start_time: Some(convert_timestamp_to_timezone(tournament.start_time, tz)),
             client_end_time: Some(convert_timestamp_to_timezone(tournament.end_time, tz)),
+            num_winners: tournament.num_winners,
         }
     } else {
         // Fallback when timezone cannot be determined
@@ -547,6 +605,7 @@ pub async fn get_leaderboard_handler(
             client_timezone: None,
             client_start_time: None,
             client_end_time: None,
+            num_winners: tournament.num_winners,
         }
     };
 
@@ -574,6 +633,7 @@ pub async fn get_leaderboard_handler(
                             upcoming_tournament.end_time,
                             tz,
                         )),
+                        num_winners: upcoming_tournament.num_winners,
                     }
                 } else {
                     TournamentInfo {
@@ -588,6 +648,7 @@ pub async fn get_leaderboard_handler(
                         client_timezone: None,
                         client_start_time: None,
                         client_end_time: None,
+                        num_winners: upcoming_tournament.num_winners,
                     }
                 };
                 Some(upcoming_info)
@@ -800,6 +861,9 @@ pub async fn get_user_rank_handler(
             .filter_map(|(index, (principal_str, score))| {
                 if let Ok(p) = Principal::from_text(principal_str) {
                     let rank = context_start + index as u32 + 1;
+                    // For active tournaments, calculate_reward already returns the correct value
+                    let reward = calculate_reward(rank, tournament.prize_pool as u64);
+
                     Some(LeaderboardEntry {
                         principal_id: p,
                         username: if p == principal {
@@ -809,7 +873,7 @@ pub async fn get_user_rank_handler(
                         },
                         score: *score,
                         rank,
-                        reward: calculate_reward(rank, tournament.prize_pool as u64),
+                        reward,
                     })
                 } else {
                     None
@@ -822,6 +886,13 @@ pub async fn get_user_rank_handler(
     };
 
     // Build user info struct
+    // For active tournaments, calculate_reward already returns the correct value
+    let user_reward = if is_in_leaderboard {
+        calculate_reward(user_rank, tournament.prize_pool as u64)
+    } else {
+        None
+    };
+
     let user = UserRankInfo {
         principal_id: principal,
         username,
@@ -832,11 +903,7 @@ pub async fn get_user_rank_handler(
         } else {
             0.0
         },
-        reward: if is_in_leaderboard {
-            calculate_reward(user_rank, tournament.prize_pool as u64)
-        } else {
-            None
-        },
+        reward: user_reward,
     };
 
     // Build tournament info struct
@@ -981,12 +1048,15 @@ pub async fn search_users_handler(
                 random_username_from_principal(*principal, 15)
             });
 
+            // For active tournaments, calculate_reward already returns the correct value
+            let reward = calculate_reward(rank, tournament.prize_pool as u64);
+
             entries.push(LeaderboardEntry {
                 principal_id: *principal,
                 username,
                 score: *score,
                 rank,
-                reward: calculate_reward(rank, tournament.prize_pool as u64),
+                reward,
             });
         }
     }
@@ -1077,11 +1147,14 @@ pub async fn get_tournament_history_handler(
                             }
                         };
 
+                        // For historical tournaments, calculate_reward returns the correct value
+                        let reward = calculate_reward(1, tournament.prize_pool as u64).unwrap_or(0);
+
                         Some(WinnerInfo {
                             principal_id: principal,
                             username,
                             score: *score,
-                            reward: calculate_reward(1, tournament.prize_pool as u64).unwrap_or(0),
+                            reward,
                         })
                     } else {
                         None
@@ -1107,6 +1180,7 @@ pub async fn get_tournament_history_handler(
                 prize_token: tournament.prize_token,
                 total_participants,
                 winner: winner_info,
+                num_winners: tournament.num_winners,
             });
         }
     }
@@ -1164,6 +1238,7 @@ pub async fn create_tournament_handler(
         allowed_sources: request.allowed_sources,
         created_at: now,
         updated_at: now,
+        num_winners: request.num_winners.unwrap_or(10),
     };
 
     // Store tournament info
@@ -1277,7 +1352,7 @@ pub async fn finalize_tournament_handler(
                 let next_end_time = next_start_time + tournament_duration; // Same duration as previous tournament
 
                 // Prepare configuration for next tournament
-                let next_tournament_config = serde_json::json!({
+                let _next_tournament_config = serde_json::json!({
                     "start_time": next_start_time,
                     "end_time": next_end_time,
                     "prize_pool": tournament.prize_pool,
@@ -1288,19 +1363,19 @@ pub async fn finalize_tournament_handler(
                 });
 
                 // Schedule tournament creation via QStash (10 minutes delay)
-                if let Err(e) = state
-                    .qstash_client
-                    .schedule_tournament_create(next_tournament_config, 60)
-                    .await
-                {
-                    log::error!("Failed to schedule next tournament creation: {:?}", e);
-                    // Don't fail the finalization if scheduling fails
-                } else {
-                    log::info!(
-                        "Scheduled next tournament to be created in 10 minutes (at {})",
-                        next_start_time
-                    );
-                }
+                // if let Err(e) = state
+                //     .qstash_client
+                //     .schedule_tournament_create(next_tournament_config, 60)
+                //     .await
+                // {
+                //     log::error!("Failed to schedule next tournament creation: {:?}", e);
+                //     // Don't fail the finalization if scheduling fails
+                // } else {
+                //     log::info!(
+                //         "Scheduled next tournament to be created in 10 minutes (at {})",
+                //         next_start_time
+                //     );
+                // }
             }
 
             (
@@ -1444,7 +1519,13 @@ pub async fn get_tournament_results_handler(
                 // Determine reward based on tournament status
                 let reward = if tournament.status == TournamentStatus::Completed {
                     // Use saved reward if exists (for winners), None for others
-                    rewards_map.get(&principal).copied()
+                    let saved_reward = rewards_map.get(&principal).copied();
+                    // Convert CKBTC rewards from sats to USD for display (only for saved rewards)
+                    if tournament.prize_token == TokenType::CKBTC {
+                        saved_reward.map(|r| (r as f64 / USD_TO_CKBTC_SATS_RATE) as u64)
+                    } else {
+                        saved_reward
+                    }
                 } else {
                     // Tournament still active - calculate potential reward
                     calculate_reward(rank, tournament.prize_pool as u64)
@@ -1497,6 +1578,7 @@ pub async fn get_tournament_results_handler(
         prize_token: tournament.prize_token.to_string(),
         metric_type: tournament.metric_type.to_string(),
         metric_display_name: tournament.metric_display_name,
+        num_winners: tournament.num_winners,
     };
 
     // Build response struct

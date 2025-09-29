@@ -2,14 +2,6 @@ use candid::Principal;
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
-pub const STDB_URL: &str = "https://maincloud.spacetimedb.com";
-
-pub const DELETED_CANISTERS_MODULE_IDENTITY: &str = "yral-canisters";
-
-pub static STDB_ACCESS_TOKEN: Lazy<String> = Lazy::new(|| {
-    std::env::var("STDB_ADMIN_ACCESS_TOKEN").expect("STDB_ADMIN_ACCESS_TOKEN to be set")
-});
-
 pub static DEDUP_INDEX_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
     "4drz6-pyaaa-aaaas-qbfoa-cai"
         .parse()
@@ -52,7 +44,7 @@ pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev
 pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
 
 pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
-    Url::parse("https://storjinterglyzk2wmjf-0f789ede209a7048.tec-s1.onthetaedgecloud.com/")
+    Url::parse("https://storjinterrx76ir6hb9-5ade12b5344ec232.tec-s1.onthetaedgecloud.com/")
         .unwrap()
 });
 

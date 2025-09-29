@@ -385,11 +385,11 @@ impl LeaderboardRedis {
             }
         }
 
-        log::debug!(
-            "Retrieved {} usernames out of {} principals",
-            username_map.len(),
-            principals.len()
-        );
+        // log::debug!(
+        //     "Retrieved {} usernames out of {} principals",
+        //     username_map.len(),
+        //     principals.len()
+        // );
 
         Ok(username_map)
     }
