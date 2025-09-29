@@ -148,7 +148,7 @@ pub async fn deduct_balance_with_cleanup(
         TokenType::Free => None, // Should not reach here
     };
 
-    // Get agents for operations
+    // Get agent for operations
     let admin_agent_opt = if matches!(token_type, TokenType::Dolr) {
         Some(agent.clone())
     } else {
