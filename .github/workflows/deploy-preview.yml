@@ -86,6 +86,7 @@ jobs:
           flyctl secrets set "YRAL_HON_WORKER_JWT=$YRAL_HON_WORKER_JWT" --app "$APP_NAME" --stage
           flyctl secrets set "LEADERBOARD_REDIS_URL=$LEADERBOARD_REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set "TEST_REDIS_URL=$TEST_REDIS_URL" --app "$APP_NAME" --stage
+          flyctl secrets set "BTC_REWARDS_GCHAT_WEBHOOK_URL=$BTC_REWARDS_GCHAT_WEBHOOK_URL" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -122,3 +123,4 @@ jobs:
           YRAL_HON_WORKER_JWT: ${{ secrets.YRAL_HON_WORKER_JWT }}
           LEADERBOARD_REDIS_URL: ${{ secrets.LEADERBOARD_REDIS_URL }}
           TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
+          BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}

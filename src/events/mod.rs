@@ -153,6 +153,11 @@ async fn process_event_impl(
         }
     }
 
+    // Process BTC rewards for video views
+    if event.event.event == "video_duration_watched" {
+        event.process_btc_rewards(&shared_state.clone()).await;
+    }
+
     Ok(())
 }
 
@@ -183,6 +188,11 @@ async fn process_event_impl_v2(
         if let Err(e) = res {
             log::error!("Failed to dispatch notification: {e:?}");
         }
+    }
+
+    // Process BTC rewards for video views
+    if event.event.event == "video_duration_watched" {
+        event.process_btc_rewards(&shared_state.clone()).await;
     }
 
     Ok(())
