@@ -104,22 +104,22 @@ sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534", features = [
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "03f5eef3c9c598864df07a604772c126d440cc84", features = [
     "full",
     "user-post-service",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
-videogen-common = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534", features = [
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "03f5eef3c9c598864df07a604772c126d440cc84", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", rev = "03f5eef3c9c598864df07a604772c126d440cc84", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "03f5eef3c9c598864df07a604772c126d440cc84" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "03f5eef3c9c598864df07a604772c126d440cc84" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", rev = "03f5eef3c9c598864df07a604772c126d440cc84", features = [
     "ic",
     "server",
 ] }
-yral-identity = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
-yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
-yral-types = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
-yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", rev = "03f5eef3c9c598864df07a604772c126d440cc84" }
+yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", rev = "03f5eef3c9c598864df07a604772c126d440cc84" }
+yral-types = { git = "https://github.com/yral-dapp/yral-common", rev = "03f5eef3c9c598864df07a604772c126d440cc84" }
+yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", rev = "03f5eef3c9c598864df07a604772c126d440cc84" }
 
 
 # Local (Path) - uncomment to use local development versions
