@@ -88,6 +88,7 @@ jobs:
           flyctl secrets set "TEST_REDIS_URL=$TEST_REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set "HETZNER_S3_ACCESS_KEY=$HETZNER_S3_ACCESS_KEY" --app "$APP_NAME" --stage
           flyctl secrets set "HETZNER_S3_SECRET_KEY=$HETZNER_S3_SECRET_KEY" --app "$APP_NAME" --stage
+          flyctl secrets set "BTC_REWARDS_GCHAT_WEBHOOK_URL=$BTC_REWARDS_GCHAT_WEBHOOK_URL" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -126,3 +127,4 @@ jobs:
           TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
           HETZNER_S3_ACCESS_KEY: ${{ secrets.HETZNER_S3_ACCESS_KEY }}
           HETZNER_S3_SECRET_KEY: ${{ secrets.HETZNER_S3_SECRET_KEY }}
+          BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}

@@ -45,6 +45,7 @@ mod offchain_service;
 pub mod pipeline;
 mod posts;
 mod qstash;
+mod rewards;
 mod types;
 pub mod user;
 pub mod utils;
@@ -84,6 +85,10 @@ async fn main_impl() -> Result<()> {
         .nest(
             "/api/v1/leaderboard",
             leaderboard::leaderboard_router(shared_state.clone()),
+        )
+        .nest(
+            "/api/v1/rewards",
+            rewards::api::rewards_router(shared_state.clone()),
         )
         .nest(
             "/api/v2/videogen",

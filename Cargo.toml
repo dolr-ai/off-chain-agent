@@ -102,6 +102,7 @@ aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 rustls = { version = "0.23", features = ["ring"] }
 async-channel = "2.3.1"
 num-bigint = "0.4"
+num-traits = "0.2"
 sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====

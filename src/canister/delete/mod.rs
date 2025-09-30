@@ -47,6 +47,8 @@ pub async fn delete_canister_data(
     user_principal: Principal,
     to_delete_posts_from_canister: bool,
 ) -> Result<(), anyhow::Error> {
+    log::info!("Deleting canister data for canister {canister_id} and user {user_principal}");
+
     // 0. Delete user from YRAL auth Redis (this step is unique to user deletion)
     #[cfg(not(feature = "local-bin"))]
     {

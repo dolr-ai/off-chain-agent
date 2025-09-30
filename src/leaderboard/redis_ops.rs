@@ -791,6 +791,7 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs() as i64,
+            num_winners: 10,
         }
     }
 

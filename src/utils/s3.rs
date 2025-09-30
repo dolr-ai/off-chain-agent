@@ -60,8 +60,8 @@ pub async fn create_s3_client() -> Result<Client, String> {
 /// Process and optimize image data
 fn process_image(image_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     // Load the image
-    let img = image::load_from_memory(&image_bytes)
-        .map_err(|e| format!("Failed to load image: {e}"))?;
+    let img =
+        image::load_from_memory(&image_bytes).map_err(|e| format!("Failed to load image: {e}"))?;
 
     // Check dimensions and resize if needed
     const MAX_SIZE: u32 = 1000;
@@ -182,7 +182,10 @@ pub async fn delete_profile_image_from_s3(user_principal: &str) -> Result<(), St
     let objects = list_response.contents();
     for object in objects {
         if let Some(key) = object.key() {
-            info!("Deleting old profile image from S3: {}/{}", config.bucket, key);
+            info!(
+                "Deleting old profile image from S3: {}/{}",
+                config.bucket, key
+            );
 
             client
                 .delete_object()

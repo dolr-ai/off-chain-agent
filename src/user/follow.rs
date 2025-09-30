@@ -7,7 +7,10 @@ use tracing::instrument;
 use utoipa::ToSchema;
 
 use crate::{
-    app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, events::types::{EventPayload, FollowUserPayload}, types::DelegatedIdentityWire,
+    app_state::AppState,
+    consts::USER_INFO_SERVICE_CANISTER_ID,
+    events::types::{EventPayload, FollowUserPayload},
+    types::DelegatedIdentityWire,
     user::utils::get_agent_from_delegated_identity_wire,
     utils::delegated_identity::get_user_info_from_delegated_identity_wire,
 };
@@ -78,7 +81,10 @@ pub async fn handle_follow_user(
     // 3. Call user_info_service.follow_user()
     let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &user_agent);
 
-    match user_info_service.follow_user(request.target_principal).await {
+    match user_info_service
+        .follow_user(request.target_principal)
+        .await
+    {
         Ok(yral_canisters_client::user_info_service::Result_::Ok) => {
             tracing::info!(
                 "User {} successfully followed {}",
