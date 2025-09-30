@@ -4,15 +4,15 @@ use tracing::info;
 use videogen_common::{VideoGenError, VideoGenInput, VideoGenResponse};
 
 use crate::app_state::AppState;
-use crate::consts::RUNPOD_WAN2_2_ENDPOINT;
+use crate::consts::RUNPOD_WAN2_5_ENDPOINT;
 
 #[derive(Serialize)]
-struct Wan22Request {
-    input: Wan22Input,
+struct Wan25Request {
+    input: Wan25Input,
 }
 
 #[derive(Serialize)]
-struct Wan22Input {
+struct Wan25Input {
     prompt: String,
 
     // Hardcoded parameters from Python script and API spec
@@ -36,19 +36,19 @@ struct Wan22Input {
 }
 
 #[derive(Deserialize)]
-struct Wan22SubmitResponse {
+struct Wan25SubmitResponse {
     id: String,
 }
 
 #[derive(Deserialize)]
-struct Wan22StatusResponse {
+struct Wan25StatusResponse {
     status: String,
-    output: Option<Wan22Output>,
+    output: Option<Wan25Output>,
     error: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct Wan22Output {
+struct Wan25Output {
     video_url: Option<String>,
     // Alternative field names from API spec
     url: Option<String>,
@@ -68,9 +68,9 @@ pub async fn generate(
     input: VideoGenInput,
     _app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
-    let VideoGenInput::Wan22(model) = input else {
+    let VideoGenInput::Wan25(model) = input else {
         return Err(VideoGenError::InvalidInput(
-            "Only Wan22 input is supported".to_string(),
+            "Only Wan25 input is supported".to_string(),
         ));
     };
 
@@ -79,8 +79,8 @@ pub async fn generate(
     let client = reqwest::Client::new();
 
     // Build request with hardcoded parameters
-    let request = Wan22Request {
-        input: Wan22Input {
+    let request = Wan25Request {
+        input: Wan25Input {
             prompt: model.prompt.clone(),
             size: "720*1280".to_string(),
             duration: 5,
@@ -97,10 +97,10 @@ pub async fn generate(
     };
 
     // Submit job
-    let submit_url = format!("https://api.runpod.ai/v2/{RUNPOD_WAN2_2_ENDPOINT}/run");
+    let submit_url = format!("https://api.runpod.ai/v2/{RUNPOD_WAN2_5_ENDPOINT}/run");
 
     info!(
-        "Submitting Wan 2.2 generation job for prompt: {}",
+        "Submitting Wan 2.5 generation job for prompt: {}",
         &model.prompt[..model.prompt.len().min(60)]
     );
 
@@ -124,11 +124,11 @@ pub async fn generate(
         )));
     }
 
-    let submit_response: Wan22SubmitResponse = response.json().await.map_err(|e| {
+    let submit_response: Wan25SubmitResponse = response.json().await.map_err(|e| {
         VideoGenError::ProviderError(format!("Failed to parse submit response: {e}"))
     })?;
 
-    info!("Wan 2.2 job submitted with ID: {}", submit_response.id);
+    info!("Wan 2.5 job submitted with ID: {}", submit_response.id);
 
     // Poll for completion
     let video_url = poll_for_completion(&submit_response.id, &api_key).await?;
@@ -136,15 +136,15 @@ pub async fn generate(
     Ok(VideoGenResponse {
         operation_id: submit_response.id,
         video_url,
-        provider: "wan2_2".to_string(),
+        provider: "wan2_5".to_string(),
     })
 }
 
 async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, VideoGenError> {
     let client = reqwest::Client::new();
-    let status_url = format!("https://api.runpod.ai/v2/{RUNPOD_WAN2_2_ENDPOINT}/status/{job_id}");
+    let status_url = format!("https://api.runpod.ai/v2/{RUNPOD_WAN2_5_ENDPOINT}/status/{job_id}");
 
-    info!("Starting to poll for completion of Wan 2.2 job: {job_id}");
+    info!("Starting to poll for completion of Wan 2.5 job: {job_id}");
 
     let max_attempts = 120; // 20 minutes with 10s intervals
     let poll_interval = Duration::from_secs(10);
@@ -168,7 +168,7 @@ async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, Vide
             )));
         }
 
-        let status: Wan22StatusResponse = response.json().await.map_err(|e| {
+        let status: Wan25StatusResponse = response.json().await.map_err(|e| {
             VideoGenError::ProviderError(format!("Failed to parse status response: {e}"))
         })?;
 
@@ -183,7 +183,7 @@ async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, Vide
                         .or(output.video);
 
                     if let Some(url) = video_url {
-                        info!("Wan 2.2 video generation completed");
+                        info!("Wan 2.5 video generation completed");
 
                         // Log metadata if available
                         if let Some(gen_time) = output.generation_time {
@@ -216,7 +216,7 @@ async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, Vide
             "IN_QUEUE" | "IN_PROGRESS" => {
                 if attempt > 0 && attempt % 6 == 0 {
                     info!(
-                        "Wan 2.2 generation still in progress... ({} seconds elapsed)",
+                        "Wan 2.5 generation still in progress... ({} seconds elapsed)",
                         attempt * 10
                     );
                 }
