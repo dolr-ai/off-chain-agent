@@ -106,22 +106,22 @@ sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "new_videogen_api", features = [
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534", features = [
     "full",
     "user-post-service",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "new_videogen_api", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "new_videogen_api", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "new_videogen_api" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "new_videogen_api" }
-videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "new_videogen_api", features = [
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534", features = [
     "ic",
     "server",
 ] }
-yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "new_videogen_api" }
-yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "new_videogen_api" }
-yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "new_videogen_api" }
-yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", branch = "new_videogen_api" }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
+yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
+yral-types = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
+yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", rev = "cd5952c4b25340cd12044b6f02bfa516acc44534" }
 
 
 # Local (Path) - uncomment to use local development versions
