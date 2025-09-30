@@ -1,4 +1,3 @@
-use crate::canister::utils::deleted_canister::WrappedContextCanisters;
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
@@ -6,6 +5,7 @@ use crate::events::push_notifications::NotificationClient;
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
+use crate::rewards::RewardsModule;
 use crate::types::RedisPool;
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
@@ -48,19 +48,27 @@ pub struct AppState {
     pub canister_backup_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
     pub notification_client: NotificationClient,
-    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
-    pub canisters_ctx: WrappedContextCanisters,
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_redis: YralAuthRedis,
     pub leaderboard_redis_pool: RedisPool,
+    pub rewards_module: RewardsModule,
     pub config: AppConfig,
 }
 
 impl AppState {
     pub async fn new(app_config: AppConfig) -> Self {
+        let leaderboard_redis_pool = init_leaderboard_redis_pool().await;
+        let agent = init_agent().await;
+        let mut rewards_module = RewardsModule::new(leaderboard_redis_pool.clone(), agent.clone());
+
+        // Initialize the rewards module (loads Lua scripts)
+        if let Err(e) = rewards_module.initialize().await {
+            log::error!("Failed to initialize rewards module: {}", e);
+        }
+
         AppState {
             yral_metadata_client: init_yral_metadata_client(&app_config),
-            agent: init_agent().await,
+            agent,
             #[cfg(not(feature = "local-bin"))]
             auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
@@ -83,11 +91,10 @@ impl AppState {
             notification_client: NotificationClient::new(
                 env::var("YRAL_METADATA_NOTIFICATION_API_KEY").unwrap_or_default(),
             ),
-            #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
-            canisters_ctx: init_canisters_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             yral_auth_redis: YralAuthRedis::init(&app_config).await,
-            leaderboard_redis_pool: init_leaderboard_redis_pool().await,
+            leaderboard_redis_pool,
+            rewards_module,
             config: app_config,
         }
     }
@@ -271,10 +278,6 @@ async fn init_canister_backup_redis_pool() -> RedisPool {
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
     RedisPool::builder().build(manager).await.unwrap()
-}
-
-pub async fn init_canisters_ctx() -> WrappedContextCanisters {
-    WrappedContextCanisters::new().expect("Canisters context to be connected")
 }
 
 async fn init_leaderboard_redis_pool() -> RedisPool {

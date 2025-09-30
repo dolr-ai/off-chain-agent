@@ -131,6 +131,8 @@ impl Event {
                     .header(CONTENT_TYPE, "application/json")
                     .header("upstash-method", "POST")
                     .header("upstash-delay", "600s")
+                    .header("Upstash-Flow-Control-Key", "VIDEO_DEDUPLICATION")
+                    .header("Upstash-Flow-Control-Value", "Rate=30,Parallelism=15")
                     .send()
                     .await;
 
@@ -839,6 +841,36 @@ impl Event {
                 }
             }
         });
+    }
+
+    pub async fn process_btc_rewards(&self, app_state: &AppState) {
+        if self.event.event != "video_duration_watched" {
+            return;
+        }
+
+        // Parse the event parameters
+        let params: Result<VideoDurationWatchedPayloadV2, _> =
+            serde_json::from_str(&self.event.params);
+
+        let params = match params {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("Failed to parse video_duration_watched params for rewards: {e:?}");
+                return;
+            }
+        };
+
+        // Initialize reward engine
+        let reward_engine = app_state.rewards_module.reward_engine.clone();
+
+        // Process the view for rewards
+        let app_state_arc = std::sync::Arc::new(app_state.clone());
+        if let Err(e) = reward_engine
+            .process_video_view(params, &app_state_arc)
+            .await
+        {
+            log::error!("Failed to process BTC rewards: {e:?}");
+        }
     }
 
     pub fn update_success_history_v3(&self, app_state: &AppState) {

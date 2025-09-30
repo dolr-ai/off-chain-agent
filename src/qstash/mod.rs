@@ -31,6 +31,7 @@ use crate::{
         nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
     },
     posts::report_post::qstash_report_post,
+    rewards::api::update_reward_config,
 };
 
 pub mod client;
@@ -162,6 +163,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/tournament/end/{id}",
             post(crate::leaderboard::handlers::end_tournament_handler),
         )
+        .route("/rewards/update_config", post(update_reward_config))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
