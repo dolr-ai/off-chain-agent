@@ -791,6 +791,8 @@ pub struct RewardEarnedPayload {
     pub view_count: u64,
     #[serde(rename = "timestamp")]
     pub timestamp: i64,
+    #[serde(rename = "rewards_received_bs")]
+    pub rewards_received_bs: bool,
 }
 
 // ----------------------------------------------------------------------------------
@@ -1048,7 +1050,8 @@ impl EventPayload {
                         ),
                     }),
                     data: Some(json!({
-                        "payload": serde_json::to_string(self).unwrap() })),
+                        "payload": serde_json::to_string(self).unwrap()
+                    })),
                     android: Some(AndroidConfig {
                         notification: Some(AndroidNotification {
                             icon: Some(
@@ -1063,10 +1066,7 @@ impl EventPayload {
                     }),
                     webpush: Some(WebpushConfig {
                         fcm_options: Some(WebpushFcmOptions {
-                            link: Some(format!(
-                                "https://yral.com/wallet/{}",
-                                payload.creator_id.to_text()
-                            )),
+                            link: Some("https://link.yral.com/dJqgFEnM6Wb".to_string()),
                             ..Default::default()
                         }),
                         ..Default::default()
@@ -1086,10 +1086,7 @@ impl EventPayload {
                                 },
                                 "sound": "default",
                             },
-                            "url": format!(
-                                "https://yral.com/wallet/{}",
-                                payload.creator_id.to_text()
-                            )
+                            "url": "https://link.yral.com/dJqgFEnM6Wb"
                         })),
                         ..Default::default()
                     }),
