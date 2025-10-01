@@ -72,7 +72,7 @@ impl ServiceCanisterMigrationRedis {
 
 
 pub async fn update_the_metadata_mapping(State(state): State<Arc<AppState>>, Json(request): Json<MigrateIndividualUserRequest>) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let admin_identity = state.admin_identity;
+    let admin_identity = &state.admin_identity;
 
    let mut user_metadata = state.yral_metadata_client.get_user_metadata_v2(request.user_principal.to_text()).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?.ok_or((StatusCode::INTERNAL_SERVER_ERROR, "User metadata not found".to_string()))?;
 
@@ -83,7 +83,7 @@ pub async fn update_the_metadata_mapping(State(state): State<Arc<AppState>>, Jso
         user_name: user_metadata.user_name,
     };
 
-    state.yral_metadata_client.admin_set_user_metadata(&admin_identity, request.user_principal, set_user_metadata_req).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    state.yral_metadata_client.admin_set_user_metadata(admin_identity, request.user_principal, set_user_metadata_req).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(())
 }
