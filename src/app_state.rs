@@ -14,7 +14,8 @@ use google_cloud_alloydb_v1::client::AlloyDBAdmin;
 use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
-use ic_agent::Agent;
+use ic_agent::identity::Secp256k1Identity;
+use ic_agent::{Agent, Identity};
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
@@ -27,6 +28,7 @@ use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
 
 #[derive(Clone)]
 pub struct AppState {
+    pub admin_identity: Secp256k1Identity,
     pub agent: ic_agent::Agent,
     pub yral_metadata_client: MetadataClient<true>,
     #[cfg(not(feature = "local-bin"))]
@@ -52,6 +54,7 @@ pub struct AppState {
     pub yral_auth_redis: YralAuthRedis,
     pub leaderboard_redis_pool: RedisPool,
     pub rewards_module: RewardsModule,
+    pub service_cansister_migration_redis_pool: RedisPool,
     pub config: AppConfig,
 }
 
@@ -67,6 +70,7 @@ impl AppState {
         }
 
         AppState {
+            admin_identity: init_identity(),
             yral_metadata_client: init_yral_metadata_client(&app_config),
             agent,
             #[cfg(not(feature = "local-bin"))]
@@ -96,6 +100,7 @@ impl AppState {
             leaderboard_redis_pool,
             rewards_module,
             config: app_config,
+            service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool().await,
         }
     }
 
@@ -143,6 +148,34 @@ impl AppState {
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
     MetadataClient::with_base_url(YRAL_METADATA_URL.clone())
         .with_jwt_token(conf.yral_metadata_token.clone())
+}
+
+pub fn init_identity() -> ic_agent::identity::Secp256k1Identity {
+    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
+    {
+
+
+        let pk = env::var("BACKEND_ADMIN_IDENTITY").expect("$BACKEND_ADMIN_IDENTITY is not set");
+         match ic_agent::identity::Secp256k1Identity::from_pem(stringreader::StringReader::new( pk.as_str(),)) {
+            Ok(identity) => identity,
+            Err(err) => {
+                panic!("Unable to create identity, error: {err:?}");
+            }
+        }
+    }
+
+    #[cfg(any(feature = "use-local-agent", feature = "local-bin"))]
+    {
+        use k256::elliptic_curve::{rand_core, SecretKey};
+        use rand::rng;
+
+        let mut rng = rand_core::OsRng {};
+
+        ic_agent::identity::Secp256k1Identity::from_private_key(SecretKey::random(&mut rng))
+    
+
+    }
+   
 }
 
 pub async fn init_agent() -> Agent {
@@ -283,6 +316,15 @@ async fn init_canister_backup_redis_pool() -> RedisPool {
 async fn init_leaderboard_redis_pool() -> RedisPool {
     let redis_url =
         std::env::var("LEADERBOARD_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
+
+    let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
+        .expect("failed to open connection to redis");
+    RedisPool::builder().build(manager).await.unwrap()
+}
+
+async fn init_service_canister_migration_redis_pool() -> RedisPool {
+    let redis_url =
+        std::env::var("SERVICE_CANISTER_MIGRATION_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
 
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");

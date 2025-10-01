@@ -12,7 +12,7 @@ chrono = { version = "=0.4.38", features = ["serde"] }
 chrono-tz = "0.10"
 futures = "0.3.30"
 ic-agent = "0.41.0"
-serde = "1.0.197"
+serde = "=1.0.219"
 serde_json = { version = "1.0.114", default-features = false }
 stringreader = "0.1.1"
 strum = { version = "0.26", features = ["derive"] }
@@ -34,7 +34,7 @@ reqwest = { version = "0.12.3", features = [
 once_cell = "1.19.0"
 yup-oauth2 = "11.0.0"
 log = "0.4.21"
-yral-metadata-client = { git = "https://github.com/yral-dapp/yral-metadata.git", features = [
+yral-metadata-client = { git = "https://github.com/yral-dapp/yral-metadata.git", branch = "master", features = [
     "rustls-tls",
 ], default-features = false }
 config = { version = "0.14.0", features = ["toml"] }
