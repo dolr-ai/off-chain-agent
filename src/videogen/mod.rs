@@ -16,6 +16,4 @@ pub use qstash_types::{
     QstashVideoGenCallback, QstashVideoGenRequest, VideoGenCallbackResult, VideoGenRequestKey,
 };
 pub use router::{videogen_router, videogen_router_v2};
-pub use types::{
-    ImageInput, Veo3AspectRatio, VideoGenError, VideoGenInput, VideoGenRequest, VideoGenResponse,
-};
+pub use types::{ImageInput, VideoGenError, VideoGenInput, VideoGenRequest, VideoGenResponse};
