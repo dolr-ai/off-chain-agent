@@ -24,18 +24,21 @@ pub async fn process_video_generation(
 
     // Route to appropriate model handler based on the input type
     let result = match request.input {
-        VideoGenInput::Veo3(_) => {
-            crate::videogen::models::veo3::generate(request.input, &state).await
-        }
-        VideoGenInput::Veo3Fast(_) => {
-            crate::videogen::models::veo3_fast::generate(request.input, &state).await
-        }
         VideoGenInput::LumaLabs(_) => {
             crate::videogen::models::lumalabs::generate(request.input, &state).await
         }
         VideoGenInput::IntTest(_) => {
             crate::videogen::models::inttest::generate(request.input, &state).await
         }
+        VideoGenInput::Wan25(_) => {
+            crate::videogen::models::wan2_5::generate(request.input, &state).await
+        }
+        VideoGenInput::Wan25Fast(_) => {
+            crate::videogen::models::wan2_5_fast::generate(request.input, &state).await
+        }
+        _ => Err(VideoGenError::UnsupportedModel(
+            request.input.model_id().to_string(),
+        )),
     };
 
     // Prepare callback data

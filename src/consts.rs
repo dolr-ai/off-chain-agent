@@ -82,11 +82,11 @@ pub static USER_POST_SERVICE_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
         .expect("User post service canister ID to be valid")
 });
 
-// Video Generation Constants
-pub const VEO3_PROJECT_ID: &str = "hot-or-not-feed-intelligence";
-pub const VEO3_STORAGE_URI: &str = "gs://yral_ai_generated_videos/veo-output/";
-pub const VEO3_LOCATION: &str = "us-central1";
-
 // LumaLabs Constants
 pub const LUMALABS_API_URL: &str = "https://api.lumalabs.ai/dream-machine/v1";
 pub const LUMALABS_IMAGE_BUCKET: &str = "videogen_tmp_image_store";
+
+// Replicate Constants
+pub const REPLICATE_API_URL: &str = "https://api.replicate.com/v1";
+pub const REPLICATE_WAN2_5_MODEL: &str = "wan-video/wan-2.5-t2v";
+pub const REPLICATE_WAN2_5_FAST_MODEL: &str = "wan-video/wan-2.5-t2v-fast";
