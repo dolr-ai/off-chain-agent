@@ -52,6 +52,7 @@ pub struct AppState {
     pub yral_auth_redis: YralAuthRedis,
     pub leaderboard_redis_pool: RedisPool,
     pub rewards_module: RewardsModule,
+    pub service_cansister_migration_redis_pool: RedisPool,
     pub config: AppConfig,
 }
 
@@ -96,6 +97,7 @@ impl AppState {
             leaderboard_redis_pool,
             rewards_module,
             config: app_config,
+            service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool().await,
         }
     }
 
@@ -289,7 +291,7 @@ async fn init_leaderboard_redis_pool() -> RedisPool {
     RedisPool::builder().build(manager).await.unwrap()
 }
 
-async fn    init_service_canister_migration_redis_pool() -> RedisPool {
+async fn init_service_canister_migration_redis_pool() -> RedisPool {
     let redis_url =
         std::env::var("SERVICE_CANISTER_MIGRATION_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
 
