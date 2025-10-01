@@ -77,7 +77,7 @@ pub async fn generate(
 
     let response = client
         .post(submit_url)
-        .bearer_auth(&api_key)
+        .bearer_auth(api_key)
         .header("Content-Type", "application/json")
         .json(&request)
         .timeout(Duration::from_secs(60))
@@ -105,7 +105,7 @@ pub async fn generate(
     );
 
     // Poll for completion
-    let video_url = poll_for_completion(&prediction_response.id, &api_key).await?;
+    let video_url = poll_for_completion(&prediction_response.id, api_key).await?;
 
     Ok(VideoGenResponse {
         operation_id: prediction_response.id,
