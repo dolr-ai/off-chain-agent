@@ -1,5 +1,6 @@
 use crate::{
     app_state::AppState,
+    events::types::{EventPayload, RewardEarnedPayload},
     rewards::{
         config::RewardConfig,
         history::{HistoryTracker, RewardRecord, ViewRecord},
@@ -63,6 +64,7 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_user_reward_history))
         .routes(routes!(get_creator_reward_history))
         .routes(routes!(get_reward_config))
+        .routes(routes!(test_send_reward_notification))
         .with_state(state)
 }
 
@@ -246,4 +248,36 @@ pub async fn update_reward_config(
     }
 
     Ok(StatusCode::OK)
+}
+
+#[utoipa::path(
+    get,
+    path = "/test/send-notification",
+    tag = "rewards",
+    responses(
+        (status = 200, description = "Notification sent successfully"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+async fn test_send_reward_notification(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<String>, (StatusCode, String)> {
+    let creator_id = Principal::from_text("fopov-cd5tj-fnz6m-m6jdm-as6bl-2dj74-ujoco-jad55-icv5w-onpky-gqe")
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Invalid principal: {}", e)))?;
+
+    let payload = RewardEarnedPayload {
+        creator_id,
+        video_id: "5b10e4ece3c94288a2db79e49bdafa9b".to_string(),
+        milestone: 100,
+        reward_btc: 0.0,
+        reward_inr: 10.0,
+        view_count: 100,
+        timestamp: chrono::Utc::now().timestamp(),
+        rewards_received_bs: true,
+    };
+
+    let event = EventPayload::RewardEarned(payload);
+    event.send_notification(&state).await;
+
+    Ok(Json("Reward notification sent successfully".to_string()))
 }
