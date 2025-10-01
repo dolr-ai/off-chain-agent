@@ -250,24 +250,45 @@ pub async fn update_reward_config(
     Ok(StatusCode::OK)
 }
 
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct TestNotificationParams {
+    #[serde(default = "default_creator_id")]
+    pub creator_id: String,
+    #[serde(default = "default_video_id")]
+    pub video_id: String,
+}
+
+fn default_creator_id() -> String {
+    "fopov-cd5tj-fnz6m-m6jdm-as6bl-2dj74-ujoco-jad55-icv5w-onpky-gqe".to_string()
+}
+
+fn default_video_id() -> String {
+    "5b10e4ece3c94288a2db79e49bdafa9b".to_string()
+}
+
 #[utoipa::path(
     get,
     path = "/test/send-notification",
+    params(
+        TestNotificationParams,
+    ),
     tag = "rewards",
     responses(
         (status = 200, description = "Notification sent successfully"),
+        (status = 400, description = "Invalid creator_id"),
         (status = 500, description = "Internal server error"),
     )
 )]
 async fn test_send_reward_notification(
     State(state): State<Arc<AppState>>,
+    Query(params): Query<TestNotificationParams>,
 ) -> Result<Json<String>, (StatusCode, String)> {
-    let creator_id = Principal::from_text("fopov-cd5tj-fnz6m-m6jdm-as6bl-2dj74-ujoco-jad55-icv5w-onpky-gqe")
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Invalid principal: {}", e)))?;
+    let creator_id = Principal::from_text(&params.creator_id)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid creator_id principal: {}", e)))?;
 
     let payload = RewardEarnedPayload {
         creator_id,
-        video_id: "5b10e4ece3c94288a2db79e49bdafa9b".to_string(),
+        video_id: params.video_id.clone(),
         milestone: 100,
         reward_btc: 0.0,
         reward_inr: 10.0,
@@ -279,5 +300,8 @@ async fn test_send_reward_notification(
     let event = EventPayload::RewardEarned(payload);
     event.send_notification(&state).await;
 
-    Ok(Json("Reward notification sent successfully".to_string()))
+    Ok(Json(format!(
+        "Reward notification sent successfully to creator {} for video {}",
+        params.creator_id, params.video_id
+    )))
 }
