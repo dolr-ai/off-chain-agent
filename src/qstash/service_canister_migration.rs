@@ -8,6 +8,7 @@ use http::{ StatusCode};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::{ic::USER_INFO_SERVICE_ID, individual_user_template::{self, GetPostsOfUserProfileError, IndividualUserTemplate, MigrationInfo, PostDetailsForFrontend, Result6}, user_info_service::{Result_, UserInfoService}};
+use yral_metadata_types::SetUserMetadataReqMetadata;
 
 use crate::{app_state::AppState, qstash::service_canister_migration, types::RedisPool};
 
@@ -71,7 +72,18 @@ impl ServiceCanisterMigrationRedis {
 
 
 pub async fn update_the_metadata_mapping(State(state): State<Arc<AppState>>, Json(request): Json<MigrateIndividualUserRequest>) -> Result<impl IntoResponse, (StatusCode, String)> {
-    //TODO: call metadata to update the yral metadata mapping
+    let admin_identity = state.admin_identity;
+
+   let mut user_metadata = state.yral_metadata_client.get_user_metadata_v2(request.user_principal.to_text()).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?.ok_or((StatusCode::INTERNAL_SERVER_ERROR, "User metadata not found".to_string()))?;
+
+   user_metadata.user_canister_id = USER_INFO_SERVICE_ID;
+
+   let set_user_metadata_req = SetUserMetadataReqMetadata {
+        user_canister_id: USER_INFO_SERVICE_ID,
+        user_name: user_metadata.user_name,
+    };
+
+    state.yral_metadata_client.admin_set_user_metadata(&admin_identity, request.user_principal, set_user_metadata_req).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(())
 }
