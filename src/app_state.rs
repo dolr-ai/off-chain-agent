@@ -53,6 +53,7 @@ pub struct AppState {
     pub leaderboard_redis_pool: RedisPool,
     pub rewards_module: RewardsModule,
     pub config: AppConfig,
+    pub replicate_api_token: String,
 }
 
 impl AppState {
@@ -96,6 +97,7 @@ impl AppState {
             leaderboard_redis_pool,
             rewards_module,
             config: app_config,
+            replicate_api_token: env::var("REPLICATE_API_TOKEN").unwrap_or_default(),
         }
     }
 

@@ -4,69 +4,42 @@ use tracing::info;
 use videogen_common::{VideoGenError, VideoGenInput, VideoGenResponse};
 
 use crate::app_state::AppState;
-use crate::consts::RUNPOD_WAN2_5_ENDPOINT;
+use crate::consts::{REPLICATE_API_URL, REPLICATE_WAN2_5_MODEL};
 
 #[derive(Serialize)]
-struct Wan25Request {
-    input: Wan25Input,
+pub struct ReplicatePredictionRequest {
+    pub version: String,
+    pub input: Wan25Input,
 }
 
 #[derive(Serialize)]
-struct Wan25Input {
-    prompt: String,
+pub struct Wan25Input {
+    pub prompt: String,
 
     // Hardcoded parameters from Python script and API spec
     #[serde(rename = "size")]
-    size: String, // "720*1280"
+    pub size: String, // "720*1280"
 
-    duration: u32,            // 5
-    num_inference_steps: u32, // 80
-    guidance: u32,            // 5
-    seed: i32,                // -1
+    pub duration: u32, // 5
+    pub seed: i32,     // -1
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    negative_prompt: Option<String>, // ""
+    pub negative_prompt: Option<String>, // ""
 
-    temperature: f32, // 0.7
-    flow_shift: u32,  // 5
-    max_tokens: u32,  // 256
-
-    enable_prompt_optimization: bool, // true
-    enable_safety_checker: bool,      // true
+    pub enable_prompt_expansion: bool, // true (renamed from enable_prompt_optimization)
 }
 
 #[derive(Deserialize)]
-struct Wan25SubmitResponse {
-    id: String,
-}
-
-#[derive(Deserialize)]
-struct Wan25StatusResponse {
-    status: String,
-    output: Option<Wan25Output>,
-    error: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct Wan25Output {
-    video_url: Option<String>,
-    // Alternative field names from API spec
-    url: Option<String>,
-    result: Option<String>,
-    video: Option<String>,
-
-    // Metadata
-    _width: Option<u32>,
-    _height: Option<u32>,
-    _duration: Option<f32>,
-    _seed: Option<u64>,
-    generation_time: Option<f32>,
-    cost: Option<f32>,
+pub struct ReplicatePredictionResponse {
+    pub id: String,
+    pub status: String,
+    pub output: Option<serde_json::Value>,
+    pub error: Option<String>,
 }
 
 pub async fn generate(
     input: VideoGenInput,
-    _app_state: &AppState,
+    app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
     let VideoGenInput::Wan25(model) = input else {
         return Err(VideoGenError::InvalidInput(
@@ -74,45 +47,43 @@ pub async fn generate(
         ));
     };
 
-    let api_key = std::env::var("RUNPOD_API_KEY").map_err(|_| VideoGenError::AuthError)?;
+    let api_key = &app_state.replicate_api_token;
+    if api_key.is_empty() {
+        return Err(VideoGenError::AuthError);
+    }
 
     let client = reqwest::Client::new();
 
     // Build request with hardcoded parameters
-    let request = Wan25Request {
+    let request = ReplicatePredictionRequest {
+        version: REPLICATE_WAN2_5_MODEL.to_string(),
         input: Wan25Input {
             prompt: model.prompt.clone(),
             size: "720*1280".to_string(),
             duration: 5,
-            num_inference_steps: 80,
-            guidance: 5,
             seed: -1,
             negative_prompt: Some("".to_string()),
-            temperature: 0.7,
-            flow_shift: 5,
-            max_tokens: 256,
-            enable_prompt_optimization: true,
-            enable_safety_checker: true,
+            enable_prompt_expansion: true,
         },
     };
 
-    // Submit job
-    let submit_url = format!("https://api.runpod.ai/v2/{RUNPOD_WAN2_5_ENDPOINT}/run");
+    // Submit prediction
+    let submit_url = format!("{REPLICATE_API_URL}/predictions");
 
     info!(
-        "Submitting Wan 2.5 generation job for prompt: {}",
+        "Submitting Wan 2.5 generation prediction for prompt: {}",
         &model.prompt[..model.prompt.len().min(60)]
     );
 
     let response = client
-        .post(&submit_url)
-        .header("Authorization", format!("Bearer {api_key}"))
+        .post(submit_url)
+        .bearer_auth(&api_key)
         .header("Content-Type", "application/json")
         .json(&request)
         .timeout(Duration::from_secs(60))
         .send()
         .await
-        .map_err(|e| VideoGenError::NetworkError(format!("Failed to submit job: {e}")))?;
+        .map_err(|e| VideoGenError::NetworkError(format!("Failed to submit prediction: {e}")))?;
 
     if !response.status().is_success() {
         let error_text = response
@@ -120,31 +91,34 @@ pub async fn generate(
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
         return Err(VideoGenError::ProviderError(format!(
-            "RunPod API error: {error_text}"
+            "Replicate API error: {error_text}"
         )));
     }
 
-    let submit_response: Wan25SubmitResponse = response.json().await.map_err(|e| {
-        VideoGenError::ProviderError(format!("Failed to parse submit response: {e}"))
+    let prediction_response: ReplicatePredictionResponse = response.json().await.map_err(|e| {
+        VideoGenError::ProviderError(format!("Failed to parse prediction response: {e}"))
     })?;
 
-    info!("Wan 2.5 job submitted with ID: {}", submit_response.id);
+    info!(
+        "Wan 2.5 prediction submitted with ID: {}",
+        prediction_response.id
+    );
 
     // Poll for completion
-    let video_url = poll_for_completion(&submit_response.id, &api_key).await?;
+    let video_url = poll_for_completion(&prediction_response.id, &api_key).await?;
 
     Ok(VideoGenResponse {
-        operation_id: submit_response.id,
+        operation_id: prediction_response.id,
         video_url,
         provider: "wan2_5".to_string(),
     })
 }
 
-async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, VideoGenError> {
+async fn poll_for_completion(prediction_id: &str, api_key: &str) -> Result<String, VideoGenError> {
     let client = reqwest::Client::new();
-    let status_url = format!("https://api.runpod.ai/v2/{RUNPOD_WAN2_5_ENDPOINT}/status/{job_id}");
+    let status_url = format!("{REPLICATE_API_URL}/predictions/{prediction_id}");
 
-    info!("Starting to poll for completion of Wan 2.5 job: {job_id}");
+    info!("Starting to poll for completion of Wan 2.5 prediction: {prediction_id}");
 
     let max_attempts = 120; // 20 minutes with 10s intervals
     let poll_interval = Duration::from_secs(10);
@@ -152,11 +126,13 @@ async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, Vide
     for attempt in 0..max_attempts {
         let response = client
             .get(&status_url)
-            .header("Authorization", format!("Bearer {api_key}"))
+            .bearer_auth(api_key)
             .timeout(Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| VideoGenError::NetworkError(format!("Failed to check job status: {e}")))?;
+            .map_err(|e| {
+                VideoGenError::NetworkError(format!("Failed to check prediction status: {e}"))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response
@@ -164,39 +140,32 @@ async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, Vide
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(VideoGenError::ProviderError(format!(
-                "Failed to check job status: {error_text}"
+                "Failed to check prediction status: {error_text}"
             )));
         }
 
-        let status: Wan25StatusResponse = response.json().await.map_err(|e| {
-            VideoGenError::ProviderError(format!("Failed to parse status response: {e}"))
+        let prediction: ReplicatePredictionResponse = response.json().await.map_err(|e| {
+            VideoGenError::ProviderError(format!("Failed to parse prediction response: {e}"))
         })?;
 
-        match status.status.as_str() {
-            "COMPLETED" => {
-                if let Some(output) = status.output {
-                    // Try different possible video URL fields
-                    let video_url = output
-                        .video_url
-                        .or(output.url)
-                        .or(output.result)
-                        .or(output.video);
+        match prediction.status.as_str() {
+            "succeeded" => {
+                if let Some(output) = prediction.output {
+                    // Output can be a string URL or an array with a URL
+                    let video_url = if let Some(url_str) = output.as_str() {
+                        Some(url_str.to_string())
+                    } else if let Some(arr) = output.as_array() {
+                        arr.first().and_then(|v| v.as_str()).map(|s| s.to_string())
+                    } else {
+                        None
+                    };
 
                     if let Some(url) = video_url {
                         info!("Wan 2.5 video generation completed");
-
-                        // Log metadata if available
-                        if let Some(gen_time) = output.generation_time {
-                            info!("Generation time: {gen_time}s");
-                        }
-                        if let Some(cost) = output.cost {
-                            info!("Cost: ${cost}");
-                        }
-
                         return Ok(url);
                     } else {
                         return Err(VideoGenError::ProviderError(
-                            "Generation completed but no video URL found".to_string(),
+                            "Generation completed but no video URL found in output".to_string(),
                         ));
                     }
                 } else {
@@ -205,15 +174,15 @@ async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, Vide
                     ));
                 }
             }
-            "FAILED" | "CANCELLED" | "TIMED_OUT" => {
-                let error = status
+            "failed" | "canceled" => {
+                let error = prediction
                     .error
-                    .unwrap_or_else(|| format!("Job {}", status.status.to_lowercase()));
+                    .unwrap_or_else(|| format!("Prediction {}", prediction.status));
                 return Err(VideoGenError::ProviderError(format!(
                     "Video generation failed: {error}"
                 )));
             }
-            "IN_QUEUE" | "IN_PROGRESS" => {
+            "starting" | "processing" => {
                 if attempt > 0 && attempt % 6 == 0 {
                     info!(
                         "Wan 2.5 generation still in progress... ({} seconds elapsed)",
@@ -223,7 +192,7 @@ async fn poll_for_completion(job_id: &str, api_key: &str) -> Result<String, Vide
             }
             _ => {
                 // Unknown status, continue polling
-                info!("Unknown status: {}", status.status);
+                info!("Unknown status: {}", prediction.status);
             }
         }
 
