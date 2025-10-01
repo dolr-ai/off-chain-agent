@@ -352,6 +352,7 @@ impl RewardEngine {
             reward_inr,
             view_count,
             timestamp: chrono::Utc::now().timestamp(),
+            rewards_received_bs: true,
         };
 
         // Create the event and send notification
