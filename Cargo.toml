@@ -104,22 +104,22 @@ sentry-anyhow = "0.42.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf", features = [
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
     "full",
     "user-post-service",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf" }
-videogen-common = { git = "https://github.com/yral-dapp/yral-common", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf", features = [
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
     "ic",
     "server",
 ] }
-yral-identity = { git = "https://github.com/yral-dapp/yral-common", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf" }
-yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf" }
-yral-types = { git = "https://github.com/yral-dapp/yral-common", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf" }
-yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", rev = "c35ef50e334954eb1a641e430e77ecab2b35decf" }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 
 
 # Local (Path) - uncomment to use local development versions
