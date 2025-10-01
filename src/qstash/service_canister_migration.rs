@@ -15,8 +15,8 @@ use crate::{app_state::AppState, qstash::service_canister_migration, types::Redi
 
 #[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, PartialOrd, Debug)]
 pub struct MigrateIndividualUserRequest {
-    user_canister: Principal,
-    user_principal: Principal,
+    pub user_canister: Principal,
+    pub user_principal: Principal,
 }
 
 
@@ -139,7 +139,7 @@ pub async fn transfer_all_posts_for_the_individual_user(State(state): State<Arc<
 
 
                 let transfer_posts_requests = posts.iter().map(|post_details| async {
-                    process_post_for_transfer(state.service_cansister_migration_redis_pool.clone(), post_details.id, request.user_canister, request.user_principal).await.map_err(|e| e.to_string())
+                    process_post_for_transfer(post_details.id, request.user_canister, request.user_principal).await.map_err(|e| e.to_string())
                 });
 
 
@@ -190,7 +190,7 @@ pub struct TransferPostRequest {
 
 
 
-pub async fn process_post_for_transfer(redis_pool: RedisPool, post_id: u64, canister_id: Principal, user_principal: Principal) -> Result<(), Box<dyn Error>> {
+pub async fn process_post_for_transfer(post_id: u64, canister_id: Principal, user_principal: Principal) -> Result<(), Box<dyn Error>> {
 
 
         //TOOD add authorization
