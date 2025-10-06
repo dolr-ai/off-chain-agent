@@ -1,6 +1,6 @@
 use crate::{
     app_state::AppState,
-    events::types::{EventPayload, RewardEarnedPayload},
+    events::types::{EventPayload, RewardEarnedPayload, VideoUploadSuccessfulPayload},
     rewards::{
         config::RewardConfig,
         history::{HistoryTracker, RewardRecord, ViewRecord},
@@ -65,6 +65,7 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_creator_reward_history))
         .routes(routes!(get_reward_config))
         .routes(routes!(test_send_reward_notification))
+        .routes(routes!(test_send_video_upload_notification))
         .with_state(state)
 }
 
@@ -303,5 +304,68 @@ async fn test_send_reward_notification(
     Ok(Json(format!(
         "Reward notification sent successfully to creator {} for video {}",
         params.creator_id, params.video_id
+    )))
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct TestVideoUploadNotificationParams {
+    #[serde(default = "default_user_id")]
+    pub user_id: String,
+    #[serde(default = "default_video_id")]
+    pub video_id: String,
+    #[serde(default = "default_post_id")]
+    pub post_id: String,
+}
+
+fn default_user_id() -> String {
+    "mlj75-eyaaa-aaaaa-qbn5q-cai".to_string()
+}
+
+fn default_post_id() -> String {
+    "123".to_string()
+}
+
+#[utoipa::path(
+    get,
+    path = "/test/send-video-upload-notification",
+    params(
+        TestVideoUploadNotificationParams,
+    ),
+    tag = "rewards",
+    responses(
+        (status = 200, description = "Notification sent successfully"),
+        (status = 400, description = "Invalid user_id"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+async fn test_send_video_upload_notification(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<TestVideoUploadNotificationParams>,
+) -> Result<Json<String>, (StatusCode, String)> {
+    let user_id = Principal::from_text(&params.user_id)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid user_id principal: {}", e)))?;
+
+    let payload = VideoUploadSuccessfulPayload {
+        user_id,
+        publisher_user_id: user_id,
+        display_name: Some("Test User".to_string()),
+        canister_id: user_id,
+        creator_category: "entertainment".to_string(),
+        hashtag_count: 5,
+        is_nsfw: false,
+        is_hotor_not: true,
+        is_filter_used: false,
+        video_id: params.video_id.clone(),
+        post_id: params.post_id.clone(),
+        country: Some("US".to_string()),
+        internal_url: None,
+    };
+
+    let event = EventPayload::VideoUploadSuccessful(payload);
+    event.send_notification(&state).await;
+
+    Ok(Json(format!(
+        "Video upload notification sent successfully to user {} for video {}",
+        params.user_id, params.video_id
     )))
 }
