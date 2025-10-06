@@ -844,8 +844,7 @@ where
     S: serde::Serializer,
 {
     use serde::ser::SerializeStruct;
-    let mut state = serializer.serialize_struct("RewardEarned", 2)?;
-    state.serialize_field("type", "RewardEarned")?;
+    let mut state = serializer.serialize_struct("RewardEarned", 1)?;
     let url = format!(
         "rewardsReceived?token=btc&reward_on=video_views&creator_id={}&video_id={}&milestone={}&reward_btc={}&reward_inr={}&view_count={}&timestamp={}&rewards_received_bs={}",
         payload.creator_id,
