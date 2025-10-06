@@ -547,6 +547,8 @@ pub struct VideoUploadSuccessfulPayload {
     pub post_id: String,
     #[serde(rename = "country", skip_serializing_if = "Option::is_none")]
     pub country: Option<String>,
+    #[serde(rename = "internalUrl", skip_serializing_if = "Option::is_none")]
+    pub internal_url: Option<String>,
 }
 
 // --------------------------------------------------
@@ -810,6 +812,7 @@ pub enum EventPayload {
     VideoUploadUploadButtonClicked(VideoUploadUploadButtonClickedPayload),
     VideoUploadVideoSelected(VideoUploadVideoSelectedPayload),
     VideoUploadUnsuccessful(VideoUploadUnsuccessfulPayload),
+    #[serde(serialize_with = "serialize_video_upload_successful")]
     VideoUploadSuccessful(VideoUploadSuccessfulPayload),
     Refer(ReferPayload),
     ReferShareLink(ReferPayload),
@@ -829,7 +832,118 @@ pub enum EventPayload {
     SatsWithdrawn(SatsWithdrawnPayload),
     TournamentStarted(TournamentStartedPayload),
     TournamentEndedWinner(TournamentEndedWinnerPayload),
+    #[serde(serialize_with = "serialize_reward_earned")]
     RewardEarned(RewardEarnedPayload),
+}
+
+fn serialize_reward_earned<S>(
+    payload: &RewardEarnedPayload,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::ser::SerializeStruct;
+    let mut state = serializer.serialize_struct("RewardEarned", 2)?;
+    state.serialize_field("type", "RewardEarned")?;
+    let url = format!(
+        "rewardsReceived?token=btc&reward_on=video_views&creator_id={}&video_id={}&milestone={}&reward_btc={}&reward_inr={}&view_count={}&timestamp={}&rewards_received_bs={}",
+        payload.creator_id,
+        payload.video_id,
+        payload.milestone,
+        payload.reward_btc,
+        payload.reward_inr,
+        payload.view_count,
+        payload.timestamp,
+        payload.rewards_received_bs
+    );
+    state.serialize_field("internalUrl", &url)?;
+    state.end()
+}
+
+fn serialize_video_upload_successful<S>(
+    payload: &VideoUploadSuccessfulPayload,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::Serialize;
+
+    // Create a modified payload with the internal_url populated
+    let mut modified_payload = payload.clone();
+
+    let mut url = format!(
+        "profile/videos?video_id={}&user_id={}&publisher_user_id={}&canister_id={}&post_id={}&creator_category={}&hashtag_count={}&is_NSFW={}&is_hotorNot={}&is_filter_used={}",
+        modified_payload.video_id,
+        modified_payload.user_id,
+        modified_payload.publisher_user_id,
+        modified_payload.canister_id,
+        modified_payload.post_id,
+        modified_payload.creator_category,
+        modified_payload.hashtag_count,
+        modified_payload.is_nsfw,
+        modified_payload.is_hotor_not,
+        modified_payload.is_filter_used
+    );
+
+    if let Some(display_name) = &modified_payload.display_name {
+        url.push_str(&format!("&display_name={}", display_name));
+    }
+
+    if let Some(country) = &modified_payload.country {
+        url.push_str(&format!("&country={}", country));
+    }
+
+    modified_payload.internal_url = Some(url);
+
+    // Serialize the modified payload with default serialization
+    #[derive(Serialize)]
+    struct VideoUploadSuccessfulHelper {
+        #[serde(rename = "user_id")]
+        user_id: Principal,
+        #[serde(rename = "publisher_user_id")]
+        publisher_user_id: Principal,
+        #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
+        display_name: Option<String>,
+        #[serde(rename = "canister_id")]
+        canister_id: Principal,
+        #[serde(rename = "creator_category")]
+        creator_category: String,
+        #[serde(rename = "hashtag_count")]
+        hashtag_count: usize,
+        #[serde(rename = "is_NSFW")]
+        is_nsfw: bool,
+        #[serde(rename = "is_hotorNot")]
+        is_hotor_not: bool,
+        #[serde(rename = "is_filter_used")]
+        is_filter_used: bool,
+        #[serde(rename = "video_id")]
+        video_id: String,
+        post_id: String,
+        #[serde(rename = "country", skip_serializing_if = "Option::is_none")]
+        country: Option<String>,
+        #[serde(rename = "internalUrl", skip_serializing_if = "Option::is_none")]
+        internal_url: Option<String>,
+    }
+
+    let helper = VideoUploadSuccessfulHelper {
+        user_id: modified_payload.user_id,
+        publisher_user_id: modified_payload.publisher_user_id,
+        display_name: modified_payload.display_name,
+        canister_id: modified_payload.canister_id,
+        creator_category: modified_payload.creator_category,
+        hashtag_count: modified_payload.hashtag_count,
+        is_nsfw: modified_payload.is_nsfw,
+        is_hotor_not: modified_payload.is_hotor_not,
+        is_filter_used: modified_payload.is_filter_used,
+        video_id: modified_payload.video_id,
+        post_id: modified_payload.post_id,
+        country: modified_payload.country,
+        internal_url: modified_payload.internal_url,
+    };
+
+    helper.serialize(serializer)
 }
 
 // ----------------------------------------------------------------------------------
@@ -1186,6 +1300,7 @@ fn test_data_payload_serialization() {
         is_filter_used: false,
         video_id: "test".to_string(),
         country: None,
+        internal_url: None,
     };
 
     let data = EventPayload::VideoUploadSuccessful(payload.clone());
