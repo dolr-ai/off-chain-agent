@@ -85,7 +85,7 @@ pub async fn update_the_metadata_mapping_impl(
     admin_identity: &impl Identity,
     migrate_request: MigrateIndividualUserRequest,
 ) -> Result<(), Box<dyn Error>> {
-    let user_metadata = yral_metadata_client
+    let _user_metadata = yral_metadata_client
         .get_user_metadata_v2(migrate_request.user_principal.to_text())
         .await
         .map_err(|e| e.to_string())?
