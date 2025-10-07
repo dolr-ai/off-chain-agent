@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use http::header;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
@@ -39,8 +40,22 @@ impl From<MigrateIndividualUserRequest> for MigrateIndividualUserRequestSchema {
 #[instrument(skip(state, request))]
 pub async fn handle_user_migration(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(request): Json<MigrateIndividualUserRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let auth_token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim_start_matches("Bearer ").to_string());
+
+    if let Some(token) = auth_token {
+        if token != state.user_migration_api_key {
+            return Err((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()));
+        }
+    } else {
+        return Err((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()));
+    }
+
     state
         .qstash_client
         .migrate_individual_user_to_service_canister(&request)

@@ -57,6 +57,7 @@ pub struct AppState {
     pub service_cansister_migration_redis_pool: RedisPool,
     pub config: AppConfig,
     pub replicate_api_token: String,
+    pub user_migration_api_key: String,
 }
 
 impl AppState {
@@ -104,6 +105,8 @@ impl AppState {
             service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool()
                 .await,
             replicate_api_token: env::var("REPLICATE_API_TOKEN").unwrap_or_default(),
+            user_migration_api_key: env::var("YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY")
+                .expect("YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY is not set"),
         }
     }
 
