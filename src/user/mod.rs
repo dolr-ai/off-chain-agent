@@ -11,6 +11,6 @@ use crate::app_state::AppState;
 pub fn user_router(state: Arc<AppState>) -> OpenApiRouter {
     OpenApiRouter::new()
         .routes(routes!(delete_user::handle_delete_user))
-        // .routes(routes!(migrate_user::handle_user_migration))
+        .routes(routes!(migrate_user::handle_user_migration))
         .with_state(state)
 }

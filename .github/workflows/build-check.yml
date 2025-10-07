@@ -39,7 +39,7 @@ jobs:
         with:
           toolchain: 1.87.0
           targets: "x86_64-unknown-linux-gnu"
-          # components: "clippy,rustfmt"
+          components: "clippy,rustfmt"
 
       - name: Build setup
         run: |
@@ -48,11 +48,11 @@ jobs:
       - name: Use rust cache
         uses: Swatinem/rust-cache@v2
 
-      # - name: Clippy check
-      #   run: cargo clippy --no-deps --release -- --deny warnings --allow deprecated
+      - name: Clippy check
+        run: cargo clippy --no-deps --release -- --deny warnings --allow deprecated
 
-      # - name: Formatting check
-      #   run: cargo fmt --check
+      - name: Formatting check
+        run: cargo fmt --check
 
       - name: Build
         run: cargo build --release --bin icp-off-chain-agent --target x86_64-unknown-linux-gnu --features prod-bin
