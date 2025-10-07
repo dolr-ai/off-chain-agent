@@ -56,6 +56,7 @@ pub struct AppState {
     pub rewards_module: RewardsModule,
     pub service_cansister_migration_redis_pool: RedisPool,
     pub config: AppConfig,
+    pub replicate_api_token: String,
 }
 
 impl AppState {
@@ -102,6 +103,7 @@ impl AppState {
             config: app_config,
             service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool()
                 .await,
+            replicate_api_token: env::var("REPLICATE_API_TOKEN").unwrap_or_default(),
         }
     }
 

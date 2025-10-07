@@ -67,6 +67,7 @@ jobs:
           flyctl secrets set "LUMALABS_API_KEY=$LUMALABS_API_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "YRAL_HON_WORKER_JWT=$YRAL_HON_WORKER_JWT" --app "icp-off-chain-agent" --stage
           flyctl secrets set "LEADERBOARD_REDIS_URL=$LEADERBOARD_REDIS_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "REPLICATE_API_TOKEN=$REPLICATE_API_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "BTC_REWARDS_GCHAT_WEBHOOK_URL=$BTC_REWARDS_GCHAT_WEBHOOK_URL" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
@@ -101,6 +102,7 @@ jobs:
           LUMALABS_API_KEY: ${{ secrets.VIDEOGEN_PROVIDER_LUMALABS_API_KEY }}
           YRAL_HON_WORKER_JWT: ${{ secrets.YRAL_HON_WORKER_JWT }}
           LEADERBOARD_REDIS_URL: ${{ secrets.LEADERBOARD_REDIS_URL }}
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
           BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml
