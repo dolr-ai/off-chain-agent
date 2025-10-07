@@ -8,6 +8,7 @@ use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::{
     ic::USER_INFO_SERVICE_ID,
+    individual_user_template::{IndividualUserTemplate, Result7, SessionType},
     user_info_service::{Result_, UserInfoService},
 };
 use yral_metadata_client::MetadataClient;
@@ -110,8 +111,22 @@ pub async fn migrate_individual_user_to_service_canister(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let user_info_canister = UserInfoService(USER_INFO_SERVICE_ID, &state.agent);
 
+    let individual_user_service = IndividualUserTemplate(request.user_canister, &state.agent);
+
+    let session_type_res = individual_user_service
+        .get_session_type()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let session_type = match session_type_res {
+        Result7::Ok(session_type) => Ok(session_type),
+        Result7::Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
+    }?;
+
+    let registered_session = matches!(session_type, SessionType::RegisteredSession);
+
     let accept_new_registration_res = user_info_canister
-        .accept_new_user_registration(request.user_principal)
+        .accept_new_user_registration(request.user_principal, registered_session)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     if let Result_::Err(e) = accept_new_registration_res {

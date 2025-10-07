@@ -87,13 +87,13 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
     };
 
     match result {
-        yral_canisters_client::user_info_service::Result2::Ok(session_type) => {
+        yral_canisters_client::user_info_service::Result5::Ok(session_type) => {
             matches!(
                 session_type,
                 yral_canisters_client::user_info_service::SessionType::RegisteredSession
             )
         }
-        yral_canisters_client::user_info_service::Result2::Err(e) => {
+        yral_canisters_client::user_info_service::Result5::Err(e) => {
             if e.contains("User not found") {
                 log::debug!(
                     "User {user_principal} not found in user info service, checking individual canister"
