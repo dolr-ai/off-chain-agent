@@ -15,7 +15,7 @@ use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::identity::Secp256k1Identity;
-use ic_agent::{Agent, Identity};
+use ic_agent::Agent;
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
@@ -100,7 +100,8 @@ impl AppState {
             leaderboard_redis_pool,
             rewards_module,
             config: app_config,
-            service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool().await,
+            service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool()
+                .await,
         }
     }
 
@@ -153,10 +154,10 @@ pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
 pub fn init_identity() -> ic_agent::identity::Secp256k1Identity {
     #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     {
-
-
         let pk = env::var("BACKEND_ADMIN_IDENTITY").expect("$BACKEND_ADMIN_IDENTITY is not set");
-         match ic_agent::identity::Secp256k1Identity::from_pem(stringreader::StringReader::new( pk.as_str(),)) {
+        match ic_agent::identity::Secp256k1Identity::from_pem(stringreader::StringReader::new(
+            pk.as_str(),
+        )) {
             Ok(identity) => identity,
             Err(err) => {
                 panic!("Unable to create identity, error: {err:?}");
@@ -172,10 +173,7 @@ pub fn init_identity() -> ic_agent::identity::Secp256k1Identity {
         let mut rng = rand_core::OsRng {};
 
         ic_agent::identity::Secp256k1Identity::from_private_key(SecretKey::random(&mut rng))
-    
-
     }
-   
 }
 
 pub async fn init_agent() -> Agent {
@@ -323,8 +321,8 @@ async fn init_leaderboard_redis_pool() -> RedisPool {
 }
 
 async fn init_service_canister_migration_redis_pool() -> RedisPool {
-    let redis_url =
-        std::env::var("SERVICE_CANISTER_MIGRATION_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
+    let redis_url = std::env::var("SERVICE_CANISTER_MIGRATION_REDIS_URL")
+        .expect("Either LEADERBOARD_REDIS_URL must be set");
 
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");

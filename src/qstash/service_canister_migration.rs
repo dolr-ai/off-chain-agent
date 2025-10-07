@@ -1,8 +1,8 @@
-use std::{env, error::Error, sync::Arc};
+use std::{error::Error, sync::Arc};
 
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
-use http::{header::AUTHORIZATION, StatusCode};
+use http::StatusCode;
 use ic_agent::Identity;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,7 @@ impl ServiceCanisterMigrationRedis {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn get_migration_info_for_user(
         &self,
         user_principal: Principal,
