@@ -89,6 +89,7 @@ jobs:
           flyctl secrets set "REPLICATE_API_TOKEN=$REPLICATE_API_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set "BTC_REWARDS_GCHAT_WEBHOOK_URL=$BTC_REWARDS_GCHAT_WEBHOOK_URL" --app "$APP_NAME" --stage
           flyctl secrets set "YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY=$YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY" --app "$APP_NAME" --stage
+          flyctl secrets set "SERVICE_CANISTER_MIGRATION_REDIS_URL=$SERVICE_CANISTER_MIGRATION_REDIS_URL" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -124,6 +125,7 @@ jobs:
           LUMALABS_API_KEY: ${{ secrets.VIDEOGEN_PROVIDER_LUMALABS_API_KEY }}
           YRAL_HON_WORKER_JWT: ${{ secrets.YRAL_HON_WORKER_JWT }}
           LEADERBOARD_REDIS_URL: ${{ secrets.LEADERBOARD_REDIS_URL }}
+          SERVICE_CANISTER_MIGRATION_REDIS_URL: ${{ secrets.SERVICE_CANISTER_MIGRATION_REDIS_URL }}
           TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
           REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
           BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}

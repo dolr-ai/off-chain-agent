@@ -327,7 +327,7 @@ async fn init_leaderboard_redis_pool() -> RedisPool {
 
 async fn init_service_canister_migration_redis_pool() -> RedisPool {
     let redis_url = std::env::var("SERVICE_CANISTER_MIGRATION_REDIS_URL")
-        .expect("Either LEADERBOARD_REDIS_URL must be set");
+        .expect("SERVICE_CANISTER_MIGRATION_REDIS_URL is not set");
 
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
