@@ -97,7 +97,7 @@ pub async fn update_the_metadata_mapping_impl(
             migrate_request.user_principal,
             SetUserMetadataReqMetadata {
                 user_canister_id: USER_INFO_SERVICE_ID,
-                user_name: user_metadata.user_name,
+                user_name: String::new(),
             },
         )
         .await?;
