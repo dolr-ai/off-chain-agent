@@ -13,7 +13,10 @@ use serde_json::json;
 use tracing::instrument;
 
 use crate::{
-    canister::snapshot::snapshot_v2::BackupUserCanisterPayload, consts::OFF_CHAIN_AGENT_URL, events::event::UploadVideoInfoV2, posts::report_post::ReportPostRequestV3, qstash::service_canister_migration::MigrateIndividualUserRequest, videogen::qstash_types::QstashVideoGenRequest
+    canister::snapshot::snapshot_v2::BackupUserCanisterPayload, consts::OFF_CHAIN_AGENT_URL,
+    events::event::UploadVideoInfoV2, posts::report_post::ReportPostRequestV3,
+    qstash::service_canister_migration::MigrateIndividualUserRequest,
+    videogen::qstash_types::QstashVideoGenRequest,
 };
 use videogen_common::VideoGenerator;
 
@@ -462,7 +465,7 @@ impl QStashClient {
     #[instrument(skip(self))]
     pub async fn migrate_individual_user_to_service_canister(
         &self,
-        request: &MigrateIndividualUserRequest
+        request: &MigrateIndividualUserRequest,
     ) -> anyhow::Result<()> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/migrate_individual_user_to_service_canister")
@@ -474,50 +477,6 @@ impl QStashClient {
             .post(url)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("Upstash-Retries", "3")
-            .json(&request)
-            .send()
-            .await?;
-
-        Ok(())
-    }
-    
-
-    #[instrument(skip(self))]
-    pub async fn transfer_all_posts_to_service_canister(
-        &self,
-        request: &MigrateIndividualUserRequest
-    ) -> anyhow::Result<()> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join("qstash/transfer_all_posts_for_individual_user")
-            .unwrap();
-
-        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
-
-        self.client
-            .post(url)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .header("Upstash-Retries", "3")
-            .json(&request)
-            .send()
-            .await?;
-
-        Ok(())
-    }
-
-    pub async fn update_yral_metadata_mapping(&self, request: &MigrateIndividualUserRequest) -> anyhow::Result<()> {
-         let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join("qstash/transfer_all_posts_for_individual_user")
-            .unwrap();
-
-        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
-
-        self.client
-            .post(url)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .header("Upstash-Delay", "2h")
             .header("Upstash-Retries", "3")
             .json(&request)
             .send()

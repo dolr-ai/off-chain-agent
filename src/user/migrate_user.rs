@@ -7,11 +7,7 @@ use utoipa::ToSchema;
 
 use crate::{
     app_state::AppState, qstash::service_canister_migration::MigrateIndividualUserRequest,
-    types::DelegatedIdentityWire,
-    utils::delegated_identity::get_user_info_from_delegated_identity_wire,
 };
-
-use super::utils::get_agent_from_delegated_identity_wire;
 
 #[derive(Serialize, Deserialize, ToSchema, Clone)]
 pub struct MigrateIndividualUserRequestSchema {
