@@ -226,19 +226,21 @@ impl RewardEngine {
             // 7. Send analytics event for unique view (after reward decision)
             let btc_video_view_tier = count / config.view_milestone;
             analytics::send_btc_video_viewed_event(
-                video_id,
-                publisher_user_id,
-                true, // is_unique_view
-                event.source.clone(),
-                event.client_type.clone(),
-                count,
-                btc_video_view_tier,
-                event.share_count,
-                event.like_count,
-                view_count_reward_allocated,
-                reward_amount_inr,
-                &event.user_id,
-                event.is_logged_in.unwrap_or(false),
+                analytics::BtcVideoViewedEventParams {
+                    video_id,
+                    publisher_user_id,
+                    is_unique_view: true,
+                    source: event.source.clone(),
+                    client_type: event.client_type.clone(),
+                    btc_video_view_count: count,
+                    btc_video_view_tier,
+                    share_count: event.share_count,
+                    like_count: event.like_count,
+                    view_count_reward_allocated,
+                    reward_amount_inr,
+                    user_id: &event.user_id,
+                    is_logged_in: event.is_logged_in.unwrap_or(false),
+                },
                 app_state,
             )
             .await;
@@ -254,19 +256,21 @@ impl RewardEngine {
             if let Ok(current_count) = self.get_view_count(video_id).await {
                 let btc_video_view_tier = current_count / config.view_milestone;
                 analytics::send_btc_video_viewed_event(
-                    video_id,
-                    publisher_user_id,
-                    false, // is_unique_view
-                    event.source.clone(),
-                    event.client_type.clone(),
-                    current_count,
-                    btc_video_view_tier,
-                    event.share_count,
-                    event.like_count,
-                    false, // view_count_reward_allocated - duplicate views never trigger rewards
-                    None,  // reward_amount_inr - no reward for duplicates
-                    &event.user_id,
-                    event.is_logged_in.unwrap_or(false),
+                    analytics::BtcVideoViewedEventParams {
+                        video_id,
+                        publisher_user_id,
+                        is_unique_view: false,
+                        source: event.source.clone(),
+                        client_type: event.client_type.clone(),
+                        btc_video_view_count: current_count,
+                        btc_video_view_tier,
+                        share_count: event.share_count,
+                        like_count: event.like_count,
+                        view_count_reward_allocated: false,
+                        reward_amount_inr: None,
+                        user_id: &event.user_id,
+                        is_logged_in: event.is_logged_in.unwrap_or(false),
+                    },
                     app_state,
                 )
                 .await;

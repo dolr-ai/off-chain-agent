@@ -475,8 +475,7 @@ impl Event {
                             PostViewDetailsFromFrontend as IndividualPostViewDetails,
                         };
                         use yral_canisters_client::user_post_service::{
-                            PostViewDetailsFromFrontend as UserPostViewDetails,
-                            UserPostService,
+                            PostViewDetailsFromFrontend as UserPostViewDetails, UserPostService,
                         };
 
                         let percentage_watched = params.percentage_watched as u8;
@@ -506,11 +505,9 @@ impl Event {
                                 if publisher_canister_id == *USER_INFO_SERVICE_CANISTER_ID {
                                     // Use UserPostService
                                     let payload = match percentage_watched.cmp(&95) {
-                                        Ordering::Less => {
-                                            UserPostViewDetails::WatchedPartially {
-                                                percentage_watched,
-                                            }
-                                        }
+                                        Ordering::Less => UserPostViewDetails::WatchedPartially {
+                                            percentage_watched,
+                                        },
                                         _ => UserPostViewDetails::WatchedMultipleTimes {
                                             percentage_watched,
                                             watch_count,
@@ -523,10 +520,7 @@ impl Event {
                                     );
 
                                     if let Err(e) = user_post_service
-                                        .update_post_add_view_details(
-                                            post_id.clone(),
-                                            payload,
-                                        )
+                                        .update_post_add_view_details(post_id.clone(), payload)
                                         .await
                                     {
                                         error!(
@@ -602,7 +596,9 @@ impl Event {
 
                                 let payload = match percentage_watched.cmp(&95) {
                                     Ordering::Less => {
-                                        PostViewDetailsFromFrontend::WatchedPartially { percentage_watched }
+                                        PostViewDetailsFromFrontend::WatchedPartially {
+                                            percentage_watched,
+                                        }
                                     }
                                     _ => PostViewDetailsFromFrontend::WatchedMultipleTimes {
                                         percentage_watched,

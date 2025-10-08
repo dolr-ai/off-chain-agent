@@ -4,28 +4,42 @@ use reqwest::Client;
 use serde_json::json;
 use std::{env, sync::Arc};
 
+pub struct BtcVideoViewedEventParams<'a> {
+    pub video_id: &'a str,
+    pub publisher_user_id: &'a Principal,
+    pub is_unique_view: bool,
+    pub source: Option<String>,
+    pub client_type: Option<String>,
+    pub btc_video_view_count: u64,
+    pub btc_video_view_tier: u64,
+    pub share_count: u64,
+    pub like_count: Option<u64>,
+    pub view_count_reward_allocated: bool,
+    pub reward_amount_inr: Option<f64>,
+    pub user_id: &'a Principal,
+    pub is_logged_in: bool,
+}
+
 /// Send btc_video_viewed event to marketing analytics server
 pub async fn send_btc_video_viewed_event(
-    video_id: &str,
-    publisher_user_id: &Principal,
-    is_unique_view: bool,
-    source: Option<String>,
-    client_type: Option<String>,
-    btc_video_view_count: u64,
-    btc_video_view_tier: u64,
-    share_count: u64,
-    like_count: Option<u64>,
-    view_count_reward_allocated: bool,
-    reward_amount_inr: Option<f64>,
-    user_id: &Principal,
-    is_logged_in: bool,
+    params: BtcVideoViewedEventParams<'_>,
     app_state: &Arc<AppState>,
 ) {
     // Spawn async task to avoid blocking
-    let video_id = video_id.to_string();
-    let publisher_user_id = publisher_user_id.to_text();
-    let user_id_text = user_id.to_text();
-    let user_id_principal = *user_id;
+    let video_id = params.video_id.to_string();
+    let publisher_user_id = params.publisher_user_id.to_text();
+    let user_id_text = params.user_id.to_text();
+    let user_id_principal = *params.user_id;
+    let is_unique_view = params.is_unique_view;
+    let source = params.source;
+    let client_type = params.client_type;
+    let btc_video_view_count = params.btc_video_view_count;
+    let btc_video_view_tier = params.btc_video_view_tier;
+    let share_count = params.share_count;
+    let like_count = params.like_count;
+    let view_count_reward_allocated = params.view_count_reward_allocated;
+    let reward_amount_inr = params.reward_amount_inr;
+    let is_logged_in = params.is_logged_in;
     let app_state = app_state.clone();
 
     tokio::spawn(async move {
@@ -65,11 +79,10 @@ pub async fn send_btc_video_viewed_event(
 
 async fn send_event_internal(payload: serde_json::Value) -> anyhow::Result<()> {
     // Get analytics server token from environment
-    let token = env::var("ANALYTICS_SERVER_TOKEN")
-        .unwrap_or_else(|_| {
-            log::warn!("ANALYTICS_SERVER_TOKEN not set, skipping analytics event");
-            String::new()
-        });
+    let token = env::var("ANALYTICS_SERVER_TOKEN").unwrap_or_else(|_| {
+        log::warn!("ANALYTICS_SERVER_TOKEN not set, skipping analytics event");
+        String::new()
+    });
 
     if token.is_empty() {
         return Ok(());
@@ -89,11 +102,7 @@ async fn send_event_internal(payload: serde_json::Value) -> anyhow::Result<()> {
     if !response.status().is_success() {
         let status = response.status();
         let error_text = response.text().await.unwrap_or_default();
-        log::error!(
-            "Analytics server returned error {}: {}",
-            status,
-            error_text
-        );
+        log::error!("Analytics server returned error {}: {}", status, error_text);
         anyhow::bail!("Analytics server error: {}", status);
     }
 
