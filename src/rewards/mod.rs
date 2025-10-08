@@ -1,3 +1,4 @@
+pub mod analytics;
 pub mod api;
 pub mod btc_conversion;
 pub mod config;

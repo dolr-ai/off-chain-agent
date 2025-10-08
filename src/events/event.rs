@@ -459,173 +459,169 @@ impl Event {
     // TODO: canister_id being used
     pub fn update_view_count_canister(&self, app_state: &AppState) {
         if self.event.event == "video_duration_watched" {
-            // Try V2 first (with u64 post_id)
-            let params_v2: Result<VideoDurationWatchedPayload, _> =
+            // Try V3 first (new format with publisher_user_id)
+            let params_v3: Result<VideoDurationWatchedPayloadV2, _> =
                 serde_json::from_str(&self.event.params);
 
             let app_state = app_state.clone();
 
-            match params_v2 {
+            match params_v3 {
                 Ok(params) => {
-                    // Handle V2 payload
+                    // Handle V3 payload
                     tokio::spawn(async move {
                         use std::cmp::Ordering;
-                        use yral_canisters_client::individual_user_template::IndividualUserTemplate;
-                        use yral_canisters_client::individual_user_template::PostViewDetailsFromFrontend;
+                        use yral_canisters_client::individual_user_template::{
+                            IndividualUserTemplate,
+                            PostViewDetailsFromFrontend as IndividualPostViewDetails,
+                        };
+                        use yral_canisters_client::user_post_service::{
+                            PostViewDetailsFromFrontend as UserPostViewDetails, UserPostService,
+                        };
 
                         let percentage_watched = params.percentage_watched as u8;
                         if percentage_watched == 0 || percentage_watched > 100 {
                             error!("Invalid percentage_watched: {percentage_watched}");
                             return;
                         }
-                        let post_id = params.post_id.parse::<u64>().unwrap();
-                        let _post_id_str = post_id.to_string();
-                        let publisher_canister_id = params.publisher_canister_id.unwrap();
-
+                        let post_id = params.post_id; // Already a String
                         let watch_count = 1u8;
 
-                        let payload = match percentage_watched.cmp(&95) {
-                            Ordering::Less => {
-                                PostViewDetailsFromFrontend::WatchedPartially { percentage_watched }
+                        // Get publisher user ID
+                        let publisher_user_id = match params.publisher_user_id {
+                            Some(id) => id,
+                            None => {
+                                error!("Missing publisher_user_id in V3 payload");
+                                return;
                             }
-                            _ => PostViewDetailsFromFrontend::WatchedMultipleTimes {
-                                percentage_watched,
-                                watch_count,
-                            },
                         };
 
-                        let individual_user_template =
-                            IndividualUserTemplate(publisher_canister_id, &app_state.agent);
-
-                        if let Err(e) = individual_user_template
-                            .update_post_add_view_details(post_id, payload)
+                        // Get the publisher's canister
+                        match app_state
+                            .get_individual_canister_by_user_principal(publisher_user_id)
                             .await
                         {
-                            error!(
-                                "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
-                            );
+                            Ok(publisher_canister_id) => {
+                                // Check if it's the user post service canister
+                                if publisher_canister_id == *USER_INFO_SERVICE_CANISTER_ID {
+                                    // Use UserPostService
+                                    let payload = match percentage_watched.cmp(&95) {
+                                        Ordering::Less => UserPostViewDetails::WatchedPartially {
+                                            percentage_watched,
+                                        },
+                                        _ => UserPostViewDetails::WatchedMultipleTimes {
+                                            percentage_watched,
+                                            watch_count,
+                                        },
+                                    };
+
+                                    let user_post_service = UserPostService(
+                                        *USER_POST_SERVICE_CANISTER_ID,
+                                        &app_state.agent,
+                                    );
+
+                                    if let Err(e) = user_post_service
+                                        .update_post_add_view_details(post_id.clone(), payload)
+                                        .await
+                                    {
+                                        error!(
+                                            "Failed to update view details for post {post_id} in UserPostService canister: {e:?}"
+                                        );
+                                    }
+                                } else {
+                                    // Use IndividualUserTemplate
+                                    let payload = match percentage_watched.cmp(&95) {
+                                        Ordering::Less => {
+                                            IndividualPostViewDetails::WatchedPartially {
+                                                percentage_watched,
+                                            }
+                                        }
+                                        _ => IndividualPostViewDetails::WatchedMultipleTimes {
+                                            percentage_watched,
+                                            watch_count,
+                                        },
+                                    };
+
+                                    let individual_user_template = IndividualUserTemplate(
+                                        publisher_canister_id,
+                                        &app_state.agent,
+                                    );
+
+                                    let post_id_u64 = match post_id.parse::<u64>() {
+                                        Ok(id) => id,
+                                        Err(e) => {
+                                            error!("Invalid post_id format: {e}");
+                                            return;
+                                        }
+                                    };
+
+                                    if let Err(e) = individual_user_template
+                                        .update_post_add_view_details(post_id_u64, payload)
+                                        .await
+                                    {
+                                        error!(
+                                            "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to get publisher canister for user {publisher_user_id}: {e:?}");
+                            }
                         }
                     });
                 }
                 Err(_) => {
-                    // Try V3 (with String post_id)
-                    let params_v3: Result<VideoDurationWatchedPayloadV2, _> =
+                    // Fall back to V2 (legacy format with publisher_canister_id)
+                    let params_v2: Result<VideoDurationWatchedPayload, _> =
                         serde_json::from_str(&self.event.params);
 
-                    match params_v3 {
+                    match params_v2 {
                         Ok(params) => {
-                            // Handle V3 payload
+                            // Handle V2 payload (legacy)
                             tokio::spawn(async move {
                                 use std::cmp::Ordering;
-                                use yral_canisters_client::individual_user_template::{
-                                    IndividualUserTemplate,
-                                    PostViewDetailsFromFrontend as IndividualPostViewDetails,
-                                };
-                                use yral_canisters_client::user_post_service::{
-                                    PostViewDetailsFromFrontend as UserPostViewDetails,
-                                    UserPostService,
-                                };
+                                use yral_canisters_client::individual_user_template::IndividualUserTemplate;
+                                use yral_canisters_client::individual_user_template::PostViewDetailsFromFrontend;
 
                                 let percentage_watched = params.percentage_watched as u8;
                                 if percentage_watched == 0 || percentage_watched > 100 {
                                     error!("Invalid percentage_watched: {percentage_watched}");
                                     return;
                                 }
-                                let post_id = params.post_id; // Already a String
+                                let post_id = params.post_id.parse::<u64>().unwrap();
+                                let _post_id_str = post_id.to_string();
+                                let publisher_canister_id = params.publisher_canister_id.unwrap();
+
                                 let watch_count = 1u8;
 
-                                // Get publisher user ID
-                                let publisher_user_id = match params.publisher_user_id {
-                                    Some(id) => id,
-                                    None => {
-                                        error!("Missing publisher_user_id in V3 payload");
-                                        return;
-                                    }
-                                };
-
-                                // Get the publisher's canister
-                                match app_state
-                                    .get_individual_canister_by_user_principal(publisher_user_id)
-                                    .await
-                                {
-                                    Ok(publisher_canister_id) => {
-                                        // Check if it's the user post service canister
-                                        if publisher_canister_id == *USER_INFO_SERVICE_CANISTER_ID {
-                                            // Use UserPostService
-                                            let payload = match percentage_watched.cmp(&95) {
-                                                Ordering::Less => {
-                                                    UserPostViewDetails::WatchedPartially {
-                                                        percentage_watched,
-                                                    }
-                                                }
-                                                _ => UserPostViewDetails::WatchedMultipleTimes {
-                                                    percentage_watched,
-                                                    watch_count,
-                                                },
-                                            };
-
-                                            let user_post_service = UserPostService(
-                                                *USER_POST_SERVICE_CANISTER_ID,
-                                                &app_state.agent,
-                                            );
-
-                                            if let Err(e) = user_post_service
-                                                .update_post_add_view_details(
-                                                    post_id.clone(),
-                                                    payload,
-                                                )
-                                                .await
-                                            {
-                                                error!(
-                                                    "Failed to update view details for post {post_id} in UserPostService canister: {e:?}"
-                                                );
-                                            }
-                                        } else {
-                                            // Use IndividualUserTemplate
-                                            let payload = match percentage_watched.cmp(&95) {
-                                                Ordering::Less => {
-                                                    IndividualPostViewDetails::WatchedPartially {
-                                                        percentage_watched,
-                                                    }
-                                                }
-                                                _ => IndividualPostViewDetails::WatchedMultipleTimes {
-                                                    percentage_watched,
-                                                    watch_count,
-                                                },
-                                            };
-
-                                            let individual_user_template = IndividualUserTemplate(
-                                                publisher_canister_id,
-                                                &app_state.agent,
-                                            );
-
-                                            let post_id_u64 = match post_id.parse::<u64>() {
-                                                Ok(id) => id,
-                                                Err(e) => {
-                                                    error!("Invalid post_id format: {e}");
-                                                    return;
-                                                }
-                                            };
-
-                                            if let Err(e) = individual_user_template
-                                                .update_post_add_view_details(post_id_u64, payload)
-                                                .await
-                                            {
-                                                error!(
-                                                    "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
-                                                );
-                                            }
+                                let payload = match percentage_watched.cmp(&95) {
+                                    Ordering::Less => {
+                                        PostViewDetailsFromFrontend::WatchedPartially {
+                                            percentage_watched,
                                         }
                                     }
-                                    Err(e) => {
-                                        error!("Failed to get publisher canister for user {publisher_user_id}: {e:?}");
-                                    }
+                                    _ => PostViewDetailsFromFrontend::WatchedMultipleTimes {
+                                        percentage_watched,
+                                        watch_count,
+                                    },
+                                };
+
+                                let individual_user_template =
+                                    IndividualUserTemplate(publisher_canister_id, &app_state.agent);
+
+                                if let Err(e) = individual_user_template
+                                    .update_post_add_view_details(post_id, payload)
+                                    .await
+                                {
+                                    error!(
+                                        "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
+                                    );
                                 }
                             });
                         }
                         Err(e) => {
                             error!(
-                                "Failed to parse video_duration_watched params as V2 or V3: {e:?}"
+                                "Failed to parse video_duration_watched params as V3 or V2: {e:?}"
                             );
                         }
                     }
