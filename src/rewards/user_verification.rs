@@ -29,11 +29,6 @@ impl UserVerification {
         let cached: Option<String> = conn.get(&cache_key).await?;
 
         if let Some(cached_value) = cached {
-            log::debug!(
-                "User registration cache hit for {}: {}",
-                principal,
-                cached_value
-            );
             return Ok(cached_value == "true");
         }
 
@@ -59,11 +54,6 @@ impl UserVerification {
                         e
                     );
                 }
-                log::debug!(
-                    "Cached user registration status for {}: {}",
-                    principal,
-                    value
-                );
             }
         });
 

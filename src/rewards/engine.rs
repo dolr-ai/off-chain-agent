@@ -2,6 +2,7 @@ use crate::{
     app_state::AppState,
     events::types::{EventPayload, RewardEarnedPayload, VideoDurationWatchedPayloadV2},
     rewards::{
+        analytics,
         btc_conversion::BtcConverter,
         config::{get_config, update_config as update_config_fn, RewardConfig},
         fraud_detection::{FraudCheck, FraudDetector},
@@ -97,10 +98,10 @@ impl RewardEngine {
         app_state: &Arc<AppState>,
     ) -> Result<()> {
         // 1. Basic validation
-        if !event.is_logged_in.unwrap_or(false) {
-            log::debug!("Skipping non-logged-in view for video {:?}", event.video_id);
-            return Ok(());
-        }
+        // if !event.is_logged_in.unwrap_or(false) {
+        //     log::debug!("Skipping non-logged-in view for video {:?}", event.video_id);
+        //     return Ok(());
+        // }
 
         let config = get_config(&self.redis_pool)
             .await
@@ -125,30 +126,30 @@ impl RewardEngine {
             .context("Missing publisher_user_id")?;
 
         // 2. Verify user registration (with caching)
-        if !self
-            .user_verification
-            .is_registered_user(event.user_id, app_state)
-            .await?
-        {
-            log::debug!(
-                "Skipping view from unregistered user {}",
-                event.user_id.to_text()
-            );
-            return Ok(());
-        }
+        // if !self
+        //     .user_verification
+        //     .is_registered_user(event.user_id, app_state)
+        //     .await?
+        // {
+        //     log::debug!(
+        //         "Skipping view from unregistered user {}",
+        //         event.user_id.to_text()
+        //     );
+        //     return Ok(());
+        // }
 
-        // 2. Verify publisher registration (with caching)
-        if !self
-            .user_verification
-            .is_registered_user(*publisher_user_id, app_state)
-            .await?
-        {
-            log::debug!(
-                "Skipping view from unregistered publisher user {}",
-                publisher_user_id.to_text()
-            );
-            return Ok(());
-        }
+        // // 2. Verify publisher registration (with caching)
+        // if !self
+        //     .user_verification
+        //     .is_registered_user(*publisher_user_id, app_state)
+        //     .await?
+        // {
+        //     log::debug!(
+        //         "Skipping view from unregistered publisher user {}",
+        //         publisher_user_id.to_text()
+        //     );
+        //     return Ok(());
+        // }
 
         // 3. Check if creator is shadow banned
         if self
@@ -188,54 +189,102 @@ impl RewardEngine {
                 })
                 .await;
 
-            // 6. Check for milestone
-            if count != 0 && count % config.view_milestone == 0 {
-                let milestone_number = count / config.view_milestone;
-                log::info!(
-                    "Milestone {} reached for video {} (view count: {})",
-                    milestone_number,
-                    video_id,
-                    count
-                );
-
-                // Process the reward
-                if (self
-                    .process_milestone(
-                        video_id,
-                        publisher_user_id,
-                        count,
+            // 6. Check for milestone and track reward allocation
+            let (view_count_reward_allocated, reward_amount_inr) =
+                if count != 0 && count % config.view_milestone == 0 {
+                    let milestone_number = count / config.view_milestone;
+                    log::info!(
+                        "Milestone {} reached for video {} (view count: {})",
                         milestone_number,
-                        &config,
-                        app_state,
-                    )
-                    .await)
-                    .is_ok()
-                {
-                    // 7. Fraud detection (async, non-blocking)
-                    let fraud_check = self
-                        .fraud_detector
-                        .check_fraud_patterns(*publisher_user_id)
+                        video_id,
+                        count
+                    );
+
+                    // Process the reward
+                    let milestone_result = self
+                        .process_milestone(
+                            video_id,
+                            publisher_user_id,
+                            count,
+                            milestone_number,
+                            &config,
+                            app_state,
+                        )
                         .await;
-                    if fraud_check == FraudCheck::Suspicious {
-                        log::warn!(
-                            "Suspicious activity detected for creator {}",
+
+                    if milestone_result.is_ok() {
+                        // 7. Fraud detection (async, non-blocking)
+                        let fraud_check = self
+                            .fraud_detector
+                            .check_fraud_patterns(*publisher_user_id)
+                            .await;
+                        if fraud_check == FraudCheck::Suspicious {
+                            log::warn!(
+                                "Suspicious activity detected for creator {}",
+                                publisher_user_id
+                            );
+                        }
+                        (true, Some(config.reward_amount_inr))
+                    } else {
+                        log::error!(
+                            "Failed to process milestone reward for video {} by user {}",
+                            video_id,
                             publisher_user_id
                         );
+                        (false, None)
                     }
                 } else {
-                    log::error!(
-                        "Failed to process milestone reward for video {} by user {}",
-                        video_id,
-                        publisher_user_id
-                    );
-                }
-            }
+                    (false, None)
+                };
+
+            // 7. Send analytics event for unique view (after reward decision)
+            let btc_video_view_tier = count / config.view_milestone;
+            analytics::send_btc_video_viewed_event(
+                video_id,
+                publisher_user_id,
+                true, // is_unique_view
+                event.source.clone(),
+                event.client_type.clone(),
+                count,
+                btc_video_view_tier,
+                event.share_count,
+                event.like_count,
+                view_count_reward_allocated,
+                reward_amount_inr,
+                &event.user_id,
+                event.is_logged_in.unwrap_or(false),
+                app_state,
+            )
+            .await;
         } else {
             log::debug!(
                 "Duplicate view for video {} by user {}",
                 video_id,
                 event.user_id
             );
+
+            // Send analytics event for duplicate view
+            // Need to fetch current view count for duplicate views
+            if let Ok(current_count) = self.get_view_count(video_id).await {
+                let btc_video_view_tier = current_count / config.view_milestone;
+                analytics::send_btc_video_viewed_event(
+                    video_id,
+                    publisher_user_id,
+                    false, // is_unique_view
+                    event.source.clone(),
+                    event.client_type.clone(),
+                    current_count,
+                    btc_video_view_tier,
+                    event.share_count,
+                    event.like_count,
+                    false, // view_count_reward_allocated - duplicate views never trigger rewards
+                    None,  // reward_amount_inr - no reward for duplicates
+                    &event.user_id,
+                    event.is_logged_in.unwrap_or(false),
+                    app_state,
+                )
+                .await;
+            }
         }
 
         Ok(())
