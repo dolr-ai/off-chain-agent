@@ -98,10 +98,9 @@ impl RewardEngine {
         app_state: &Arc<AppState>,
     ) -> Result<()> {
         // 1. Basic validation
-        // if !event.is_logged_in.unwrap_or(false) {
-        //     log::debug!("Skipping non-logged-in view for video {:?}", event.video_id);
-        //     return Ok(());
-        // }
+        if !event.is_logged_in.unwrap_or(false) {
+            return Ok(());
+        }
 
         let config = get_config(&self.redis_pool)
             .await
@@ -111,11 +110,6 @@ impl RewardEngine {
             })
             .unwrap_or_default();
         if event.absolute_watched < config.min_watch_duration {
-            log::debug!(
-                "Skipping view with insufficient watch duration: {} < {}",
-                event.absolute_watched,
-                config.min_watch_duration
-            );
             return Ok(());
         }
 
@@ -126,30 +120,22 @@ impl RewardEngine {
             .context("Missing publisher_user_id")?;
 
         // 2. Verify user registration (with caching)
-        // if !self
-        //     .user_verification
-        //     .is_registered_user(event.user_id, app_state)
-        //     .await?
-        // {
-        //     log::debug!(
-        //         "Skipping view from unregistered user {}",
-        //         event.user_id.to_text()
-        //     );
-        //     return Ok(());
-        // }
+        if !self
+            .user_verification
+            .is_registered_user(event.user_id, app_state)
+            .await?
+        {
+            return Ok(());
+        }
 
-        // // 2. Verify publisher registration (with caching)
-        // if !self
-        //     .user_verification
-        //     .is_registered_user(*publisher_user_id, app_state)
-        //     .await?
-        // {
-        //     log::debug!(
-        //         "Skipping view from unregistered publisher user {}",
-        //         publisher_user_id.to_text()
-        //     );
-        //     return Ok(());
-        // }
+        // 2. Verify publisher registration (with caching)
+        if !self
+            .user_verification
+            .is_registered_user(*publisher_user_id, app_state)
+            .await?
+        {
+            return Ok(());
+        }
 
         // 3. Check if creator is shadow banned
         if self
