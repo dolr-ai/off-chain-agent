@@ -42,6 +42,7 @@ pub async fn send_btc_video_viewed_event(
             "video_id": video_id,
             "publisher_user_id": publisher_user_id,
             "user_id": user_id_text,
+            "principal": user_id_text,
             "is_logged_in": is_logged_in,
             "canister_id": canister_id.map(|c| c.to_text()),
             "is_unique_view": is_unique_view,
