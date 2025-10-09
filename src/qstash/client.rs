@@ -513,7 +513,7 @@ impl QStashClient {
         request: &MigrateIndividualUserRequest,
     ) -> anyhow::Result<()> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join("qstash/transfer_all_posts_for_individual_user")
+            .join("qstash/update_yral_metadata_mapping")
             .unwrap();
 
         let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
