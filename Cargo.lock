@@ -9634,7 +9634,7 @@ dependencies = [
 [[package]]
 name = "yral-metadata-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-metadata.git?branch=master#12adcb44efe54de6d5341fd80acca991a5f4353f"
+source = "git+https://github.com/yral-dapp/yral-metadata.git?branch=master#65fc5445768af00b75ec53d89bd2cddf3c5a1167"
 dependencies = [
  "ic-agent",
  "reqwest 0.12.23",
@@ -9646,7 +9646,7 @@ dependencies = [
 [[package]]
 name = "yral-metadata-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-metadata.git?branch=master#12adcb44efe54de6d5341fd80acca991a5f4353f"
+source = "git+https://github.com/yral-dapp/yral-metadata.git?branch=master#65fc5445768af00b75ec53d89bd2cddf3c5a1167"
 dependencies = [
  "candid",
  "chrono",

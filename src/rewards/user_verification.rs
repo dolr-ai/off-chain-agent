@@ -4,7 +4,8 @@ use candid::Principal;
 use redis::AsyncCommands;
 use std::sync::Arc;
 use yral_canisters_client::{
-    individual_user_template::IndividualUserTemplate, user_info_service::UserInfoService,
+    individual_user_template::IndividualUserTemplate,
+    user_info_service::{SessionType, UserInfoService},
 };
 
 #[derive(Clone)]
@@ -29,11 +30,6 @@ impl UserVerification {
         let cached: Option<String> = conn.get(&cache_key).await?;
 
         if let Some(cached_value) = cached {
-            log::debug!(
-                "User registration cache hit for {}: {}",
-                principal,
-                cached_value
-            );
             return Ok(cached_value == "true");
         }
 
@@ -59,11 +55,6 @@ impl UserVerification {
                         e
                     );
                 }
-                log::debug!(
-                    "Cached user registration status for {}: {}",
-                    principal,
-                    value
-                );
             }
         });
 
@@ -88,10 +79,7 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
 
     match result {
         yral_canisters_client::user_info_service::Result5::Ok(session_type) => {
-            matches!(
-                session_type,
-                yral_canisters_client::user_info_service::SessionType::RegisteredSession
-            )
+            matches!(session_type, SessionType::RegisteredSession)
         }
         yral_canisters_client::user_info_service::Result5::Err(e) => {
             if e.contains("User not found") {

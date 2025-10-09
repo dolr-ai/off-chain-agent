@@ -53,7 +53,7 @@ pub struct VideoStatsResponse {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ConfigResponse {
-    pub config: RewardConfig,
+    pub config: Option<RewardConfig>,
 }
 
 pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
@@ -222,7 +222,16 @@ async fn get_reward_config(
     // Get config from RewardEngine (fetches from Redis)
     let config = state.rewards_module.reward_engine.get_config().await;
 
-    Ok(Json(ConfigResponse { config }))
+    // Return None if reward_amount_inr is 0 (rewards disabled)
+    let response = if config.reward_amount_inr == 0.0 {
+        ConfigResponse { config: None }
+    } else {
+        ConfigResponse {
+            config: Some(config),
+        }
+    };
+
+    Ok(Json(response))
 }
 
 pub async fn update_reward_config(

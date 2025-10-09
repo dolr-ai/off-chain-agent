@@ -2,6 +2,7 @@ use crate::{
     app_state::AppState,
     events::types::{EventPayload, RewardEarnedPayload, VideoDurationWatchedPayloadV2},
     rewards::{
+        analytics,
         btc_conversion::BtcConverter,
         config::{get_config, update_config as update_config_fn, RewardConfig},
         fraud_detection::{FraudCheck, FraudDetector},
@@ -98,7 +99,6 @@ impl RewardEngine {
     ) -> Result<()> {
         // 1. Basic validation
         if !event.is_logged_in.unwrap_or(false) {
-            log::debug!("Skipping non-logged-in view for video {:?}", event.video_id);
             return Ok(());
         }
 
@@ -110,11 +110,6 @@ impl RewardEngine {
             })
             .unwrap_or_default();
         if event.absolute_watched < config.min_watch_duration {
-            log::debug!(
-                "Skipping view with insufficient watch duration: {} < {}",
-                event.absolute_watched,
-                config.min_watch_duration
-            );
             return Ok(());
         }
 
@@ -130,10 +125,6 @@ impl RewardEngine {
             .is_registered_user(event.user_id, app_state)
             .await?
         {
-            log::debug!(
-                "Skipping view from unregistered user {}",
-                event.user_id.to_text()
-            );
             return Ok(());
         }
 
@@ -143,10 +134,6 @@ impl RewardEngine {
             .is_registered_user(*publisher_user_id, app_state)
             .await?
         {
-            log::debug!(
-                "Skipping view from unregistered publisher user {}",
-                publisher_user_id.to_text()
-            );
             return Ok(());
         }
 
@@ -188,54 +175,106 @@ impl RewardEngine {
                 })
                 .await;
 
-            // 6. Check for milestone
-            if count != 0 && count % config.view_milestone == 0 {
-                let milestone_number = count / config.view_milestone;
-                log::info!(
-                    "Milestone {} reached for video {} (view count: {})",
-                    milestone_number,
-                    video_id,
-                    count
-                );
-
-                // Process the reward
-                if (self
-                    .process_milestone(
-                        video_id,
-                        publisher_user_id,
-                        count,
+            // 6. Check for milestone and track reward allocation
+            let (view_count_reward_allocated, reward_amount_inr) =
+                if count != 0 && count % config.view_milestone == 0 {
+                    let milestone_number = count / config.view_milestone;
+                    log::info!(
+                        "Milestone {} reached for video {} (view count: {})",
                         milestone_number,
-                        &config,
-                        app_state,
-                    )
-                    .await)
-                    .is_ok()
-                {
-                    // 7. Fraud detection (async, non-blocking)
-                    let fraud_check = self
-                        .fraud_detector
-                        .check_fraud_patterns(*publisher_user_id)
+                        video_id,
+                        count
+                    );
+
+                    // Process the reward
+                    let milestone_result = self
+                        .process_milestone(
+                            video_id,
+                            publisher_user_id,
+                            count,
+                            milestone_number,
+                            &config,
+                            app_state,
+                        )
                         .await;
-                    if fraud_check == FraudCheck::Suspicious {
-                        log::warn!(
-                            "Suspicious activity detected for creator {}",
+
+                    if milestone_result.is_ok() {
+                        // 7. Fraud detection (async, non-blocking)
+                        let fraud_check = self
+                            .fraud_detector
+                            .check_fraud_patterns(*publisher_user_id)
+                            .await;
+                        if fraud_check == FraudCheck::Suspicious {
+                            log::warn!(
+                                "Suspicious activity detected for creator {}",
+                                publisher_user_id
+                            );
+                        }
+                        (true, Some(config.reward_amount_inr))
+                    } else {
+                        log::error!(
+                            "Failed to process milestone reward for video {} by user {}",
+                            video_id,
                             publisher_user_id
                         );
+                        (false, None)
                     }
                 } else {
-                    log::error!(
-                        "Failed to process milestone reward for video {} by user {}",
-                        video_id,
-                        publisher_user_id
-                    );
-                }
-            }
+                    (false, None)
+                };
+
+            // 7. Send analytics event for unique view (after reward decision)
+            let btc_video_view_tier = count / config.view_milestone;
+            analytics::send_btc_video_viewed_event(
+                analytics::BtcVideoViewedEventParams {
+                    video_id,
+                    publisher_user_id,
+                    is_unique_view: true,
+                    source: event.source.clone(),
+                    client_type: event.client_type.clone(),
+                    btc_video_view_count: count,
+                    btc_video_view_tier,
+                    share_count: event.share_count,
+                    like_count: event.like_count,
+                    view_count_reward_allocated,
+                    reward_amount_inr,
+                    user_id: &event.user_id,
+                    is_logged_in: event.is_logged_in.unwrap_or(false),
+                },
+                app_state,
+            )
+            .await;
         } else {
             log::debug!(
                 "Duplicate view for video {} by user {}",
                 video_id,
                 event.user_id
             );
+
+            // Send analytics event for duplicate view
+            // Need to fetch current view count for duplicate views
+            if let Ok(current_count) = self.get_view_count(video_id).await {
+                let btc_video_view_tier = current_count / config.view_milestone;
+                analytics::send_btc_video_viewed_event(
+                    analytics::BtcVideoViewedEventParams {
+                        video_id,
+                        publisher_user_id,
+                        is_unique_view: false,
+                        source: event.source.clone(),
+                        client_type: event.client_type.clone(),
+                        btc_video_view_count: current_count,
+                        btc_video_view_tier,
+                        share_count: event.share_count,
+                        like_count: event.like_count,
+                        view_count_reward_allocated: false,
+                        reward_amount_inr: None,
+                        user_id: &event.user_id,
+                        is_logged_in: event.is_logged_in.unwrap_or(false),
+                    },
+                    app_state,
+                )
+                .await;
+            }
         }
 
         Ok(())

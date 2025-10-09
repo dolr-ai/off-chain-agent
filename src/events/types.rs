@@ -302,6 +302,10 @@ pub struct VideoDurationWatchedPayloadV2 {
     pub post_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nsfw_probability: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
