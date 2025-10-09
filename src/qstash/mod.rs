@@ -14,10 +14,12 @@ use tracing::instrument;
 use crate::pipeline::Step;
 use crate::qstash::duplicate::VideoPublisherDataV2;
 use crate::qstash::hotornot_job::start_hotornot_job_v3;
-use crate::qstash::service_canister_migration::{migrate_individual_user_to_service_canister, process_post_for_transfer, transfer_all_posts_for_the_individual_user, update_the_metadata_mapping};
+use crate::qstash::service_canister_migration::{
+    migrate_individual_user_to_service_canister, transfer_all_posts_for_the_individual_user,
+    update_the_metadata_mapping,
+};
 use crate::qstash::verify::verify_qstash_message;
 use crate::setup_context;
-use crate::videogen::router;
 use crate::{
     app_state::AppState,
     canister::{
@@ -138,7 +140,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/snapshot_alert_job", post(snapshot_alert_job))
         .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
         .route("/start_hotornot_job_v3", post(start_hotornot_job_v3))
-        
         .route(
             "/delete_and_reclaim_canisters",
             post(handle_delete_and_reclaim_canisters),
@@ -155,9 +156,18 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/tournament/create",
             post(crate::leaderboard::handlers::create_tournament_handler),
         )
-        .route("/migrate_individual_user_to_service_canister", post(migrate_individual_user_to_service_canister))
-        .route("/transfer_all_posts_for_individual_user", post(transfer_all_posts_for_the_individual_user))
-        .route("/update_yral_metadata_mapping", post(update_the_metadata_mapping))
+        .route(
+            "/migrate_individual_user_to_service_canister",
+            post(migrate_individual_user_to_service_canister),
+        )
+        .route(
+            "/transfer_all_posts_for_individual_user",
+            post(transfer_all_posts_for_the_individual_user),
+        )
+        .route(
+            "/update_yral_metadata_mapping",
+            post(update_the_metadata_mapping),
+        )
         .route(
             "/tournament/start/{id}",
             post(crate::leaderboard::handlers::start_tournament_handler),

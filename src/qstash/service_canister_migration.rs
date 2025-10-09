@@ -1,17 +1,16 @@
+use std::env;
 use std::{error::Error, sync::Arc};
 
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
 use futures::future::join_all;
-use http::StatusCode;
 use http::{header::AUTHORIZATION, StatusCode};
-use ic_agent::Identity;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::{
     ic::USER_INFO_SERVICE_ID,
     individual_user_template::{GetPostsOfUserProfileError, IndividualUserTemplate, Result6},
-    individual_user_template::{IndividualUserTemplate, Result7, SessionType},
+    individual_user_template::{Result7, SessionType},
     user_info_service::{Result_, UserInfoService},
 };
 use yral_metadata_types::SetUserMetadataReqMetadata;
@@ -28,15 +27,6 @@ pub struct MigrateIndividualUserRequest {
 pub struct MigrationStatus {
     pub individual_user_canister: Principal,
     pub migrated: bool,
-}
-
-impl MigrationStatus {
-    fn new(individual_user_canister: Principal) -> Self {
-        MigrationStatus {
-            individual_user_canister,
-            migrated: false,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -102,10 +92,24 @@ pub async fn update_the_metadata_mapping(
         .yral_metadata_client
         .admin_set_user_metadata(
             admin_identity,
-            migrate_request.user_principal,
+            request.user_principal,
             SetUserMetadataReqMetadata {
                 user_canister_id: USER_INFO_SERVICE_ID,
                 user_name: String::new(),
+            },
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let service_canister_migration_redis =
+        ServiceCanisterMigrationRedis::new(state.service_cansister_migration_redis_pool.clone());
+
+    service_canister_migration_redis
+        .set_migrated_info_for_user(
+            request.user_principal,
+            MigrationStatus {
+                migrated: true,
+                individual_user_canister: request.user_canister,
             },
         )
         .await
@@ -211,7 +215,7 @@ pub async fn transfer_all_posts_for_the_individual_user(
 
                 let result = join_all(transfer_posts_requests).await;
 
-                if let Some(Err(e)) = result.get(0) {
+                if let Some(Err(e)) = result.first() {
                     log::error!("failed to transfer post {e}")
                 }
             }
@@ -258,9 +262,9 @@ pub async fn process_post_for_transfer(
     user_principal: Principal,
 ) -> Result<(), Box<dyn Error>> {
     let request_payload = SyncPostToPostServiceRequest {
-        user_principal: user_principal,
-        canister_id: canister_id,
-        post_id: post_id,
+        user_principal,
+        canister_id,
+        post_id,
     };
 
     let yral_cloudflare_worker_token = env::var("YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN")?;
@@ -276,7 +280,7 @@ pub async fn process_post_for_transfer(
         .await;
 
     match response_result {
-        Err(e) => return Err(e.into()),
+        Err(e) => Err(e.into()),
         Ok(response) => {
             if response.status().is_success() {
                 Ok(())
