@@ -14,6 +14,10 @@ use tracing::instrument;
 use crate::pipeline::Step;
 use crate::qstash::duplicate::VideoPublisherDataV2;
 use crate::qstash::hotornot_job::start_hotornot_job_v3;
+use crate::qstash::service_canister_migration::{
+    migrate_individual_user_to_service_canister, transfer_all_posts_for_the_individual_user,
+    update_the_metadata_mapping,
+};
 use crate::qstash::verify::verify_qstash_message;
 use crate::setup_context;
 use crate::{
@@ -37,6 +41,7 @@ use crate::{
 pub mod client;
 pub mod duplicate;
 pub mod hotornot_job;
+pub mod service_canister_migration;
 
 #[derive(Clone)]
 pub struct QStashState {
@@ -150,6 +155,18 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/tournament/create",
             post(crate::leaderboard::handlers::create_tournament_handler),
+        )
+        .route(
+            "/migrate_individual_user_to_service_canister",
+            post(migrate_individual_user_to_service_canister),
+        )
+        .route(
+            "/transfer_all_posts_for_individual_user",
+            post(transfer_all_posts_for_the_individual_user),
+        )
+        .route(
+            "/update_yral_metadata_mapping",
+            post(update_the_metadata_mapping),
         )
         .route(
             "/tournament/start/{id}",
