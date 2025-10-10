@@ -172,11 +172,11 @@ async fn main_impl() -> Result<()> {
 
 fn main() {
     let _guard = sentry::init((
-        "https://9a2d5e94760b78c84361380a30eae9ef@sentry.yral.com/2",
+        "https://e286074c3c36b715a5bc55f418cb990f@sentry.yral.com/4",
         sentry::ClientOptions {
             release: sentry::release_name!(),
             // debug: true, // use when debugging sentry issues
-            traces_sample_rate: 0.3,
+            traces_sample_rate: 0.5,
             ..Default::default()
         },
     ));
