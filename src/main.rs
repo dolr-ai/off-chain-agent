@@ -171,6 +171,11 @@ async fn main_impl() -> Result<()> {
 }
 
 fn main() {
+    // Initialize the rustls crypto provider
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let _guard = sentry::init((
         "https://e84a6dc4e0dfbaf7bd99b4a285a3e5b3@apm.yral.com/2",
         sentry::ClientOptions {

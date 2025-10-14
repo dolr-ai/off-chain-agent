@@ -806,6 +806,16 @@ pub struct RewardEarnedPayload {
 // ----------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FollowUserPayload {
+    #[serde(rename = "follower_principal_id")]
+    pub follower_principal_id: Principal,
+    #[serde(rename = "follower_username")]
+    pub follower_username: Option<String>,
+    #[serde(rename = "followee_principal_id")]
+    pub followee_principal_id: Principal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum EventPayload {
     VideoDurationWatched(VideoDurationWatchedPayloadV2),
@@ -838,6 +848,7 @@ pub enum EventPayload {
     TournamentEndedWinner(TournamentEndedWinnerPayload),
     #[serde(serialize_with = "serialize_reward_earned")]
     RewardEarned(RewardEarnedPayload),
+    FollowUser(FollowUserPayload),
 }
 
 fn serialize_reward_earned<S>(
@@ -1216,6 +1227,86 @@ impl EventPayload {
                     .await;
             }
 
+            EventPayload::FollowUser(payload) => {
+                let title = "New Follower";
+                let body = match &payload.follower_username {
+                    Some(username) => format!("{} started following you", username),
+                    None => "Someone started following you".to_string(),
+                };
+                let followee_principal_id = payload.followee_principal_id;
+
+                let profile_url = format!(
+                    "https://yral.com/profile/{}/posts",
+                    payload.follower_principal_id.to_text()
+                );
+
+                log::debug!(
+                    "Sending follow notification to user {} from {}",
+                    followee_principal_id,
+                    payload
+                        .follower_username
+                        .as_deref()
+                        .unwrap_or(&payload.follower_principal_id.to_text())
+                );
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.clone()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "payload": serde_json::to_string(self).unwrap()
+                    })),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(profile_url.clone()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body,
+                                },
+                                "sound": "default",
+                            },
+                            "url": profile_url
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, followee_principal_id)
+                    .await;
+            }
+
             _ => {}
         }
     }
@@ -1284,6 +1375,7 @@ pub fn deserialize_event_payload(
             serde_json::from_value(value)?,
         )),
         "reward_earned" => Ok(EventPayload::RewardEarned(serde_json::from_value(value)?)),
+        "follow_user" => Ok(EventPayload::FollowUser(serde_json::from_value(value)?)),
         _ => Err(serde_json::Error::unknown_field(event_name, &[])),
     }
 }

@@ -85,6 +85,8 @@ jobs:
           flyctl secrets set "YRAL_HON_WORKER_JWT=$YRAL_HON_WORKER_JWT" --app "$APP_NAME" --stage
           flyctl secrets set "LEADERBOARD_REDIS_URL=$LEADERBOARD_REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set "TEST_REDIS_URL=$TEST_REDIS_URL" --app "$APP_NAME" --stage
+          flyctl secrets set "HETZNER_S3_ACCESS_KEY=$HETZNER_S3_ACCESS_KEY" --app "$APP_NAME" --stage
+          flyctl secrets set "HETZNER_S3_SECRET_KEY=$HETZNER_S3_SECRET_KEY" --app "$APP_NAME" --stage
           flyctl secrets set "REPLICATE_API_TOKEN=$REPLICATE_API_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set "BTC_REWARDS_GCHAT_WEBHOOK_URL=$BTC_REWARDS_GCHAT_WEBHOOK_URL" --app "$APP_NAME" --stage
           flyctl secrets set "YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY=$YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY" --app "$APP_NAME" --stage
@@ -126,6 +128,8 @@ jobs:
           LEADERBOARD_REDIS_URL: ${{ secrets.LEADERBOARD_REDIS_URL }}
           SERVICE_CANISTER_MIGRATION_REDIS_URL: ${{ secrets.SERVICE_CANISTER_MIGRATION_REDIS_URL }}
           TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
+          HETZNER_S3_ACCESS_KEY: ${{ secrets.HETZNER_S3_ACCESS_KEY }}
+          HETZNER_S3_SECRET_KEY: ${{ secrets.HETZNER_S3_SECRET_KEY }}
           REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
           BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}
           YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY: ${{ secrets.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}
