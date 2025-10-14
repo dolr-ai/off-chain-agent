@@ -30,7 +30,7 @@ use yral_ml_feed_cache::consts::{
 };
 use yral_ml_feed_cache::types::{BufferItem, MLFeedCacheHistoryItem, PlainPostItem};
 use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2, PlainPostItemV2};
-use yral_ml_feed_cache::types_v3::{BufferItemV3, MLFeedCacheHistoryItemV3, PlainPostItemV3};
+use yral_ml_feed_cache::types_v3::MLFeedCacheHistoryItemV3;
 // V3 types - will be available after ml-feed-cache is updated
 // use yral_ml_feed_cache::types_v3::{BufferItemV3, MLFeedCacheHistoryItemV3, PlainPostItemV3};
 

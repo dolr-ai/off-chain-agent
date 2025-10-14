@@ -226,12 +226,10 @@ async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPost>) {
                     }
                 } else {
                     // Use IndividualUserTemplate for legacy users
-                    let individual_user_template = IndividualUserTemplate(canister_principal, &agent);
+                    let individual_user_template =
+                        IndividualUserTemplate(canister_principal, &agent);
 
-                    match individual_user_template
-                        .delete_post(post.post_id)
-                        .await
-                    {
+                    match individual_user_template.delete_post(post.post_id).await {
                         Ok(yral_canisters_client::individual_user_template::Result_::Ok) => Ok(()),
                         Ok(yral_canisters_client::individual_user_template::Result_::Err(_)) => {
                             log::error!(
