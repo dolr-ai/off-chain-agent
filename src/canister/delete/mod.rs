@@ -19,7 +19,7 @@ use yral_canisters_client::{
 use crate::{
     app_state::AppState,
     consts::{USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID},
-    posts::{delete_post::bulk_insert_video_delete_rows, types::UserPost},
+    posts::{delete_post::bulk_insert_video_delete_rows_v2, types::UserPostV2},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -84,7 +84,7 @@ pub async fn delete_canister_data(
     // Step 3: Bulk insert into video_deleted table if posts exist
     //       : Handle duplicate posts cleanup (spawn as background task)
     if !posts.is_empty() {
-        bulk_insert_video_delete_rows(&state.bigquery_client, posts.clone()).await?;
+        bulk_insert_video_delete_rows_v2(&state.bigquery_client, posts.clone()).await?;
 
         let bigquery_client = state.bigquery_client.clone();
         let video_ids: Vec<String> = posts.iter().map(|p| p.video_id.clone()).collect();
@@ -128,7 +128,7 @@ async fn get_canister_posts(
     agent: &Agent,
     canister_id: Principal,
     user_principal: Principal,
-) -> Result<Vec<UserPost>, anyhow::Error> {
+) -> Result<Vec<UserPostV2>, anyhow::Error> {
     let mut all_posts = Vec::new();
     let mut start = 0u64;
     let batch_size = 100u64;
@@ -144,9 +144,9 @@ async fn get_canister_posts(
                 .await?;
 
             let result_len = posts.len();
-            all_posts.extend(posts.into_iter().map(|p| UserPost {
+            all_posts.extend(posts.into_iter().map(|p| UserPostV2 {
                 canister_id: canister_id.to_string(),
-                post_id: p.id.parse::<u64>().unwrap_or(0), // Parse String to u64, use 0 if parsing fails
+                post_id: p.id, // Already String, no conversion needed
                 video_id: p.video_uid,
             }));
 
@@ -168,9 +168,9 @@ async fn get_canister_posts(
             match result {
                 yral_canisters_client::individual_user_template::Result6::Ok(posts) => {
                     let result_len = posts.len();
-                    all_posts.extend(posts.into_iter().map(|p| UserPost {
+                    all_posts.extend(posts.into_iter().map(|p| UserPostV2 {
                         canister_id: canister_id.to_string(),
-                        post_id: p.id,
+                        post_id: p.id.to_string(), // Convert u64 to String
                         video_id: p.video_uid,
                     }));
                     if result_len < batch_size as usize {
@@ -189,7 +189,7 @@ async fn get_canister_posts(
     Ok(all_posts)
 }
 
-async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPost>) {
+async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPostV2>) {
     let futures: Vec<_> = posts
         .into_iter()
         .map(|post| {
@@ -204,7 +204,7 @@ async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPost>) {
                     let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &agent);
 
                     match user_post_service
-                        .delete_post(post.post_id.to_string())
+                        .delete_post(post.post_id.clone()) // post_id is already String
                         .await
                     {
                         Ok(yral_canisters_client::user_post_service::Result_::Ok) => Ok(()),
@@ -229,7 +229,12 @@ async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPost>) {
                     let individual_user_template =
                         IndividualUserTemplate(canister_principal, &agent);
 
-                    match individual_user_template.delete_post(post.post_id).await {
+                    // Parse String post_id to u64 for IndividualUserTemplate
+                    let post_id_u64 = post.post_id.parse::<u64>().map_err(|e| {
+                        format!("Invalid post_id format for legacy canister: {}", e)
+                    })?;
+
+                    match individual_user_template.delete_post(post_id_u64).await {
                         Ok(yral_canisters_client::individual_user_template::Result_::Ok) => Ok(()),
                         Ok(yral_canisters_client::individual_user_template::Result_::Err(_)) => {
                             log::error!(
