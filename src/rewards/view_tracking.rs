@@ -7,12 +7,12 @@ use sha1::{Digest, Sha1};
 const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     --!df flags=allow-undeclared-keys
     -- Atomic operation for view counting with config change handling
+    -- This script only runs for logged-in users
     -- Using HSET to store both count and config_version in single hash
     local views_set = KEYS[1]  -- rewards:views:{video_id} (set of user IDs)
     local video_hash = KEYS[2]  -- rewards:video:{video_id} (hash with count & config_version)
 
     local user_id = ARGV[1]
-    local is_logged_in = ARGV[2]  -- "true" or "false"
 
     -- Get current global config version from Redis
     local current_global_version = redis.call('GET', 'rewards:config:version') or '1'
@@ -30,18 +30,11 @@ const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     -- Check if user already viewed (critical check)
     local added = redis.call('SADD', views_set, user_id)
     if added == 1 then
-        -- New view, increment counters based on login status
-        if is_logged_in == "true" then
-            -- Logged-in view: increment all counters
-            redis.call('HINCRBY', video_hash, 'count', 1)
-            redis.call('HINCRBY', video_hash, 'total_count_loggedin', 1)
-            redis.call('HINCRBY', video_hash, 'total_count_all', 1)
-            return redis.call('HGET', video_hash, 'count')
-        else
-            -- Non-logged-in view: only increment total_count_all
-            redis.call('HINCRBY', video_hash, 'total_count_all', 1)
-            return nil  -- Return nil for non-logged-in (same as duplicate view behavior)
-        end
+        -- New logged-in view: increment all counters
+        redis.call('HINCRBY', video_hash, 'count', 1)
+        redis.call('HINCRBY', video_hash, 'total_count_loggedin', 1)
+        redis.call('HINCRBY', video_hash, 'total_count_all', 1)
+        return redis.call('HGET', video_hash, 'count')
     else
         return nil  -- Duplicate view
     end
@@ -100,10 +93,17 @@ impl ViewTracker {
     ) -> Result<Option<u64>> {
         let mut conn = self.pool.get().await?;
 
-        // Keys for the Lua script
+        // Fast path for non-logged-in: just increment total_count_all
+        if !is_logged_in {
+            let video_hash_key = format!("rewards:video:{}", video_id);
+            conn.hincr::<_, _, _, ()>(&video_hash_key, "total_count_all", 1)
+                .await?;
+            return Ok(None);
+        }
+
+        // Logged-in path: use Lua script for atomic duplicate checking
         let views_set_key = format!("rewards:views:{}", video_id);
         let video_hash_key = format!("rewards:video:{}", video_id);
-        let is_logged_in_str = if is_logged_in { "true" } else { "false" };
 
         // Try to use the loaded script SHA, fallback to EVAL if not loaded
         let result: Option<u64> = if let Some(sha) = &self.script_sha {
@@ -114,7 +114,6 @@ impl ViewTracker {
                 .arg(&views_set_key)
                 .arg(&video_hash_key)
                 .arg(user_id.to_string())
-                .arg(is_logged_in_str)
                 .query_async(&mut *conn)
                 .await;
 
@@ -129,7 +128,6 @@ impl ViewTracker {
                         .arg(&views_set_key)
                         .arg(&video_hash_key)
                         .arg(user_id.to_string())
-                        .arg(is_logged_in_str)
                         .query_async(&mut *conn)
                         .await
                         .context("Failed to execute view tracking script")?
@@ -143,7 +141,6 @@ impl ViewTracker {
                 .arg(&views_set_key)
                 .arg(&video_hash_key)
                 .arg(user_id.to_string())
-                .arg(is_logged_in_str)
                 .query_async(&mut *conn)
                 .await
                 .context("Failed to execute view tracking script")?
