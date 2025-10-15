@@ -12,11 +12,14 @@ use utoipa::ToSchema;
 use yral_canisters_client::{
     individual_user_template::IndividualUserTemplate,
     user_index::{Result3, UserIndex},
+    user_info_service::UserInfoService,
+    user_post_service::UserPostService,
 };
 
 use crate::{
     app_state::AppState,
-    posts::{delete_post::bulk_insert_video_delete_rows, types::UserPost},
+    consts::{USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID},
+    posts::{delete_post::bulk_insert_video_delete_rows_v2, types::UserPostV2},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -68,13 +71,20 @@ pub async fn delete_canister_data(
         log::error!("Failed to delete metadata for user {user_principal}: {e}");
     }
 
+    // 2. Delete user info from UserInfoService
+    // Wont return error if user info deletion fails, just log it
+    let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, agent);
+    if let Err(e) = user_info_service.delete_user_info(user_principal).await {
+        log::error!("Failed to delete user info for user {user_principal}: {e}");
+    }
+
     // Step 2: Get all posts for the canister
-    let posts = get_canister_posts(agent, canister_id).await?;
+    let posts = get_canister_posts(agent, canister_id, user_principal).await?;
 
     // Step 3: Bulk insert into video_deleted table if posts exist
     //       : Handle duplicate posts cleanup (spawn as background task)
     if !posts.is_empty() {
-        bulk_insert_video_delete_rows(&state.bigquery_client, posts.clone()).await?;
+        bulk_insert_video_delete_rows_v2(&state.bigquery_client, posts.clone()).await?;
 
         let bigquery_client = state.bigquery_client.clone();
         let video_ids: Vec<String> = posts.iter().map(|p| p.video_id.clone()).collect();
@@ -117,42 +127,69 @@ pub async fn delete_canister_data(
 async fn get_canister_posts(
     agent: &Agent,
     canister_id: Principal,
-) -> Result<Vec<UserPost>, anyhow::Error> {
+    user_principal: Principal,
+) -> Result<Vec<UserPostV2>, anyhow::Error> {
     let mut all_posts = Vec::new();
     let mut start = 0u64;
     let batch_size = 100u64;
 
-    loop {
-        let end = start + batch_size;
+    // Route based on canister
+    if canister_id == *USER_INFO_SERVICE_CANISTER_ID {
+        // Use UserPostService for users registered via USER_INFO_SERVICE
+        loop {
+            let end = start + batch_size;
 
-        let result = IndividualUserTemplate(canister_id, agent)
-            .get_posts_of_this_user_profile_with_pagination_cursor(start, end)
-            .await?;
+            let posts = UserPostService(*USER_POST_SERVICE_CANISTER_ID, agent)
+                .get_posts_of_this_user_profile_with_pagination_cursor(user_principal, start, end)
+                .await?;
 
-        match result {
-            yral_canisters_client::individual_user_template::Result6::Ok(posts) => {
-                let result_len = posts.len();
-                all_posts.extend(posts.into_iter().map(|p| UserPost {
-                    canister_id: canister_id.to_string(),
-                    post_id: p.id,
-                    video_id: p.video_uid,
-                }));
-                if result_len < batch_size as usize {
+            let result_len = posts.len();
+            all_posts.extend(posts.into_iter().map(|p| UserPostV2 {
+                canister_id: canister_id.to_string(),
+                post_id: p.id, // Already String, no conversion needed
+                video_id: p.video_uid,
+            }));
+
+            if result_len < batch_size as usize {
+                break;
+            }
+
+            start = end;
+        }
+    } else {
+        // Use IndividualUserTemplate for legacy users
+        loop {
+            let end = start + batch_size;
+
+            let result = IndividualUserTemplate(canister_id, agent)
+                .get_posts_of_this_user_profile_with_pagination_cursor(start, end)
+                .await?;
+
+            match result {
+                yral_canisters_client::individual_user_template::Result6::Ok(posts) => {
+                    let result_len = posts.len();
+                    all_posts.extend(posts.into_iter().map(|p| UserPostV2 {
+                        canister_id: canister_id.to_string(),
+                        post_id: p.id.to_string(), // Convert u64 to String
+                        video_id: p.video_uid,
+                    }));
+                    if result_len < batch_size as usize {
+                        break;
+                    }
+                }
+                yral_canisters_client::individual_user_template::Result6::Err(_) => {
                     break;
                 }
             }
-            yral_canisters_client::individual_user_template::Result6::Err(_) => {
-                break;
-            }
-        }
 
-        start = end;
+            start = end;
+        }
     }
 
     Ok(all_posts)
 }
 
-async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPost>) {
+async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPostV2>) {
     let futures: Vec<_> = posts
         .into_iter()
         .map(|post| {
@@ -161,20 +198,63 @@ async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPost>) {
                 let canister_principal = Principal::from_text(&post.canister_id)
                     .map_err(|e| format!("Invalid canister principal: {e}"))?;
 
-                let individual_user_template = IndividualUserTemplate(canister_principal, &agent);
+                // Route based on canister
+                if canister_principal == *USER_INFO_SERVICE_CANISTER_ID {
+                    // Use UserPostService for USER_INFO_SERVICE users
+                    let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &agent);
 
-                individual_user_template
-                    .delete_post(post.post_id)
-                    .await
-                    .map_err(|e| {
-                        log::error!(
-                            "Failed to delete post {} from canister {}: {}",
-                            post.post_id,
-                            post.canister_id,
-                            e
-                        );
-                        format!("Failed to delete post: {e}")
-                    })
+                    match user_post_service
+                        .delete_post(post.post_id.clone()) // post_id is already String
+                        .await
+                    {
+                        Ok(yral_canisters_client::user_post_service::Result_::Ok) => Ok(()),
+                        Ok(yral_canisters_client::user_post_service::Result_::Err(_)) => {
+                            log::error!(
+                                "Failed to delete post {} from UserPostService",
+                                post.post_id
+                            );
+                            Err("Failed to delete post".to_string())
+                        }
+                        Err(e) => {
+                            log::error!(
+                                "Failed to delete post {} from UserPostService: {}",
+                                post.post_id,
+                                e
+                            );
+                            Err(format!("Failed to delete post: {e}"))
+                        }
+                    }
+                } else {
+                    // Use IndividualUserTemplate for legacy users
+                    let individual_user_template =
+                        IndividualUserTemplate(canister_principal, &agent);
+
+                    // Parse String post_id to u64 for IndividualUserTemplate
+                    let post_id_u64 = post.post_id.parse::<u64>().map_err(|e| {
+                        format!("Invalid post_id format for legacy canister: {}", e)
+                    })?;
+
+                    match individual_user_template.delete_post(post_id_u64).await {
+                        Ok(yral_canisters_client::individual_user_template::Result_::Ok) => Ok(()),
+                        Ok(yral_canisters_client::individual_user_template::Result_::Err(_)) => {
+                            log::error!(
+                                "Failed to delete post {} from canister {}",
+                                post.post_id,
+                                post.canister_id
+                            );
+                            Err("Failed to delete post".to_string())
+                        }
+                        Err(e) => {
+                            log::error!(
+                                "Failed to delete post {} from canister {}: {}",
+                                post.post_id,
+                                post.canister_id,
+                                e
+                            );
+                            Err(format!("Failed to delete post: {e}"))
+                        }
+                    }
+                }
             }
         })
         .collect();

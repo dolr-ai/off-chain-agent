@@ -30,7 +30,7 @@ use yral_ml_feed_cache::consts::{
 };
 use yral_ml_feed_cache::types::{BufferItem, MLFeedCacheHistoryItem, PlainPostItem};
 use yral_ml_feed_cache::types_v2::{BufferItemV2, MLFeedCacheHistoryItemV2, PlainPostItemV2};
-use yral_ml_feed_cache::types_v3::{BufferItemV3, MLFeedCacheHistoryItemV3, PlainPostItemV3};
+use yral_ml_feed_cache::types_v3::MLFeedCacheHistoryItemV3;
 // V3 types - will be available after ml-feed-cache is updated
 // use yral_ml_feed_cache::types_v3::{BufferItemV3, MLFeedCacheHistoryItemV3, PlainPostItemV3};
 
@@ -384,6 +384,7 @@ impl Event {
                 let video_id = params.video_id.unwrap_or_default();
                 let item_type = "video_duration_watched".to_string();
                 let timestamp = std::time::SystemTime::now();
+                let is_nsfw = nsfw_probability > 0.4;
 
                 let watch_history_item = MLFeedCacheHistoryItemV3 {
                     publisher_user_id: publisher_user_id.to_string(),
@@ -398,59 +399,21 @@ impl Event {
                 let user_cache_key = format!(
                     "{}{}",
                     user_id,
-                    if nsfw_probability <= 0.4 {
+                    if !is_nsfw {
                         USER_WATCH_HISTORY_CLEAN_SUFFIX_V2
                     } else {
                         USER_WATCH_HISTORY_NSFW_SUFFIX_V2
                     }
                 );
                 let res = ml_feed_cache
-                    .add_user_watch_history_items_v3(
+                    .add_user_watch_history_items_v4(
                         &user_cache_key,
                         vec![watch_history_item.clone()],
+                        is_nsfw,
                     )
                     .await;
                 if res.is_err() {
                     error!("Error adding user watch history items: {:?}", res.err());
-                }
-
-                // Below is for dealing with hotornot evaluator for alloydb
-                // Conditions:
-                // if already present in history, return
-                // else add to history and user buffer
-
-                let plain_key = format!("{user_id}{USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2}");
-
-                match ml_feed_cache
-                    .is_user_history_plain_item_exists_v3(
-                        plain_key.as_str(),
-                        PlainPostItemV3 {
-                            video_id: video_id.clone(),
-                        },
-                    )
-                    .await
-                {
-                    Ok(true) => {}
-                    Ok(false) => {
-                        // add_user_buffer_items
-                        if let Err(e) = ml_feed_cache
-                            .add_user_buffer_items_v3(vec![BufferItemV3 {
-                                publisher_user_id: publisher_user_id.to_string(),
-                                post_id,
-                                video_id,
-                                item_type,
-                                percent_watched: watch_history_item.percent_watched,
-                                user_id: user_id.to_string(),
-                                timestamp,
-                            }])
-                            .await
-                        {
-                            error!("Error adding user watch history buffer items: {e:?}");
-                        }
-                    }
-                    Err(e) => {
-                        error!("Error checking user watch history plain item: {e:?}");
-                    }
                 }
             });
         }
@@ -879,7 +842,6 @@ impl Event {
         let params_str = self.event.params.clone();
 
         tokio::spawn(async move {
-            let ml_feed_cache = app_state.ml_feed_cache.clone();
             let timestamp = std::time::SystemTime::now();
 
             // Parse parameters using the helper function
@@ -891,6 +853,8 @@ impl Event {
                     return;
                 }
             };
+            let nsfw_probability = params.nsfw_probability;
+            let is_nsfw = nsfw_probability > 0.4;
 
             let success_history_item = MLFeedCacheHistoryItemV3 {
                 publisher_user_id: params.publisher_user_id.clone(),
@@ -905,7 +869,7 @@ impl Event {
             let user_cache_key = format!(
                 "{}{}",
                 params.user_id,
-                if params.nsfw_probability <= 0.4 {
+                if !is_nsfw {
                     USER_SUCCESS_HISTORY_CLEAN_SUFFIX_V2
                 } else {
                     USER_SUCCESS_HISTORY_NSFW_SUFFIX_V2
@@ -913,61 +877,14 @@ impl Event {
             );
             let res = app_state
                 .ml_feed_cache
-                .add_user_success_history_items_v3(
+                .add_user_success_history_items_v4(
                     &user_cache_key,
                     vec![success_history_item.clone()],
+                    is_nsfw,
                 )
                 .await;
             if res.is_err() {
                 error!("Error adding user success history items: {:?}", res.err());
-            }
-
-            // add to history plain items
-            if item_type == "like_video" {
-                let plain_key = format!(
-                    "{}{}",
-                    params.user_id, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2
-                );
-
-                match ml_feed_cache
-                    .is_user_history_plain_item_exists_v3(
-                        plain_key.as_str(),
-                        PlainPostItemV3 {
-                            video_id: params.video_id.clone(),
-                        },
-                    )
-                    .await
-                {
-                    Ok(true) => {}
-                    Ok(false) => {
-                        // add_user_buffer_items
-                        if let Err(e) = ml_feed_cache
-                            .add_user_buffer_items_v3(vec![BufferItemV3 {
-                                publisher_user_id: params.publisher_user_id.clone(),
-                                post_id: params.post_id,
-                                video_id: params.video_id.clone(),
-                                item_type,
-                                percent_watched: params.percent_watched as f32,
-                                user_id: params.user_id.clone(),
-                                timestamp,
-                            }])
-                            .await
-                        {
-                            error!("Error adding user like history buffer items: {e:?}");
-                        }
-
-                        // can do this here, because `like` is absolute. Unline watch which has percent varying everytime
-                        if let Err(e) = ml_feed_cache
-                            .add_user_history_plain_items_v3(&plain_key, vec![success_history_item])
-                            .await
-                        {
-                            error!("Error adding user like history plain items: {e:?}");
-                        }
-                    }
-                    Err(e) => {
-                        error!("Error checking user like history plain item: {e:?}");
-                    }
-                }
             }
         });
     }
@@ -1032,6 +949,7 @@ pub async fn upload_video_gcs(
     ))
 }
 
+#[instrument(skip(uid))]
 pub async fn upload_gcs_impl(
     uid: &str,
     publisher_user_id: &str,
