@@ -12,6 +12,7 @@ const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     local video_hash = KEYS[2]  -- rewards:video:{video_id} (hash with count & config_version)
 
     local user_id = ARGV[1]
+    local is_logged_in = ARGV[2]  -- "true" or "false"
 
     -- Get current global config version from Redis
     local current_global_version = redis.call('GET', 'rewards:config:version') or '1'
@@ -29,8 +30,18 @@ const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     -- Check if user already viewed (critical check)
     local added = redis.call('SADD', views_set, user_id)
     if added == 1 then
-        -- New view, increment counter in hash and return new value
-        return redis.call('HINCRBY', video_hash, 'count', 1)
+        -- New view, increment counters based on login status
+        if is_logged_in == "true" then
+            -- Logged-in view: increment all counters
+            redis.call('HINCRBY', video_hash, 'count', 1)
+            redis.call('HINCRBY', video_hash, 'total_count_loggedin', 1)
+            redis.call('HINCRBY', video_hash, 'total_count_all', 1)
+            return redis.call('HGET', video_hash, 'count')
+        else
+            -- Non-logged-in view: only increment total_count_all
+            redis.call('HINCRBY', video_hash, 'total_count_all', 1)
+            return nil  -- Return nil for non-logged-in (same as duplicate view behavior)
+        end
     else
         return nil  -- Duplicate view
     end
@@ -81,22 +92,29 @@ impl ViewTracker {
         Ok(sha)
     }
 
-    pub async fn track_view(&self, video_id: &str, user_id: &Principal) -> Result<Option<u64>> {
+    pub async fn track_view(
+        &self,
+        video_id: &str,
+        user_id: &Principal,
+        is_logged_in: bool,
+    ) -> Result<Option<u64>> {
         let mut conn = self.pool.get().await?;
 
         // Keys for the Lua script
         let views_set_key = format!("rewards:views:{}", video_id);
         let video_hash_key = format!("rewards:video:{}", video_id);
+        let is_logged_in_str = if is_logged_in { "true" } else { "false" };
 
         // Try to use the loaded script SHA, fallback to EVAL if not loaded
         let result: Option<u64> = if let Some(sha) = &self.script_sha {
             // Use EVALSHA for better performance
             let evalsha_result = redis::cmd("EVALSHA")
                 .arg(sha)
-                .arg(2) // number of keys (reduced from 3 to 2)
+                .arg(2) // number of keys
                 .arg(&views_set_key)
                 .arg(&video_hash_key)
                 .arg(user_id.to_string())
+                .arg(is_logged_in_str)
                 .query_async(&mut *conn)
                 .await;
 
@@ -111,6 +129,7 @@ impl ViewTracker {
                         .arg(&views_set_key)
                         .arg(&video_hash_key)
                         .arg(user_id.to_string())
+                        .arg(is_logged_in_str)
                         .query_async(&mut *conn)
                         .await
                         .context("Failed to execute view tracking script")?
@@ -124,6 +143,7 @@ impl ViewTracker {
                 .arg(&views_set_key)
                 .arg(&video_hash_key)
                 .arg(user_id.to_string())
+                .arg(is_logged_in_str)
                 .query_async(&mut *conn)
                 .await
                 .context("Failed to execute view tracking script")?
@@ -153,12 +173,110 @@ impl ViewTracker {
             .await?;
         Ok(())
     }
+
+    pub async fn get_total_count_loggedin(&self, video_id: &str) -> Result<u64> {
+        let mut conn = self.pool.get().await?;
+        let video_hash_key = format!("rewards:video:{}", video_id);
+        let count: Option<String> = conn.hget(&video_hash_key, "total_count_loggedin").await?;
+        Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
+    }
+
+    pub async fn get_total_count_all(&self, video_id: &str) -> Result<u64> {
+        let mut conn = self.pool.get().await?;
+        let video_hash_key = format!("rewards:video:{}", video_id);
+        let count: Option<String> = conn.hget(&video_hash_key, "total_count_all").await?;
+        Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
+    }
+
+    /// Get all video stats in a single Redis call
+    pub async fn get_all_video_stats(&self, video_id: &str) -> Result<(u64, u64, u64, u64)> {
+        let mut conn = self.pool.get().await?;
+        let video_hash_key = format!("rewards:video:{}", video_id);
+
+        // Get all fields in one call
+        let data: std::collections::HashMap<String, String> = conn.hgetall(&video_hash_key).await?;
+
+        let count = data.get("count").and_then(|s| s.parse().ok()).unwrap_or(0);
+        let total_count_loggedin = data
+            .get("total_count_loggedin")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        let total_count_all = data
+            .get("total_count_all")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        let last_milestone = data
+            .get("last_milestone")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        Ok((count, total_count_loggedin, total_count_all, last_milestone))
+    }
+
+    /// Get stats for multiple videos using Redis pipelining (batched)
+    pub async fn get_bulk_video_stats(
+        &self,
+        video_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, (u64, u64, u64, u64)>> {
+        if video_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let mut conn = self.pool.get().await?;
+
+        // Build pipeline with HGETALL for each video
+        let mut pipe = redis::pipe();
+        for video_id in video_ids {
+            let video_hash_key = format!("rewards:video:{}", video_id);
+            pipe.hgetall(&video_hash_key);
+        }
+
+        // Execute pipeline - all commands in single round-trip
+        let results: Vec<std::collections::HashMap<String, String>> =
+            pipe.query_async(&mut *conn).await?;
+
+        // Parse results
+        let mut response = std::collections::HashMap::new();
+        for (i, video_id) in video_ids.iter().enumerate() {
+            if let Some(data) = results.get(i) {
+                let count = data.get("count").and_then(|s| s.parse().ok()).unwrap_or(0);
+                let total_count_loggedin = data
+                    .get("total_count_loggedin")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let total_count_all = data
+                    .get("total_count_all")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let last_milestone = data
+                    .get("last_milestone")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+
+                response.insert(
+                    video_id.clone(),
+                    (count, total_count_loggedin, total_count_all, last_milestone),
+                );
+            }
+        }
+
+        Ok(response)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Once;
     use uuid::Uuid;
+
+    static INIT: Once = Once::new();
+
+    fn init_crypto() {
+        INIT.call_once(|| {
+            let _ = rustls::crypto::ring::default_provider().install_default();
+        });
+    }
 
     fn test_key_prefix() -> String {
         format!("test_rewards_{}", Uuid::new_v4().to_string())
@@ -171,6 +289,8 @@ mod tests {
 
     impl TestViewTracker {
         async fn new() -> Self {
+            init_crypto();
+
             let redis_url = std::env::var("TEST_REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
@@ -241,7 +361,7 @@ mod tests {
 
         let count = test_tracker
             .tracker
-            .track_view(&video_id, &user_id)
+            .track_view(&video_id, &user_id, true)
             .await
             .unwrap();
         assert_eq!(count, Some(1));
@@ -257,14 +377,14 @@ mod tests {
 
         let count1 = test_tracker
             .tracker
-            .track_view(&video_id, &user_id)
+            .track_view(&video_id, &user_id, true)
             .await
             .unwrap();
         assert_eq!(count1, Some(1));
 
         let count2 = test_tracker
             .tracker
-            .track_view(&video_id, &user_id)
+            .track_view(&video_id, &user_id, true)
             .await
             .unwrap();
         assert_eq!(count2, None);
@@ -283,21 +403,21 @@ mod tests {
 
         let count1 = test_tracker
             .tracker
-            .track_view(&video_id, &user1)
+            .track_view(&video_id, &user1, true)
             .await
             .unwrap();
         assert_eq!(count1, Some(1));
 
         let count2 = test_tracker
             .tracker
-            .track_view(&video_id, &user2)
+            .track_view(&video_id, &user2, true)
             .await
             .unwrap();
         assert_eq!(count2, Some(2));
 
         let count3 = test_tracker
             .tracker
-            .track_view(&video_id, &user3)
+            .track_view(&video_id, &user3, true)
             .await
             .unwrap();
         assert_eq!(count3, Some(3));
@@ -322,12 +442,12 @@ mod tests {
 
         test_tracker
             .tracker
-            .track_view(&video_id, &user1)
+            .track_view(&video_id, &user1, true)
             .await
             .unwrap();
         test_tracker
             .tracker
-            .track_view(&video_id, &user2)
+            .track_view(&video_id, &user2, true)
             .await
             .unwrap();
 
@@ -347,14 +467,14 @@ mod tests {
         // After config change, users who already viewed should NOT be able to view again
         let count_after_reset = test_tracker
             .tracker
-            .track_view(&video_id, &user1)
+            .track_view(&video_id, &user1, true)
             .await
             .unwrap();
         assert_eq!(count_after_reset, None); // User1 already viewed, cannot view again
 
         let count_user2_after = test_tracker
             .tracker
-            .track_view(&video_id, &user2)
+            .track_view(&video_id, &user2, true)
             .await
             .unwrap();
         assert_eq!(count_user2_after, None); // User2 already viewed, cannot view again
@@ -362,7 +482,7 @@ mod tests {
         // New user should be able to view and counter starts from 1 (after reset)
         let count_user3 = test_tracker
             .tracker
-            .track_view(&video_id, &user3)
+            .track_view(&video_id, &user3, true)
             .await
             .unwrap();
         assert_eq!(count_user3, Some(1)); // New user can view, counter is 1 after reset
@@ -387,12 +507,12 @@ mod tests {
 
         test_tracker
             .tracker
-            .track_view(&video_id, &user1)
+            .track_view(&video_id, &user1, true)
             .await
             .unwrap();
         test_tracker
             .tracker
-            .track_view(&video_id, &user2)
+            .track_view(&video_id, &user2, true)
             .await
             .unwrap();
 
@@ -447,7 +567,7 @@ mod tests {
         for user in users {
             let tracker = test_tracker.tracker.clone();
             let vid = video_id.clone();
-            let handle = tokio::spawn(async move { tracker.track_view(&vid, &user).await });
+            let handle = tokio::spawn(async move { tracker.track_view(&vid, &user, true).await });
             handles.push(handle);
         }
 
@@ -466,6 +586,171 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(final_count, 10);
+
+        test_tracker.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_total_count_loggedin_persists_on_config_reset() {
+        let test_tracker = TestViewTracker::new().await;
+        let video_id = test_tracker.test_video_id("video8");
+        let user1 = Principal::self_authenticating("total_user1");
+        let user2 = Principal::self_authenticating("total_user2");
+        let user3 = Principal::self_authenticating("total_user3");
+
+        // Track 2 logged-in views
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user1, true)
+            .await
+            .unwrap();
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user2, true)
+            .await
+            .unwrap();
+
+        let count_before = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
+        let total_loggedin_before = test_tracker
+            .tracker
+            .get_total_count_loggedin(&video_id)
+            .await
+            .unwrap();
+        assert_eq!(count_before, 2);
+        assert_eq!(total_loggedin_before, 2);
+
+        // Change config version
+        let mut conn = test_tracker.tracker.pool.get().await.unwrap();
+        let _: () = conn
+            .set::<_, _, ()>("rewards:config:version", "2")
+            .await
+            .unwrap();
+
+        // Track a new user view after config change
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user3, true)
+            .await
+            .unwrap();
+
+        // count should reset to 1, but total_count_loggedin should be 3
+        let count_after = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
+        let total_loggedin_after = test_tracker
+            .tracker
+            .get_total_count_loggedin(&video_id)
+            .await
+            .unwrap();
+        assert_eq!(count_after, 1); // Reset counter
+        assert_eq!(total_loggedin_after, 3); // Never resets
+
+        test_tracker.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_total_count_all_includes_non_logged_in() {
+        let test_tracker = TestViewTracker::new().await;
+        let video_id = test_tracker.test_video_id("video9");
+        let user1 = Principal::self_authenticating("mixed_user1");
+        let user2 = Principal::self_authenticating("mixed_user2");
+        let user3 = Principal::self_authenticating("mixed_user3");
+        let user4 = Principal::self_authenticating("mixed_user4");
+
+        // 2 logged-in views
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user1, true)
+            .await
+            .unwrap();
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user2, true)
+            .await
+            .unwrap();
+
+        // 2 non-logged-in views
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user3, false)
+            .await
+            .unwrap();
+        test_tracker
+            .tracker
+            .track_view(&video_id, &user4, false)
+            .await
+            .unwrap();
+
+        let count = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
+        let total_loggedin = test_tracker
+            .tracker
+            .get_total_count_loggedin(&video_id)
+            .await
+            .unwrap();
+        let total_all = test_tracker
+            .tracker
+            .get_total_count_all(&video_id)
+            .await
+            .unwrap();
+
+        assert_eq!(count, 2); // Only logged-in views
+        assert_eq!(total_loggedin, 2); // Only logged-in views
+        assert_eq!(total_all, 4); // All views
+
+        test_tracker.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_total_counters_with_duplicates() {
+        let test_tracker = TestViewTracker::new().await;
+        let video_id = test_tracker.test_video_id("video10");
+        let user1 = Principal::self_authenticating("dup_user1");
+
+        // First view (logged-in)
+        let result1 = test_tracker
+            .tracker
+            .track_view(&video_id, &user1, true)
+            .await
+            .unwrap();
+        assert_eq!(result1, Some(1));
+
+        // Duplicate view (logged-in) - should not increment any counter
+        let result2 = test_tracker
+            .tracker
+            .track_view(&video_id, &user1, true)
+            .await
+            .unwrap();
+        assert_eq!(result2, None);
+
+        let count = test_tracker
+            .tracker
+            .get_view_count(&video_id)
+            .await
+            .unwrap();
+        let total_loggedin = test_tracker
+            .tracker
+            .get_total_count_loggedin(&video_id)
+            .await
+            .unwrap();
+        let total_all = test_tracker
+            .tracker
+            .get_total_count_all(&video_id)
+            .await
+            .unwrap();
+
+        assert_eq!(count, 1);
+        assert_eq!(total_loggedin, 1);
+        assert_eq!(total_all, 1);
 
         test_tracker.cleanup().await.unwrap();
     }

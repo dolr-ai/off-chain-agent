@@ -97,11 +97,6 @@ impl RewardEngine {
         event: VideoDurationWatchedPayloadV2,
         app_state: &Arc<AppState>,
     ) -> Result<()> {
-        // 1. Basic validation
-        if !event.is_logged_in.unwrap_or(false) {
-            return Ok(());
-        }
-
         let config = get_config(&self.redis_pool)
             .await
             .map_err(|e| {
@@ -118,6 +113,17 @@ impl RewardEngine {
             .publisher_user_id
             .as_ref()
             .context("Missing publisher_user_id")?;
+        let is_logged_in = event.is_logged_in.unwrap_or(false);
+
+        // For non-logged-in users, only track total_count_all and exit
+        if !is_logged_in {
+            // Track the view (only increments total_count_all)
+            let _ = self
+                .view_tracker
+                .track_view(video_id, &event.user_id, false)
+                .await?;
+            return Ok(());
+        }
 
         // 2. Verify user registration (with caching)
         if !self
@@ -153,7 +159,7 @@ impl RewardEngine {
         // 4. ATOMIC: Count the view (config version is now checked in Lua script)
         let view_count = self
             .view_tracker
-            .track_view(video_id, &event.user_id)
+            .track_view(video_id, &event.user_id, true)
             .await?;
 
         if let Some(count) = view_count {
@@ -431,5 +437,43 @@ impl RewardEngine {
     /// Get last milestone for a video
     pub async fn get_last_milestone(&self, video_id: &str) -> Result<u64> {
         self.view_tracker.get_last_milestone(video_id).await
+    }
+
+    /// Get comprehensive stats for a video (single Redis call)
+    pub async fn get_video_stats(&self, video_id: &str) -> Result<crate::rewards::api::VideoStats> {
+        let (count, total_count_loggedin, total_count_all, last_milestone) =
+            self.view_tracker.get_all_video_stats(video_id).await?;
+
+        Ok(crate::rewards::api::VideoStats {
+            count,
+            total_count_loggedin,
+            total_count_all,
+            last_milestone,
+        })
+    }
+
+    /// Get stats for multiple videos using Redis pipelining
+    pub async fn get_bulk_video_stats(
+        &self,
+        video_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, crate::rewards::api::VideoStats>> {
+        let stats_map = self.view_tracker.get_bulk_video_stats(video_ids).await?;
+
+        Ok(stats_map
+            .into_iter()
+            .map(
+                |(video_id, (count, total_count_loggedin, total_count_all, last_milestone))| {
+                    (
+                        video_id,
+                        crate::rewards::api::VideoStats {
+                            count,
+                            total_count_loggedin,
+                            total_count_all,
+                            last_milestone,
+                        },
+                    )
+                },
+            )
+            .collect())
     }
 }
