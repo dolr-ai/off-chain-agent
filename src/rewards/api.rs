@@ -13,6 +13,7 @@ use axum::{
 };
 use candid::Principal;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
@@ -56,6 +57,21 @@ pub struct ConfigResponse {
     pub config: Option<RewardConfig>,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct BulkVideoStatsRequest {
+    pub video_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct VideoStats {
+    pub count: u64,
+    pub total_count_loggedin: u64,
+    pub total_count_all: u64,
+    pub last_milestone: u64,
+}
+
+pub type BulkVideoStatsResponse = HashMap<String, VideoStats>;
+
 pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
     OpenApiRouter::new()
         .routes(routes!(get_video_views))
@@ -63,6 +79,7 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_user_reward_history))
         .routes(routes!(get_creator_reward_history))
         .routes(routes!(get_reward_config))
+        .routes(routes!(bulk_get_video_stats))
         .with_state(state)
 }
 
@@ -255,4 +272,32 @@ pub async fn update_reward_config(
     }
 
     Ok(StatusCode::OK)
+}
+
+#[utoipa::path(
+    post,
+    path = "/videos/bulk-stats",
+    request_body = BulkVideoStatsRequest,
+    tag = "rewards",
+    responses(
+        (status = 200, description = "Bulk video stats retrieved", body = BulkVideoStatsResponse),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+async fn bulk_get_video_stats(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<BulkVideoStatsRequest>,
+) -> Result<Json<BulkVideoStatsResponse>, (StatusCode, String)> {
+    let reward_engine = &state.rewards_module.reward_engine;
+
+    // Use Redis pipelining for efficient batched retrieval
+    let response = reward_engine
+        .get_bulk_video_stats(&request.video_ids)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to get bulk video stats: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        })?;
+
+    Ok(Json(response))
 }
