@@ -14,6 +14,9 @@ const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
 
     local user_id = ARGV[1]
 
+    -- Always increment total_count_all (counts all views including duplicates)
+    redis.call('HINCRBY', video_hash, 'total_count_all', 1)
+
     -- Get current global config version from Redis
     local current_global_version = redis.call('GET', 'rewards:config:version') or '1'
 
@@ -27,16 +30,15 @@ const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
         -- Note: We do NOT delete the views_set, so users who already viewed cannot view again
     end
 
-    -- Check if user already viewed (critical check)
+    -- Check if user already viewed (critical check for unique views)
     local added = redis.call('SADD', views_set, user_id)
     if added == 1 then
-        -- New logged-in view: increment all counters
+        -- New unique logged-in view: increment unique counters
         redis.call('HINCRBY', video_hash, 'count', 1)
         redis.call('HINCRBY', video_hash, 'total_count_loggedin', 1)
-        redis.call('HINCRBY', video_hash, 'total_count_all', 1)
         return redis.call('HGET', video_hash, 'count')
     else
-        return nil  -- Duplicate view
+        return nil  -- Duplicate view (total_count_all already incremented above)
     end
 "#;
 
@@ -721,7 +723,7 @@ mod tests {
             .unwrap();
         assert_eq!(result1, Some(1));
 
-        // Duplicate view (logged-in) - should not increment any counter
+        // Duplicate view (logged-in) - should only increment total_count_all
         let result2 = test_tracker
             .tracker
             .track_view(&video_id, &user1, true)
@@ -745,9 +747,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(count, 1);
-        assert_eq!(total_loggedin, 1);
-        assert_eq!(total_all, 1);
+        assert_eq!(count, 1); // Unique views only
+        assert_eq!(total_loggedin, 1); // Unique logged-in views only
+        assert_eq!(total_all, 2); // All views including duplicates
 
         test_tracker.cleanup().await.unwrap();
     }
