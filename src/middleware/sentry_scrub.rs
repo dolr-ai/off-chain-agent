@@ -33,7 +33,8 @@ pub fn scrub_sensitive_data(mut event: Event<'static>) -> Option<Event<'static>>
     }
 
     // Scrub extra data
-    let keys_to_remove: Vec<String> = event.extra
+    let keys_to_remove: Vec<String> = event
+        .extra
         .keys()
         .filter(|k| is_sensitive_field(k))
         .cloned()
@@ -60,7 +61,8 @@ pub fn scrub_sensitive_data(mut event: Event<'static>) -> Option<Event<'static>>
 
     // Scrub breadcrumbs
     for breadcrumb in event.breadcrumbs.values.iter_mut() {
-        let keys_to_remove: Vec<String> = breadcrumb.data
+        let keys_to_remove: Vec<String> = breadcrumb
+            .data
             .keys()
             .filter(|k| is_sensitive_field(k))
             .cloned()
@@ -75,6 +77,7 @@ pub fn scrub_sensitive_data(mut event: Event<'static>) -> Option<Event<'static>>
 }
 
 /// Scrubs sensitive data from Sentry transaction events
+#[allow(dead_code)]
 pub fn scrub_transaction_data(event: Event<'static>) -> Option<Event<'static>> {
     // Use the same scrubbing logic for transactions
     scrub_sensitive_data(event)
@@ -83,7 +86,8 @@ pub fn scrub_transaction_data(event: Event<'static>) -> Option<Event<'static>> {
 /// Scrubs sensitive headers and data from Sentry request objects
 fn scrub_request(request: &mut SentryRequest) {
     // Scrub sensitive headers
-    let keys_to_scrub: Vec<String> = request.headers
+    let keys_to_scrub: Vec<String> = request
+        .headers
         .keys()
         .filter(|k| is_sensitive_field(k))
         .cloned()
@@ -119,7 +123,6 @@ fn scrub_request(request: &mut SentryRequest) {
 pub fn create_before_send() -> Arc<dyn Fn(Event<'static>) -> Option<Event<'static>> + Send + Sync> {
     Arc::new(scrub_sensitive_data)
 }
-
 
 #[cfg(test)]
 mod tests {

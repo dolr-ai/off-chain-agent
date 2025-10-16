@@ -73,9 +73,7 @@ pub async fn http_logging_middleware(
         .map(|s| s.to_string());
 
     // Buffer request body bytes (cheap - no parsing yet)
-    let (req, request_body_bytes) = if !is_grpc
-        && should_capture_body(content_type.as_deref())
-    {
+    let (req, request_body_bytes) = if !is_grpc && should_capture_body(content_type.as_deref()) {
         match buffer_request_body_bytes(req).await {
             Ok(result) => result,
             Err(e) => {
@@ -107,36 +105,31 @@ pub async fn http_logging_middleware(
     // OPTIMIZATION: Only parse/scrub bodies if status >= 400
     if status.as_u16() >= 400 {
         // Parse and scrub request body (only on errors)
-        let request_body_str = request_body_bytes
-            .as_ref()
-            .and_then(|bytes| parse_and_scrub_bytes(bytes));
+        let request_body_str = request_body_bytes.as_ref().and_then(parse_and_scrub_bytes);
 
         // Buffer response body bytes
-        let (res, response_body_bytes) = if !is_grpc
-            && should_capture_body(response_content_type.as_deref())
-        {
-            match buffer_response_body_bytes(res).await {
-                Ok(result) => result,
-                Err(e) => {
-                    log::warn!("Failed to buffer response body: {}", e);
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to process response".to_string(),
-                    ));
+        let (res, response_body_bytes) =
+            if !is_grpc && should_capture_body(response_content_type.as_deref()) {
+                match buffer_response_body_bytes(res).await {
+                    Ok(result) => result,
+                    Err(e) => {
+                        log::warn!("Failed to buffer response body: {}", e);
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to process response".to_string(),
+                        ));
+                    }
                 }
-            }
-        } else {
-            (res, None)
-        };
+            } else {
+                (res, None)
+            };
 
         // Parse and scrub response body (only on errors)
-        let response_body_str = response_body_bytes
-            .as_ref()
-            .and_then(|bytes| parse_and_scrub_bytes(bytes));
+        let response_body_str = response_body_bytes.as_ref().and_then(parse_and_scrub_bytes);
 
         // Add detailed breadcrumbs with bodies
         add_request_breadcrumb(
-            &method.to_string(),
+            method.as_str(),
             uri.path(),
             &request_headers,
             request_body_str.as_deref(),
@@ -153,7 +146,7 @@ pub async fn http_logging_middleware(
     } else {
         // Success: Add lightweight breadcrumb (no body parsing)
         add_lightweight_breadcrumb(
-            &method.to_string(),
+            method.as_str(),
             uri.path(),
             status.as_u16(),
             duration.as_millis() as u64,
@@ -258,15 +251,9 @@ fn extract_safe_headers(headers: &http::HeaderMap) -> BTreeMap<String, serde_jso
         let name_lower = name.as_str().to_lowercase();
 
         if sensitive_headers.contains(&name_lower.as_str()) {
-            safe_headers.insert(
-                name.as_str().to_string(),
-                serde_json::json!("[REDACTED]"),
-            );
+            safe_headers.insert(name.as_str().to_string(), serde_json::json!("[REDACTED]"));
         } else if let Ok(value_str) = value.to_str() {
-            safe_headers.insert(
-                name.as_str().to_string(),
-                serde_json::json!(value_str),
-            );
+            safe_headers.insert(name.as_str().to_string(), serde_json::json!(value_str));
         }
     }
 
@@ -284,8 +271,11 @@ fn add_lightweight_breadcrumb(method: &str, path: &str, status: u16, duration_ms
     sentry::add_breadcrumb(sentry::Breadcrumb {
         ty: "http".to_string(),
         category: Some("http.request".to_string()),
-        message: Some(format!("{} {} {} ({}ms)", method, path, status, duration_ms)),
-        data: data.into_iter().map(|(k, v)| (k, v.into())).collect(),
+        message: Some(format!(
+            "{} {} {} ({}ms)",
+            method, path, status, duration_ms
+        )),
+        data: data.into_iter().collect(),
         level: sentry::Level::Info,
         ..Default::default()
     });
@@ -320,7 +310,7 @@ fn add_request_breadcrumb(
         ty: "http".to_string(),
         category: Some("http.request".to_string()),
         message: Some(format!("{} {}", method, path)),
-        data: data.into_iter().map(|(k, v)| (k, v.into())).collect(),
+        data: data.into_iter().collect(),
         level: sentry::Level::Info,
         ..Default::default()
     });
@@ -334,14 +324,8 @@ fn add_response_breadcrumb(
     body_preview: Option<&str>,
 ) {
     let mut data = BTreeMap::new();
-    data.insert(
-        "status_code".to_string(),
-        serde_json::json!(status),
-    );
-    data.insert(
-        "duration_ms".to_string(),
-        serde_json::json!(duration_ms),
-    );
+    data.insert("status_code".to_string(), serde_json::json!(status));
+    data.insert("duration_ms".to_string(), serde_json::json!(duration_ms));
 
     if !headers.is_empty() {
         data.insert("headers".to_string(), serde_json::json!(headers));
@@ -369,7 +353,7 @@ fn add_response_breadcrumb(
         ty: "http".to_string(),
         category: Some("http.response".to_string()),
         message: Some(format!("HTTP {} ({}ms)", status, duration_ms)),
-        data: data.into_iter().map(|(k, v)| (k, v.into())).collect(),
+        data: data.into_iter().collect(),
         level,
         ..Default::default()
     });
@@ -436,7 +420,9 @@ fn scrub_json_value(value: &mut serde_json::Value) {
                 .keys()
                 .filter(|k| {
                     let k_lower = k.to_lowercase();
-                    SENSITIVE_FIELD_NAMES.iter().any(|field| k_lower.contains(field))
+                    SENSITIVE_FIELD_NAMES
+                        .iter()
+                        .any(|field| k_lower.contains(field))
                 })
                 .cloned()
                 .collect();

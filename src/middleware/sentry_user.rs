@@ -22,6 +22,7 @@ pub fn set_user_context(user_principal: Principal) {
 /// Set Sentry user context with additional metadata
 ///
 /// Allows setting user context with optional username and additional data.
+#[allow(dead_code)]
 pub fn set_user_context_with_metadata(
     user_principal: Principal,
     user_canister: Option<Principal>,
@@ -47,6 +48,7 @@ pub fn set_user_context_with_metadata(
 /// Clear Sentry user context
 ///
 /// Useful for clearing user context after request completion or in error cases.
+#[allow(dead_code)]
 pub fn clear_user_context() {
     sentry::configure_scope(|scope| {
         scope.set_user(None);
@@ -56,6 +58,7 @@ pub fn clear_user_context() {
 /// Add custom tag to Sentry scope
 ///
 /// Useful for adding additional context like endpoint names, request types, etc.
+#[allow(dead_code)]
 pub fn add_tag(key: &str, value: &str) {
     sentry::configure_scope(|scope| {
         scope.set_tag(key, value);
@@ -65,13 +68,12 @@ pub fn add_tag(key: &str, value: &str) {
 /// Add custom context to Sentry scope
 ///
 /// Useful for adding structured data to Sentry events.
+#[allow(dead_code)]
 pub fn add_context(key: &str, value: serde_json::Value) {
     sentry::configure_scope(|scope| {
         if let Ok(sentry_value) = serde_json::from_value::<sentry::protocol::Value>(value) {
             let context = sentry::protocol::Context::Other(
-                [(key.to_string(), sentry_value)]
-                    .into_iter()
-                    .collect(),
+                [(key.to_string(), sentry_value)].into_iter().collect(),
             );
             scope.set_context(key, context);
         }
