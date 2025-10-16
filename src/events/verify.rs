@@ -59,6 +59,9 @@ pub async fn verify_event_bulk_request(
     let user_principal = user_info.user_principal;
     let user_canister = user_info.user_canister;
 
+    // Set Sentry user context for tracking
+    crate::middleware::set_user_context(user_principal);
+
     // verify all events are valid
     for event in event_bulk_request.events.clone() {
         if event.user_canister().unwrap_or(Principal::anonymous()) != user_canister {
@@ -120,6 +123,9 @@ pub async fn verify_event_bulk_request_v3(
         )
     })?;
     let user_principal = user_info.user_principal;
+
+    // Set Sentry user context for tracking
+    crate::middleware::set_user_context(user_principal);
 
     // verify all events are valid
     for event in event_bulk_request.events.clone() {

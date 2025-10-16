@@ -55,6 +55,9 @@ pub async fn handle_upload_profile_image(
 
     let user_principal = user_info.user_principal;
 
+    // Set Sentry user context for tracking
+    crate::middleware::set_user_context(user_principal);
+
     // Remove data URL prefix if present
     let base64_data = if let Some(comma_pos) = request.image_data.find(',') {
         &request.image_data[comma_pos + 1..]
@@ -191,6 +194,9 @@ pub async fn handle_delete_profile_image(
             })?;
 
     let user_principal = user_info.user_principal;
+
+    // Set Sentry user context for tracking
+    crate::middleware::set_user_context(user_principal);
 
     // Delete image from S3
     crate::utils::s3::delete_profile_image_from_s3(&user_principal.to_text())

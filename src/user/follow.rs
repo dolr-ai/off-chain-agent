@@ -59,6 +59,9 @@ pub async fn handle_follow_user(
 
     let follower_principal = user_info.user_principal;
 
+    // Set Sentry user context for tracking
+    crate::middleware::set_user_context(follower_principal);
+
     // Don't allow users to follow themselves
     if follower_principal == request.target_principal {
         return Err((
