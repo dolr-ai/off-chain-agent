@@ -48,6 +48,9 @@ pub async fn handle_delete_user(
     let user_principal = user_info.user_principal;
     let user_canister = user_info.user_canister;
 
+    // Set Sentry user context for tracking
+    crate::middleware::set_user_context(user_principal);
+
     let agent = get_agent_from_delegated_identity_wire(&request.delegated_identity_wire)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

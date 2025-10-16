@@ -52,6 +52,9 @@ where
     let user_principal = user_info.user_principal;
     let user_canister = user_info.user_canister;
 
+    // Set Sentry user context for tracking
+    crate::middleware::set_user_context(user_principal);
+
     // Create a verified request with all the necessary context
     let verified_request = VerifiedPostRequest {
         user_principal,
