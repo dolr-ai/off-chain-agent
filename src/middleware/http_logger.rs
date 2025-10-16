@@ -7,7 +7,11 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
+
+/// Global request counter for generating unique request IDs
+static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Maximum size of request/response body to capture (default: 10KB)
 const DEFAULT_BODY_LIMIT: usize = 10 * 1024;
@@ -51,6 +55,9 @@ pub async fn http_logging_middleware(
     if !is_logging_enabled() {
         return Ok(next.run(req).await);
     }
+
+    // Generate unique request ID for tracing
+    let request_id = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
 
     let start = Instant::now();
     let method = req.method().clone();
@@ -127,8 +134,31 @@ pub async fn http_logging_middleware(
         // Parse and scrub response body (only on errors)
         let response_body_str = response_body_bytes.as_ref().and_then(parse_and_scrub_bytes);
 
+        // Log error details
+        log::error!(
+            "[req_id:{}] HTTP Error: {} {} -> {} ({}ms) | Request: {} | Response: {}",
+            request_id,
+            method,
+            uri.path(),
+            status.as_u16(),
+            duration.as_millis(),
+            request_body_str
+                .as_deref()
+                .unwrap_or("[no body]")
+                .chars()
+                .take(200)
+                .collect::<String>(),
+            response_body_str
+                .as_deref()
+                .unwrap_or("[no body]")
+                .chars()
+                .take(200)
+                .collect::<String>()
+        );
+
         // Add detailed breadcrumbs with bodies
         add_request_breadcrumb(
+            request_id,
             method.as_str(),
             uri.path(),
             &request_headers,
@@ -136,6 +166,7 @@ pub async fn http_logging_middleware(
         );
 
         add_response_breadcrumb(
+            request_id,
             status.as_u16(),
             duration.as_millis() as u64,
             &response_headers,
@@ -268,7 +299,7 @@ fn add_lightweight_breadcrumb(method: &str, path: &str, status: u16, duration_ms
     data.insert("status_code".to_string(), serde_json::json!(status));
     data.insert("duration_ms".to_string(), serde_json::json!(duration_ms));
 
-    sentry::add_breadcrumb(sentry::Breadcrumb {
+    sentry::Hub::current().add_breadcrumb(sentry::Breadcrumb {
         ty: "http".to_string(),
         category: Some("http.request".to_string()),
         message: Some(format!(
@@ -283,12 +314,14 @@ fn add_lightweight_breadcrumb(method: &str, path: &str, status: u16, duration_ms
 
 /// Add request breadcrumb to Sentry
 fn add_request_breadcrumb(
+    request_id: u64,
     method: &str,
     path: &str,
     headers: &BTreeMap<String, serde_json::Value>,
     body_preview: Option<&str>,
 ) {
     let mut data = BTreeMap::new();
+    data.insert("request_id".to_string(), serde_json::json!(request_id));
     data.insert("method".to_string(), serde_json::json!(method));
     data.insert("url".to_string(), serde_json::json!(path));
 
@@ -306,10 +339,10 @@ fn add_request_breadcrumb(
         data.insert("body".to_string(), serde_json::json!(safe_body));
     }
 
-    sentry::add_breadcrumb(sentry::Breadcrumb {
+    sentry::Hub::current().add_breadcrumb(sentry::Breadcrumb {
         ty: "http".to_string(),
         category: Some("http.request".to_string()),
-        message: Some(format!("{} {}", method, path)),
+        message: Some(format!("[{}] {} {}", request_id, method, path)),
         data: data.into_iter().collect(),
         level: sentry::Level::Info,
         ..Default::default()
@@ -318,12 +351,14 @@ fn add_request_breadcrumb(
 
 /// Add response breadcrumb to Sentry
 fn add_response_breadcrumb(
+    request_id: u64,
     status: u16,
     duration_ms: u64,
     headers: &BTreeMap<String, serde_json::Value>,
     body_preview: Option<&str>,
 ) {
     let mut data = BTreeMap::new();
+    data.insert("request_id".to_string(), serde_json::json!(request_id));
     data.insert("status_code".to_string(), serde_json::json!(status));
     data.insert("duration_ms".to_string(), serde_json::json!(duration_ms));
 
@@ -349,10 +384,13 @@ fn add_response_breadcrumb(
         sentry::Level::Info
     };
 
-    sentry::add_breadcrumb(sentry::Breadcrumb {
+    sentry::Hub::current().add_breadcrumb(sentry::Breadcrumb {
         ty: "http".to_string(),
         category: Some("http.response".to_string()),
-        message: Some(format!("HTTP {} ({}ms)", status, duration_ms)),
+        message: Some(format!(
+            "[{}] HTTP {} ({}ms)",
+            request_id, status, duration_ms
+        )),
         data: data.into_iter().collect(),
         level,
         ..Default::default()
