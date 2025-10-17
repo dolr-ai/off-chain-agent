@@ -28,6 +28,7 @@ pub mod report_post;
 pub mod types;
 mod utils;
 mod verify;
+pub mod videohash;
 
 /// Macro to create a route with verification middleware
 macro_rules! verified_route {
@@ -58,6 +59,7 @@ pub fn posts_router_v2(state: Arc<AppState>) -> OpenApiRouter {
 
     router
         .routes(routes!(nsfw_query::get_nsfw_data))
+        .routes(routes!(videohash::get_videohash))
         .with_state(state)
 }
 
