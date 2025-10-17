@@ -16,4 +16,4 @@ git submodule update --init --recursive;
 # cargo binstall leptosfmt --no-confirm;
 
 # # Enable the env file
-# cp .env.example .env;
+cp .env.example .env;
