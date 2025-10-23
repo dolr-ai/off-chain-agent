@@ -62,7 +62,7 @@ pub struct BulkVideoStatsRequest {
     pub video_ids: Vec<String>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct VideoStats {
     pub count: u64,
     pub total_count_loggedin: u64,
@@ -72,6 +72,17 @@ pub struct VideoStats {
 
 pub type BulkVideoStatsResponse = HashMap<String, VideoStats>;
 
+#[derive(Debug, Serialize, ToSchema)]
+pub struct VideoStatsV2 {
+    pub video_id: String,
+    pub count: u64,
+    pub total_count_loggedin: u64,
+    pub total_count_all: u64,
+    pub last_milestone: u64,
+}
+
+pub type BulkVideoStatsResponseV2 = Vec<VideoStatsV2>;
+
 pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
     OpenApiRouter::new()
         .routes(routes!(get_video_views))
@@ -80,6 +91,7 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_creator_reward_history))
         .routes(routes!(get_reward_config))
         .routes(routes!(bulk_get_video_stats))
+        .routes(routes!(bulk_get_video_stats_v2))
         .with_state(state)
 }
 
@@ -298,6 +310,55 @@ async fn bulk_get_video_stats(
             log::error!("Failed to get bulk video stats: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?;
+
+    Ok(Json(response))
+}
+
+#[utoipa::path(
+    post,
+    path = "/videos/bulk-stats-v2",
+    request_body = BulkVideoStatsRequest,
+    tag = "rewards",
+    responses(
+        (status = 200, description = "Bulk video stats retrieved (v2 - ordered list)", body = BulkVideoStatsResponseV2),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+async fn bulk_get_video_stats_v2(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<BulkVideoStatsRequest>,
+) -> Result<Json<BulkVideoStatsResponseV2>, (StatusCode, String)> {
+    let reward_engine = &state.rewards_module.reward_engine;
+
+    // Use Redis pipelining for efficient batched retrieval
+    let stats_map = reward_engine
+        .get_bulk_video_stats(&request.video_ids)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to get bulk video stats: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        })?;
+
+    // Convert HashMap to ordered Vec, preserving request order
+    let response: Vec<VideoStatsV2> = request
+        .video_ids
+        .iter()
+        .map(|video_id| {
+            let stats = stats_map.get(video_id).cloned().unwrap_or(VideoStats {
+                count: 0,
+                total_count_loggedin: 0,
+                total_count_all: 0,
+                last_milestone: 0,
+            });
+            VideoStatsV2 {
+                video_id: video_id.clone(),
+                count: stats.count,
+                total_count_loggedin: stats.total_count_loggedin,
+                total_count_all: stats.total_count_all,
+                last_milestone: stats.last_milestone,
+            }
+        })
+        .collect();
 
     Ok(Json(response))
 }
