@@ -426,7 +426,7 @@ impl QStashClient {
     pub async fn queue_video_generation(
         &self,
         request: &QstashVideoGenRequest,
-        callback_url: &str,
+        callback_url: Option<&str>,
     ) -> anyhow::Result<()> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/process_video_gen")
@@ -447,8 +447,11 @@ impl QStashClient {
             .json(&request)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("Upstash-Callback", callback_url)
             .header("Upstash-Retries", "0");
+
+        if let Some(callback) = callback_url {
+            req_builder = req_builder.header("Upstash-Callback", callback);
+        }
 
         // Add flow control headers only if flow control is configured
         if let Some((fc_key, fc_value)) = flow_control {
