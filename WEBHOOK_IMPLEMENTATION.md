@@ -19,9 +19,10 @@ The webhook implementation provides:
 
 ### New Webhook Flow
 1. Request submitted to Replicate API with webhook URL
-2. Replicate calls our webhook endpoint when status changes
-3. Webhook processes completion immediately
-4. Same callback system used for both QStash and webhook completions
+2. QStash processing detects webhook-enabled request and waits (returns "pending")
+3. Replicate calls our webhook endpoint when status changes
+4. Webhook processes completion and updates request status
+5. No duplicate callback execution - prevents double processing
 
 ## Configuration
 
@@ -111,6 +112,12 @@ Currently implemented for:
 - When `ENABLE_REPLICATE_WEBHOOKS=false`, uses polling
 - Individual requests can fail back to polling if webhook setup fails
 - Webhook processing errors are logged but don't break the flow
+
+### Double Execution Prevention
+- QStash processor detects webhook-enabled requests with empty video URLs
+- Returns "pending" status instead of triggering callback immediately
+- Only webhook completion triggers the actual callback processing
+- Prevents race conditions and duplicate status updates
 
 ## Testing
 
