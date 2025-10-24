@@ -1,8 +1,13 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    Json,
+};
+use candid::Principal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::instrument;
-use videogen_common::{VideoGenError, VideoGenResponse};
+use videogen_common::{TokenType, VideoGenError, VideoGenResponse};
 
 use crate::{
     app_state::AppState,
@@ -21,8 +26,14 @@ pub struct ReplicateWebhookPayload {
     pub output: Option<serde_json::Value>,
     pub error: Option<String>,
     pub webhook_completed: Option<String>,
-    /// Custom data we include to track our internal request
-    pub metadata: Option<ReplicateWebhookMetadata>,
+}
+
+/// Query parameters for webhook URL
+#[derive(Debug, Deserialize)]
+pub struct WebhookQueryParams {
+    pub principal: String,
+    pub counter: u64,
+    pub token_type: String,
 }
 
 /// Metadata we include in the Replicate prediction to track our internal state
@@ -90,6 +101,7 @@ fn convert_replicate_status(payload: &ReplicateWebhookPayload) -> VideoGenCallba
 #[instrument(skip(state, payload_bytes))]
 pub async fn handle_replicate_webhook(
     State(state): State<Arc<AppState>>,
+    Query(params): Query<WebhookQueryParams>,
     headers: axum::http::HeaderMap,
     payload_bytes: axum::body::Bytes,
 ) -> Result<StatusCode, (StatusCode, Json<VideoGenError>)> {
@@ -103,9 +115,8 @@ pub async fn handle_replicate_webhook(
     })?;
 
     // Get signing secret
-    let signing_secret = get_webhook_signing_secret().map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(e))
-    })?;
+    let signing_secret =
+        get_webhook_signing_secret().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
 
     // Verify webhook signature
     verify_webhook_signature(&webhook_headers, &payload_bytes, &signing_secret).map_err(|e| {
@@ -135,27 +146,19 @@ pub async fn handle_replicate_webhook(
     match payload.status.as_str() {
         "succeeded" | "failed" | "canceled" => {
             // Extract metadata if available
-            let metadata = payload.metadata.as_ref().ok_or_else(|| {
-                log::error!("No metadata found in webhook payload for prediction {}", payload.id);
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(VideoGenError::ProviderError(
-                        "Missing metadata in webhook payload".to_string(),
-                    )),
-                )
-            })?;
+
+            let Ok(user_principal) = Principal::from_text(params.principal.clone()) else {
+                log::error!("Failed to parse principal");
+                return Ok(StatusCode::OK);
+            };
+
+            let Ok(video_gen_request) =
+                super::rate_limit::fetch_request(user_principal, params.counter, &state).await
+            else {
+                return Ok(StatusCode::OK);
+            };
 
             // Parse token type
-            let token_type = serde_json::from_str(&format!("\"{}\"", metadata.token_type))
-                .map_err(|e| {
-                    log::error!("Failed to parse token type: {e}");
-                    (
-                        StatusCode::BAD_REQUEST,
-                        Json(VideoGenError::ProviderError(format!(
-                            "Invalid token type: {e}"
-                        ))),
-                    )
-                })?;
 
             // Convert to callback result
             let callback_result = convert_replicate_status(&payload);
@@ -163,21 +166,15 @@ pub async fn handle_replicate_webhook(
             // Create callback data compatible with existing system
             let callback = QstashVideoGenCallback {
                 request_key: crate::videogen::VideoGenRequestKey {
-                    principal: metadata.request_key_principal.parse().map_err(|e| {
-                        log::error!("Failed to parse principal: {e}");
-                        (
-                            StatusCode::BAD_REQUEST,
-                            Json(VideoGenError::ProviderError(format!(
-                                "Invalid principal: {e}"
-                            ))),
-                        )
-                    })?,
-                    counter: metadata.request_key_counter,
+                    principal: user_principal,
+                    counter: params.counter,
                 },
                 result: callback_result,
-                property: metadata.property.clone(),
-                deducted_amount: metadata.deducted_amount,
-                token_type,
+                property: video_gen_request.model_name.clone(),
+                deducted_amount: video_gen_request
+                    .payment_amount
+                    .and_then(|a| a.parse::<u64>().ok()),
+                token_type: TokenType::Free, //TODO: verify once the videogen is updated.
             };
 
             // Use existing callback handler logic
@@ -185,7 +182,10 @@ pub async fn handle_replicate_webhook(
                 .await
                 .map_err(|(status, error)| (status, Json(VideoGenError::ProviderError(error))))?;
 
-            log::info!("Successfully processed Replicate webhook for prediction {}", payload.id);
+            log::info!(
+                "Successfully processed Replicate webhook for prediction {}",
+                payload.id
+            );
         }
         _ => {
             // Intermediate states like "starting", "processing" - just acknowledge
@@ -200,9 +200,14 @@ pub async fn handle_replicate_webhook(
     Ok(StatusCode::OK)
 }
 
-/// Generate webhook URL for a Replicate prediction
-pub fn generate_webhook_url(base_url: &str) -> String {
-    format!("{}/replicate/webhook", base_url.trim_end_matches('/'))
+/// Generate webhook URL for a Replicate prediction with principal and counter
+pub fn generate_webhook_url(base_url: &str, principal: &str, counter: u64) -> String {
+    format!(
+        "{}/replicate/webhook?principal={}&counter={}",
+        base_url.trim_end_matches('/'),
+        principal,
+        counter
+    )
 }
 
 #[cfg(test)]
@@ -219,33 +224,33 @@ mod tests {
             output: Some(json!("https://example.com/video.mp4")),
             error: None,
             webhook_completed: Some("2023-01-01T00:00:00Z".to_string()),
-            metadata: Some(ReplicateWebhookMetadata {
-                user_principal: "test-principal".to_string(),
-                request_key_principal: "test-principal".to_string(),
-                request_key_counter: 1,
-                property: "VIDEOGEN".to_string(),
-                deducted_amount: Some(100),
-                token_type: "Sats".to_string(),
-            }),
         }
     }
 
     #[test]
     fn test_generate_webhook_url() {
         let base_url = "https://example.com";
-        let webhook_url = generate_webhook_url(base_url);
-        assert_eq!(webhook_url, "https://example.com/replicate/webhook");
+        let principal = "test-principal-123";
+        let counter = 42;
+        let webhook_url = generate_webhook_url(base_url, principal, counter);
+        assert_eq!(
+            webhook_url,
+            "https://example.com/replicate/webhook?principal=test-principal-123&counter=42"
+        );
 
         let base_url_with_slash = "https://example.com/";
-        let webhook_url = generate_webhook_url(base_url_with_slash);
-        assert_eq!(webhook_url, "https://example.com/replicate/webhook");
+        let webhook_url = generate_webhook_url(base_url_with_slash, principal, counter);
+        assert_eq!(
+            webhook_url,
+            "https://example.com/replicate/webhook?principal=test-principal-123&counter=42"
+        );
     }
 
     #[test]
     fn test_convert_replicate_status_success() {
         let payload = create_test_payload();
         let result = convert_replicate_status(&payload);
-        
+
         match result {
             VideoGenCallbackResult::Success(response) => {
                 assert_eq!(response.operation_id, "test-prediction-id");
@@ -262,9 +267,9 @@ mod tests {
         payload.status = "failed".to_string();
         payload.error = Some("Test error".to_string());
         payload.output = None;
-        
+
         let result = convert_replicate_status(&payload);
-        
+
         match result {
             VideoGenCallbackResult::Failure(error) => {
                 assert!(error.contains("Test error"));
@@ -276,10 +281,13 @@ mod tests {
     #[test]
     fn test_convert_replicate_status_array_output() {
         let mut payload = create_test_payload();
-        payload.output = Some(json!(["https://example.com/video.mp4", "https://example.com/video2.mp4"]));
-        
+        payload.output = Some(json!([
+            "https://example.com/video.mp4",
+            "https://example.com/video2.mp4"
+        ]));
+
         let result = convert_replicate_status(&payload);
-        
+
         match result {
             VideoGenCallbackResult::Success(response) => {
                 assert_eq!(response.video_url, "https://example.com/video.mp4");
@@ -301,9 +309,12 @@ mod tests {
 
         let json = serde_json::to_value(&metadata).unwrap();
         let deserialized: ReplicateWebhookMetadata = serde_json::from_value(json).unwrap();
-        
+
         assert_eq!(metadata.user_principal, deserialized.user_principal);
-        assert_eq!(metadata.request_key_counter, deserialized.request_key_counter);
+        assert_eq!(
+            metadata.request_key_counter,
+            deserialized.request_key_counter
+        );
         assert_eq!(metadata.deducted_amount, deserialized.deducted_amount);
     }
 }

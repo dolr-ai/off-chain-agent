@@ -32,36 +32,17 @@ pub async fn process_video_generation(
         }
         VideoGenInput::Wan25(_) => {
             let input = request.input.clone();
-            crate::videogen::models::wan2_5::generate_with_context(input, &state, Some(&request)).await
+            crate::videogen::models::wan2_5::generate_with_context(input, &state, &request).await
         }
         VideoGenInput::Wan25Fast(_) => {
             let input = request.input.clone();
-            crate::videogen::models::wan2_5_fast::generate_with_context(input, &state, Some(&request)).await
+            crate::videogen::models::wan2_5_fast::generate_with_context(input, &state, &request)
+                .await
         }
         _ => Err(VideoGenError::UnsupportedModel(
             request.input.model_id().to_string(),
         )),
     };
-
-    // Check if this is a webhook-enabled model that returned with empty video URL
-    // In this case, we should not trigger the callback here as the webhook will handle it
-    let is_webhook_pending = matches!(&result, 
-        Ok(response) if response.video_url.is_empty() && 
-        std::env::var("ENABLE_REPLICATE_WEBHOOKS").unwrap_or_default() == "true"
-    );
-
-    if is_webhook_pending {
-        // For webhook-enabled requests with empty video URL, return a "pending" response
-        // The webhook will handle the actual callback when video generation completes
-        log::info!(
-            "Webhook-enabled request for {} - waiting for webhook completion, not triggering callback",
-            request.request_key.principal
-        );
-        return Ok(Json(serde_json::json!({
-            "status": "pending",
-            "message": "Video generation in progress, webhook will handle completion"
-        })));
-    }
 
     // Prepare callback data for non-webhook or error cases
     let callback_result = match result {

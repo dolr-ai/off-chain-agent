@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use candid::Principal;
 use std::sync::Arc;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
-use yral_canisters_client::rate_limits::RateLimits;
+use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequest, VideoGenRequestKey};
 use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 
 use crate::{
@@ -85,6 +85,49 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
                 false
             }
         }
+    }
+}
+
+pub async fn fetch_request(
+    user_principal: Principal,
+    counter: u64,
+    app_state: &Arc<AppState>,
+) -> Result<VideoGenRequest, (StatusCode, VideoGenError)> {
+    let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
+
+    let videogen_request_key = VideoGenRequestKey {
+        principal: user_principal,
+        counter: counter,
+    };
+
+    let request_result = rate_limits_client
+        .get_video_generation_request(videogen_request_key)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                VideoGenError::NetworkError(format!(
+                    "Failed to fetch video generation request: {e}"
+                )),
+            )
+        })?;
+
+    match request_result {
+        Some(request) => {
+            log::info!(
+                "Fetched video generation request for principal {} counter {}",
+                user_principal,
+                counter
+            );
+            Ok(request)
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            VideoGenError::InvalidInput(format!(
+                "Request not found for principal {} counter {}",
+                user_principal, counter
+            )),
+        )),
     }
 }
 
