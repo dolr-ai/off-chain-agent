@@ -4,12 +4,17 @@ use tracing::info;
 use videogen_common::{VideoGenError, VideoGenInput, VideoGenResponse};
 
 use crate::app_state::AppState;
-use crate::consts::{REPLICATE_API_URL, REPLICATE_WAN2_5_MODEL};
+use crate::consts::{OFF_CHAIN_AGENT_URL, REPLICATE_API_URL, REPLICATE_WAN2_5_MODEL};
+use crate::videogen::replicate_webhook::{generate_webhook_url, ReplicateWebhookMetadata};
 
 #[derive(Serialize)]
 pub struct ReplicatePredictionRequest {
     pub version: String,
     pub input: Wan25Input,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webhook: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -41,6 +46,14 @@ pub async fn generate(
     input: VideoGenInput,
     app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
+    generate_with_context(input, app_state, None).await
+}
+
+pub async fn generate_with_context(
+    input: VideoGenInput,
+    app_state: &AppState,
+    context: Option<&crate::videogen::qstash_types::QstashVideoGenRequest>,
+) -> Result<VideoGenResponse, VideoGenError> {
     let VideoGenInput::Wan25(model) = input else {
         return Err(VideoGenError::InvalidInput(
             "Only Wan25 input is supported".to_string(),
@@ -54,6 +67,28 @@ pub async fn generate(
 
     let client = reqwest::Client::new();
 
+    // Check if we should use webhook (when context is provided)
+    let use_webhook = context.is_some() && std::env::var("ENABLE_REPLICATE_WEBHOOKS").unwrap_or_default() == "true";
+    
+    let (webhook_url, metadata) = if use_webhook {
+        if let Some(ctx) = context {
+        let webhook_url = generate_webhook_url(&OFF_CHAIN_AGENT_URL.as_str());
+        let metadata = ReplicateWebhookMetadata {
+            user_principal: ctx.user_principal.to_string(),
+            request_key_principal: ctx.request_key.principal.to_string(),
+            request_key_counter: ctx.request_key.counter,
+            property: ctx.property.clone(),
+            deducted_amount: ctx.deducted_amount,
+            token_type: serde_json::to_string(&ctx.token_type).unwrap_or_default().trim_matches('"').to_string(),
+        };
+            (Some(webhook_url), Some(serde_json::to_value(metadata).unwrap()))
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
     // Build request with hardcoded parameters
     let request = ReplicatePredictionRequest {
         version: REPLICATE_WAN2_5_MODEL.to_string(),
@@ -65,6 +100,8 @@ pub async fn generate(
             negative_prompt: Some("".to_string()),
             enable_prompt_expansion: true,
         },
+        webhook: webhook_url,
+        metadata,
     };
 
     // Submit prediction
@@ -104,14 +141,24 @@ pub async fn generate(
         prediction_response.id
     );
 
-    // Poll for completion
-    let video_url = poll_for_completion(&prediction_response.id, api_key).await?;
-
-    Ok(VideoGenResponse {
-        operation_id: prediction_response.id,
-        video_url,
-        provider: "wan2_5".to_string(),
-    })
+    if use_webhook {
+        // With webhooks, return immediately - the webhook will handle completion
+        info!("Using webhook for Wan 2.5 prediction {}, returning immediately", prediction_response.id);
+        Ok(VideoGenResponse {
+            operation_id: prediction_response.id,
+            video_url: String::new(), // Will be filled by webhook
+            provider: "wan2_5".to_string(),
+        })
+    } else {
+        // Fallback to polling for backward compatibility
+        info!("Using polling for Wan 2.5 prediction {}", prediction_response.id);
+        let video_url = poll_for_completion(&prediction_response.id, api_key).await?;
+        Ok(VideoGenResponse {
+            operation_id: prediction_response.id,
+            video_url,
+            provider: "wan2_5".to_string(),
+        })
+    }
 }
 
 async fn poll_for_completion(prediction_id: &str, api_key: &str) -> Result<String, VideoGenError> {

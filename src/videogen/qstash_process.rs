@@ -31,10 +31,12 @@ pub async fn process_video_generation(
             crate::videogen::models::inttest::generate(request.input, &state).await
         }
         VideoGenInput::Wan25(_) => {
-            crate::videogen::models::wan2_5::generate(request.input, &state).await
+            let input = request.input.clone();
+            crate::videogen::models::wan2_5::generate_with_context(input, &state, Some(&request)).await
         }
         VideoGenInput::Wan25Fast(_) => {
-            crate::videogen::models::wan2_5_fast::generate(request.input, &state).await
+            let input = request.input.clone();
+            crate::videogen::models::wan2_5_fast::generate_with_context(input, &state, Some(&request)).await
         }
         _ => Err(VideoGenError::UnsupportedModel(
             request.input.model_id().to_string(),
