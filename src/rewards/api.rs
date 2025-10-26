@@ -1,5 +1,6 @@
 use crate::{
     app_state::AppState,
+    consts::USER_POST_SERVICE_CANISTER_ID,
     rewards::{
         config::RewardConfig,
         history::{HistoryTracker, RewardRecord, ViewRecord},
@@ -18,6 +19,7 @@ use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
+use yral_canisters_client::user_post_service::{Result1, UserPostService};
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct PaginationParams {
@@ -339,22 +341,69 @@ async fn bulk_get_video_stats_v2(
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?;
 
+    // Special handling for single video: fetch total_count_all from canister
+    let canister_total_view_count = if request.video_ids.len() == 1 {
+        let video_id = &request.video_ids[0];
+        let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &state.agent);
+
+        match user_post_service
+            .get_individual_post_details_by_id(video_id.clone())
+            .await
+        {
+            Ok(Result1::Ok(post)) => {
+                log::debug!(
+                    "Retrieved total_view_count from canister for video {}: {}",
+                    video_id,
+                    post.view_stats.total_view_count
+                );
+                Some(post.view_stats.total_view_count)
+            }
+            Ok(Result1::Err(e)) => {
+                log::warn!(
+                    "Canister returned error for video {}: {:?}, falling back to Redis",
+                    video_id,
+                    e
+                );
+                None
+            }
+            Err(e) => {
+                log::warn!(
+                    "Failed to get post details from canister for video {}: {}, falling back to Redis",
+                    video_id,
+                    e
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Convert HashMap to ordered Vec, preserving request order
     let response: Vec<VideoStatsV2> = request
         .video_ids
         .iter()
-        .map(|video_id| {
+        .enumerate()
+        .map(|(idx, video_id)| {
             let stats = stats_map.get(video_id).cloned().unwrap_or(VideoStats {
                 count: 0,
                 total_count_loggedin: 0,
                 total_count_all: 0,
                 last_milestone: 0,
             });
+
+            // Use canister value for total_count_all if available (single video case)
+            let total_count_all = if idx == 0 {
+                canister_total_view_count.unwrap_or(stats.total_count_all)
+            } else {
+                stats.total_count_all
+            };
+
             VideoStatsV2 {
                 video_id: video_id.clone(),
                 count: stats.count,
                 total_count_loggedin: stats.total_count_loggedin,
-                total_count_all: stats.total_count_all,
+                total_count_all,
                 last_milestone: stats.last_milestone,
             }
         })
