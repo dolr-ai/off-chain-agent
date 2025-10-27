@@ -3,8 +3,9 @@ use crate::duplicate_video::phash::{
     download_video_from_cloudflare, extract_metadata, PHasher, VideoMetadata,
 };
 use axum::{extract::State, http::StatusCode, Json};
-use google_cloud_bigquery::http::job::query::QueryRequest;
+use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::Arc;
 use tracing::instrument;
 use utoipa::ToSchema;
@@ -127,39 +128,72 @@ pub async fn compute_phash_api(
     }))
 }
 
-/// Store phash to BigQuery
+/// Store phash to BigQuery using Streaming Insert API (no quota limits)
 async fn store_phash_to_bigquery(
     state: &AppState,
     video_id: &str,
     phash: &str,
     metadata: &VideoMetadata,
 ) -> Result<(), anyhow::Error> {
-    let query = format!(
-        "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_phash`
-         (video_id, phash, num_frames, hash_size, duration, width, height, fps, created_at)
-         VALUES ('{video_id}', '{phash}', 10, 8, {}, {}, {}, {}, CURRENT_TIMESTAMP())",
-        metadata.duration, metadata.width, metadata.height, metadata.fps
+    log::info!(
+        "Storing phash via streaming insert for video_id: {}",
+        video_id
     );
 
-    let request = QueryRequest {
-        query,
+    // Prepare row data
+    let row_data = json!({
+        "video_id": video_id,
+        "phash": phash,
+        "num_frames": 10,
+        "hash_size": 8,
+        "duration": metadata.duration,
+        "width": metadata.width as i64,
+        "height": metadata.height as i64,
+        "fps": metadata.fps,
+        "created_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    let request = InsertAllRequest {
+        rows: vec![Row {
+            insert_id: Some(format!(
+                "phash_{}_{}",
+                video_id,
+                chrono::Utc::now().timestamp_millis()
+            )),
+            json: row_data,
+        }],
+        ignore_unknown_values: Some(false),
+        skip_invalid_rows: Some(false),
         ..Default::default()
     };
 
-    log::info!("Storing phash in BigQuery for video_id: {}", video_id);
-
     #[cfg(not(feature = "local-bin"))]
     {
-        state
+        let result = state
             .bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "videohash_phash",
+                &request,
+            )
             .await?;
+
+        // Check for insert errors
+        if let Some(errors) = result.insert_errors {
+            if !errors.is_empty() {
+                log::error!("BigQuery streaming insert errors: {:?}", errors);
+                anyhow::bail!("Failed to insert row: {:?}", errors);
+            }
+        }
+
+        log::debug!("Successfully inserted phash for video_id: {}", video_id);
     }
 
     #[cfg(feature = "local-bin")]
     {
-        log::info!("Local mode: would store phash to BigQuery: {}", query);
+        log::info!("Local mode: would stream insert to BigQuery: {:?}", request);
     }
 
     Ok(())
