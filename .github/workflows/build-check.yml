@@ -26,8 +26,8 @@ jobs:
       - name: Cache and Install prereqs
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: protobuf-compiler ffmpeg libavutil-dev libavformat-dev libavfilter-dev libavdevice-dev libavcodec-dev libswscale-dev libswresample-dev
-          version: 1.1 # cache version, for manual invalidation (bumped for ffmpeg)
+          packages: protobuf-compiler ffmpeg libavutil-dev libavformat-dev libavfilter-dev libavdevice-dev libavcodec-dev libswscale-dev libswresample-dev libblas-dev liblapack-dev
+          version: 1.2 # cache version, for manual invalidation (bumped for blas/lapack)
 
       # - name: Setup Go
       #   uses: actions/setup-go@v5

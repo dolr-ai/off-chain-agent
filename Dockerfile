@@ -14,6 +14,8 @@ RUN apt-get update \
     libavcodec-dev \
     libswscale-dev \
     libswresample-dev \
+    libblas-dev \
+    liblapack-dev \
     unzip
 
 RUN curl -L https://github.com/storj/storj/releases/latest/download/uplink_linux_amd64.zip -o uplink_linux_amd64.zip
