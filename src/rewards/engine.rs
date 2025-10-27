@@ -125,7 +125,7 @@ impl RewardEngine {
             .publisher_user_id
             .as_ref()
             .context("Missing publisher_user_id")?;
-        let is_logged_in = event.is_logged_in.unwrap_or(false);
+        let is_logged_in = event.is_logged_in.unwrap_or(true);
 
         // For non-logged-in users, only track total_count_all and exit
         if !is_logged_in {

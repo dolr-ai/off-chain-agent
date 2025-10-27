@@ -21,6 +21,64 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use yral_canisters_client::user_post_service::{Result1, UserPostService};
 
+#[cfg(not(feature = "local-bin"))]
+use google_cloud_bigquery::http::job::query::QueryRequest;
+
+/// Query BigQuery to get post_id from video_id
+#[cfg(not(feature = "local-bin"))]
+async fn query_post_id_from_bigquery(
+    bigquery_client: &google_cloud_bigquery::client::Client,
+    video_id: &str,
+) -> Option<String> {
+    let query = format!(
+        "SELECT JSON_EXTRACT_SCALAR(params, '$.post_id') as post_id \
+         FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics` \
+         WHERE event = 'video_upload_successful' \
+         AND JSON_EXTRACT_SCALAR(params, '$.video_id') = '{}' \
+         LIMIT 1",
+        video_id
+    );
+
+    let request = QueryRequest {
+        query,
+        ..Default::default()
+    };
+
+    match bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await
+    {
+        Ok(result) => {
+            let rows = result.rows.unwrap_or_default();
+            if rows.is_empty() {
+                log::warn!("No post_id found in BigQuery for video_id: {}", video_id);
+                return None;
+            }
+
+            // Extract post_id from first row
+            let row = &rows[0];
+            match &row.f[0].v {
+                google_cloud_bigquery::http::tabledata::list::Value::String(s) => {
+                    log::debug!("Found post_id {} for video_id {}", s, video_id);
+                    Some(s.clone())
+                }
+                _ => {
+                    log::warn!(
+                        "Unexpected value type for post_id in BigQuery for video_id: {}",
+                        video_id
+                    );
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to query BigQuery for post_id: {}", e);
+            None
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct PaginationParams {
     #[serde(default = "default_limit")]
@@ -344,36 +402,64 @@ async fn bulk_get_video_stats_v2(
     // Special handling for single video: fetch total_count_all from canister
     let canister_total_view_count = if request.video_ids.len() == 1 {
         let video_id = &request.video_ids[0];
-        let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &state.agent);
 
-        match user_post_service
-            .get_individual_post_details_by_id(video_id.clone())
-            .await
+        #[cfg(not(feature = "local-bin"))]
         {
-            Ok(Result1::Ok(post)) => {
-                log::debug!(
-                    "Retrieved total_view_count from canister for video {}: {}",
-                    video_id,
-                    post.view_stats.total_view_count
-                );
-                Some(post.view_stats.total_view_count)
-            }
-            Ok(Result1::Err(e)) => {
+            // Query BigQuery to get post_id from video_id
+            let post_id_opt = query_post_id_from_bigquery(&state.bigquery_client, video_id).await;
+
+            if let Some(post_id) = post_id_opt {
+                let user_post_service =
+                    UserPostService(*USER_POST_SERVICE_CANISTER_ID, &state.agent);
+
+                match user_post_service
+                    .get_individual_post_details_by_id(post_id.clone())
+                    .await
+                {
+                    Ok(Result1::Ok(post)) => {
+                        log::debug!(
+                            "Retrieved total_view_count from canister for video {} (post_id {}): {}",
+                            video_id,
+                            post_id,
+                            post.view_stats.total_view_count
+                        );
+                        Some(post.view_stats.total_view_count)
+                    }
+                    Ok(Result1::Err(e)) => {
+                        log::warn!(
+                            "Canister returned error for video {} (post_id {}): {:?}, falling back to Redis",
+                            video_id,
+                            post_id,
+                            e
+                        );
+                        None
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to get post details from canister for video {} (post_id {}): {}, falling back to Redis",
+                            video_id,
+                            post_id,
+                            e
+                        );
+                        None
+                    }
+                }
+            } else {
                 log::warn!(
-                    "Canister returned error for video {}: {:?}, falling back to Redis",
-                    video_id,
-                    e
+                    "Could not find post_id for video {}, falling back to Redis",
+                    video_id
                 );
                 None
             }
-            Err(e) => {
-                log::warn!(
-                    "Failed to get post details from canister for video {}: {}, falling back to Redis",
-                    video_id,
-                    e
-                );
-                None
-            }
+        }
+
+        #[cfg(feature = "local-bin")]
+        {
+            log::debug!(
+                "Skipping canister call for video {} (local-bin mode), using Redis value",
+                video_id
+            );
+            None
         }
     } else {
         None
