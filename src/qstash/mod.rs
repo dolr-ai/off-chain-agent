@@ -41,6 +41,7 @@ use crate::{
 pub mod client;
 pub mod duplicate;
 pub mod hotornot_job;
+pub mod phash_bulk;
 pub mod service_canister_migration;
 
 #[derive(Clone)]
@@ -181,6 +182,8 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(crate::leaderboard::handlers::end_tournament_handler),
         )
         .route("/rewards/update_config", post(update_reward_config))
+        .route("/compute_video_phash", post(phash_bulk::compute_video_phash_handler))
+        .route("/bulk_compute_phash", post(phash_bulk::bulk_compute_phash_handler))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,

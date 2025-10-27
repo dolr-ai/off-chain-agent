@@ -530,4 +530,122 @@ impl QStashClient {
 
         Ok(())
     }
+
+    #[instrument(skip(self))]
+    pub async fn queue_compute_phash(&self, video_id: &str) -> anyhow::Result<()> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/compute_video_phash")
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
+
+        let req = serde_json::json!({
+            "video_id": video_id
+        });
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("Upstash-Flow-Control-Key", "COMPUTE_PHASH")
+            .header("Upstash-Flow-Control-Value", "Rate=10,Parallelism=5")
+            .header("Upstash-Retries", "2")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    #[instrument(skip(self, video_ids))]
+    pub async fn queue_compute_phash_batch(
+        &self,
+        video_ids: Vec<String>,
+        rate_limit: u32,
+        parallelism: u32,
+    ) -> anyhow::Result<()> {
+        let destination_url = OFF_CHAIN_AGENT_URL
+            .join("qstash/compute_video_phash")?
+            .to_string();
+        let qstash_batch_url = self.base_url.join("batch")?;
+
+        log::info!("Compute phash batch URL: {}", qstash_batch_url);
+        log::info!("Queuing {} videos for phash computation", video_ids.len());
+
+        let requests: Vec<serde_json::Value> = video_ids
+            .iter()
+            .map(|video_id| {
+                let payload = json!({
+                    "video_id": video_id
+                });
+                let body_str = serde_json::to_string(&payload).unwrap_or_else(|e| {
+                    tracing::error!("Failed to serialize ComputePhashRequest: {}", e);
+                    "{}".to_string()
+                });
+
+                json!({
+                    "destination": destination_url,
+                    "headers": {
+                        "Upstash-Forward-Content-Type": "application/json",
+                        "Upstash-Forward-Method": "POST",
+                        "Upstash-Flow-Control-Key": "COMPUTE_PHASH",
+                        "Upstash-Flow-Control-Value": format!("Rate={},Parallelism={}", rate_limit, parallelism),
+                        "Upstash-Retries": "1",
+                    },
+                    "body": body_str,
+                })
+            })
+            .collect();
+
+        log::info!("Created {} batch requests", requests.len());
+
+        let chunk_size = 100;
+
+        let mut futures = Vec::new();
+        for request_chunk in requests.chunks(chunk_size) {
+            let client = self.client.clone();
+            let qstash_batch_url = qstash_batch_url.clone();
+            futures.push(async move {
+                client
+                    .post(qstash_batch_url.clone())
+                    .json(&request_chunk)
+                    .send()
+                    .await
+            });
+        }
+
+        let num_chunks = futures.len();
+        log::info!("Processing {} batch chunks", num_chunks);
+
+        let responses = futures::stream::iter(futures)
+            .buffer_unordered(80) // less than qstash limit per sec = 100
+            .collect::<Vec<_>>()
+            .await;
+
+        log::info!("Received {} batch responses", responses.len());
+
+        let mut failed_batches = 0;
+        for response in responses {
+            match response {
+                Ok(response) => {
+                    if !response.status().is_success() {
+                        failed_batches += 1;
+                        tracing::error!("QStash batch request failed: {}", response.status());
+                    }
+                }
+                Err(e) => {
+                    failed_batches += 1;
+                    tracing::error!("QStash batch request failed: {}", e);
+                }
+            }
+        }
+
+        if failed_batches > 0 {
+            log::warn!("{} batch(es) failed out of {}", failed_batches, num_chunks);
+        }
+
+        log::info!("Compute phash batch completed");
+
+        Ok(())
+    }
 }
