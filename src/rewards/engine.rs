@@ -97,6 +97,18 @@ impl RewardEngine {
         event: VideoDurationWatchedPayloadV2,
         app_state: &Arc<AppState>,
     ) -> Result<()> {
+        // if event.source.is_some() {
+        log::info!(
+            "Processing video view event: {:?} ; publisher: {:?} ; user_id: {:?}",
+            event,
+            event
+                .publisher_user_id
+                .unwrap_or_else(Principal::anonymous)
+                .to_text(),
+            event.user_id.to_text()
+        );
+        // }
+
         let config = get_config(&self.redis_pool)
             .await
             .map_err(|e| {
