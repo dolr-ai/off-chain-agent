@@ -182,8 +182,14 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(crate::leaderboard::handlers::end_tournament_handler),
         )
         .route("/rewards/update_config", post(update_reward_config))
-        .route("/compute_video_phash", post(phash_bulk::compute_video_phash_handler))
-        .route("/bulk_compute_phash", post(phash_bulk::bulk_compute_phash_handler))
+        .route(
+            "/compute_video_phash",
+            post(phash_bulk::compute_video_phash_handler),
+        )
+        .route(
+            "/bulk_compute_phash",
+            post(phash_bulk::bulk_compute_phash_handler),
+        )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
