@@ -117,6 +117,22 @@ pub struct ConfigResponse {
     pub config: Option<RewardConfig>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardConfigV2 {
+    pub reward_amount_inr: f64,
+    pub reward_amount_usd: f64,
+    pub view_milestone: u64,
+    pub min_watch_duration: f64,
+    pub fraud_threshold: usize,
+    pub shadow_ban_duration: u64,
+    pub config_version: u64,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ConfigResponseV2 {
+    pub config: Option<RewardConfigV2>,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct BulkVideoStatsRequest {
     pub video_ids: Vec<String>,
@@ -150,6 +166,7 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_user_reward_history))
         .routes(routes!(get_creator_reward_history))
         .routes(routes!(get_reward_config))
+        .routes(routes!(get_reward_config_v2))
         .routes(routes!(bulk_get_video_stats))
         .routes(routes!(bulk_get_video_stats_v2))
         .with_state(state)
@@ -321,6 +338,58 @@ async fn get_reward_config(
     };
 
     Ok(Json(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/config/v2",
+    tag = "rewards",
+    responses(
+        (status = 200, description = "Configuration retrieved with USD amount", body = ConfigResponseV2),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+async fn get_reward_config_v2(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ConfigResponseV2>, (StatusCode, String)> {
+    // Get config from RewardEngine (fetches from Redis)
+    let config = state.rewards_module.reward_engine.get_config().await;
+
+    // Return None if reward_amount_inr is 0 (rewards disabled)
+    if config.reward_amount_inr == 0.0 {
+        return Ok(Json(ConfigResponseV2 { config: None }));
+    }
+
+    // Get INR/USD exchange rate
+    let inr_usd_rate = state
+        .rewards_module
+        .btc_converter
+        .get_inr_usd_rate()
+        .await
+        .map_err(|e| {
+            log::error!("Failed to get INR/USD exchange rate: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get exchange rate: {}", e),
+            )
+        })?;
+
+    // Calculate reward amount in USD
+    let reward_amount_usd = config.reward_amount_inr / inr_usd_rate;
+
+    let config_v2 = RewardConfigV2 {
+        reward_amount_inr: config.reward_amount_inr,
+        reward_amount_usd,
+        view_milestone: config.view_milestone,
+        min_watch_duration: config.min_watch_duration,
+        fraud_threshold: config.fraud_threshold,
+        shadow_ban_duration: config.shadow_ban_duration,
+        config_version: config.config_version,
+    };
+
+    Ok(Json(ConfigResponseV2 {
+        config: Some(config_v2),
+    }))
 }
 
 pub async fn update_reward_config(
