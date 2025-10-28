@@ -589,7 +589,7 @@ impl QStashClient {
                         "Upstash-Forward-Content-Type": "application/json",
                         "Upstash-Forward-Method": "POST",
                         "Upstash-Flow-Control-Key": "COMPUTE_PHASH",
-                        "Upstash-Flow-Control-Value": format!("Rate={},Parallelism={}", rate_limit, parallelism),
+                        "Upstash-Flow-Control-Value": format!("rate={},parallelism={}", rate_limit, parallelism),
                         "Upstash-Retries": "1",
                     },
                     "body": body_str,

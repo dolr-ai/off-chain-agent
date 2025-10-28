@@ -1,10 +1,16 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::events::types::string_or_number;
-use crate::{app_state, consts::DEDUP_INDEX_CANISTER_ID, duplicate_video::videohash::VideoHash};
+use crate::{
+    app_state,
+    consts::DEDUP_INDEX_CANISTER_ID,
+    duplicate_video::phash::compute_phash_from_cloudflare,
+};
 use anyhow::Context;
 use google_cloud_bigquery::http::job::query::QueryRequest;
+use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSystemTime};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -33,32 +39,34 @@ impl VideoHashDuplication {
         )
             -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
     ) -> Result<(), anyhow::Error> {
-        log::info!("Calculating videohash for video URL: {video_url}");
-        let video_hash = VideoHash::from_url(video_url)
+        log::info!("Computing phash for video ID: {video_id}");
+        let phash = compute_phash_from_cloudflare(video_id)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
 
         let is_duplicate = DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent)
-            .is_duplicate(video_hash.hash.clone())
+            .is_duplicate(phash.clone())
             .await
             .context("Couldn't check if the video is duplicate")?;
 
         if is_duplicate {
             log::info!(
                 "Duplicate video detected: hash: {} | video_id: {video_id}",
-                video_hash.hash
+                phash
             );
         }
 
-        // Store the original hash regardless of duplication status
-        self.store_videohash_to_dedup_index(agent, video_id, &video_hash.hash)
+        // Store the phash regardless of duplication status
+        self.store_videohash_to_dedup_index(agent, video_id, &phash)
             .await?;
-        self.store_videohash_original(bigquery_client, video_id, &video_hash.hash)
+        self.store_videohash_original(bigquery_client, video_id, &phash)
+            .await?;
+        self.store_phash_to_bigquery(bigquery_client, video_id, &phash)
             .await?;
 
         if !is_duplicate {
-            self.store_unique_video(video_id, &video_hash.hash).await?;
-            self.store_unique_video_v2(video_id, &video_hash.hash)
+            self.store_unique_video(video_id, &phash).await?;
+            self.store_unique_video_v2(video_id, &phash)
                 .await?;
             log::info!("Unique video recorded: video_id [{video_id}]");
         }
@@ -86,8 +94,8 @@ impl VideoHashDuplication {
         hash: &str,
     ) -> Result<(), anyhow::Error> {
         let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
-             (video_id, videohash, created_at) 
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original`
+             (video_id, videohash, created_at)
              VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
@@ -103,6 +111,55 @@ impl VideoHashDuplication {
             .query("hot-or-not-feed-intelligence", &request)
             .await?;
 
+        Ok(())
+    }
+
+    async fn store_phash_to_bigquery(
+        &self,
+        bigquery_client: &google_cloud_bigquery::client::Client,
+        video_id: &str,
+        phash: &str,
+    ) -> Result<(), anyhow::Error> {
+        log::info!("Storing phash via streaming insert for video_id: {}", video_id);
+
+        // Prepare row data
+        let row_data = json!({
+            "video_id": video_id,
+            "phash": phash,
+            "num_frames": 10,
+            "hash_size": 8,
+            "created_at": chrono::Utc::now().to_rfc3339(),
+        });
+
+        let request = InsertAllRequest {
+            rows: vec![Row {
+                insert_id: Some(format!("phash_dedup_{}_{}", video_id, chrono::Utc::now().timestamp_millis())),
+                json: row_data,
+            }],
+            ignore_unknown_values: Some(false),
+            skip_invalid_rows: Some(false),
+            ..Default::default()
+        };
+
+        let result = bigquery_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "videohash_phash",
+                &request
+            )
+            .await?;
+
+        // Check for insert errors
+        if let Some(errors) = result.insert_errors {
+            if !errors.is_empty() {
+                log::error!("BigQuery streaming insert errors: {:?}", errors);
+                anyhow::bail!("Failed to insert phash row: {:?}", errors);
+            }
+        }
+
+        log::debug!("Successfully inserted phash for video_id: {}", video_id);
         Ok(())
     }
 

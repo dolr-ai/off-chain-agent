@@ -272,6 +272,45 @@ pub async fn download_video_from_cloudflare(video_id: &str, output_path: &Path) 
     Ok(())
 }
 
+/// Compute phash for a video by downloading from Cloudflare
+/// Downloads video, computes hash, cleans up temp files automatically
+pub async fn compute_phash_from_cloudflare(video_id: &str) -> Result<String> {
+    log::info!("Computing phash for video ID from Cloudflare: {}", video_id);
+
+    // Create temp directory
+    let temp_dir = std::env::temp_dir().join(format!("dedup_{}", uuid::Uuid::new_v4()));
+    tokio::fs::create_dir_all(&temp_dir)
+        .await
+        .context("Failed to create temp directory")?;
+
+    let video_path = temp_dir.join(format!("{}.mp4", video_id));
+
+    // Download from Cloudflare
+    let download_result = download_video_from_cloudflare(video_id, &video_path).await;
+    if let Err(e) = download_result {
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+        return Err(e);
+    }
+
+    // Compute phash in blocking task
+    let video_path_clone = video_path.clone();
+    let phash_result = tokio::task::spawn_blocking(move || {
+        PHasher::new().compute_hash(&video_path_clone)
+    })
+    .await;
+
+    // Cleanup temp directory
+    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+
+    // Handle result
+    let phash = phash_result
+        .context("Task join error")?
+        .context("Failed to compute phash")?;
+
+    log::info!("Successfully computed phash for video {}: {} chars", video_id, phash.len());
+    Ok(phash)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
