@@ -4,7 +4,7 @@ use crate::events::types::string_or_number;
 use crate::{
     app_state,
     consts::DEDUP_INDEX_CANISTER_ID,
-    duplicate_video::phash::compute_phash_from_cloudflare,
+    duplicate_video::phash::{compute_phash_from_cloudflare, VideoMetadata},
 };
 use anyhow::Context;
 use google_cloud_bigquery::http::job::query::QueryRequest;
@@ -29,7 +29,7 @@ impl VideoHashDuplication {
         agent: &ic_agent::Agent,
         bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
-        video_url: &str,
+        _video_url: &str,
         publisher_data: VideoPublisherDataV2,
         publish_video_callback: impl FnOnce(
             &str,
@@ -40,7 +40,7 @@ impl VideoHashDuplication {
             -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
     ) -> Result<(), anyhow::Error> {
         log::info!("Computing phash for video ID: {video_id}");
-        let phash = compute_phash_from_cloudflare(video_id)
+        let (phash, metadata) = compute_phash_from_cloudflare(video_id)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
 
@@ -61,13 +61,12 @@ impl VideoHashDuplication {
             .await?;
         self.store_videohash_original(bigquery_client, video_id, &phash)
             .await?;
-        self.store_phash_to_bigquery(bigquery_client, video_id, &phash)
+        self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
             .await?;
 
         if !is_duplicate {
             self.store_unique_video(video_id, &phash).await?;
-            self.store_unique_video_v2(video_id, &phash)
-                .await?;
+            self.store_unique_video_v2(video_id, &phash).await?;
             log::info!("Unique video recorded: video_id [{video_id}]");
         }
 
@@ -119,8 +118,12 @@ impl VideoHashDuplication {
         bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         phash: &str,
+        metadata: &VideoMetadata,
     ) -> Result<(), anyhow::Error> {
-        log::info!("Storing phash via streaming insert for video_id: {}", video_id);
+        log::info!(
+            "Storing phash via streaming insert for video_id: {}",
+            video_id
+        );
 
         // Prepare row data
         let row_data = json!({
@@ -128,12 +131,20 @@ impl VideoHashDuplication {
             "phash": phash,
             "num_frames": 10,
             "hash_size": 8,
+            "duration": metadata.duration,
+            "width": metadata.width as i64,
+            "height": metadata.height as i64,
+            "fps": metadata.fps,
             "created_at": chrono::Utc::now().to_rfc3339(),
         });
 
         let request = InsertAllRequest {
             rows: vec![Row {
-                insert_id: Some(format!("phash_dedup_{}_{}", video_id, chrono::Utc::now().timestamp_millis())),
+                insert_id: Some(format!(
+                    "phash_dedup_{}_{}",
+                    video_id,
+                    chrono::Utc::now().timestamp_millis()
+                )),
                 json: row_data,
             }],
             ignore_unknown_values: Some(false),
@@ -147,7 +158,7 @@ impl VideoHashDuplication {
                 "hot-or-not-feed-intelligence",
                 "yral_ds",
                 "videohash_phash",
-                &request
+                &request,
             )
             .await?;
 

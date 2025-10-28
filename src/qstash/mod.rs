@@ -39,6 +39,7 @@ use crate::{
 };
 
 pub mod client;
+pub mod dedup_index_backfill;
 pub mod duplicate;
 pub mod hotornot_job;
 pub mod phash_bulk;
@@ -189,6 +190,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/bulk_compute_phash",
             post(phash_bulk::bulk_compute_phash_handler),
+        )
+        .route(
+            "/backfill_dedup_index",
+            post(dedup_index_backfill::backfill_dedup_index_handler),
         )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),

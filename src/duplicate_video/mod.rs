@@ -1,3 +1,5 @@
+pub mod frame_diff;
+pub mod frame_diff_api;
 pub mod phash;
 pub mod phash_api;
 pub mod router;

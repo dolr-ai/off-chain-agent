@@ -273,8 +273,9 @@ pub async fn download_video_from_cloudflare(video_id: &str, output_path: &Path) 
 }
 
 /// Compute phash for a video by downloading from Cloudflare
-/// Downloads video, computes hash, cleans up temp files automatically
-pub async fn compute_phash_from_cloudflare(video_id: &str) -> Result<String> {
+/// Downloads video, computes hash and extracts metadata, cleans up temp files automatically
+/// Returns tuple of (phash, metadata)
+pub async fn compute_phash_from_cloudflare(video_id: &str) -> Result<(String, VideoMetadata)> {
     log::info!("Computing phash for video ID from Cloudflare: {}", video_id);
 
     // Create temp directory
@@ -292,10 +293,13 @@ pub async fn compute_phash_from_cloudflare(video_id: &str) -> Result<String> {
         return Err(e);
     }
 
-    // Compute phash in blocking task
+    // Compute phash and extract metadata in blocking task
     let video_path_clone = video_path.clone();
-    let phash_result = tokio::task::spawn_blocking(move || {
-        PHasher::new().compute_hash(&video_path_clone)
+    let video_id_clone = video_id.to_string();
+    let result = tokio::task::spawn_blocking(move || {
+        let phash = PHasher::new().compute_hash(&video_path_clone)?;
+        let metadata = extract_metadata(&video_path_clone, video_id_clone)?;
+        Ok::<_, anyhow::Error>((phash, metadata))
     })
     .await;
 
@@ -303,12 +307,16 @@ pub async fn compute_phash_from_cloudflare(video_id: &str) -> Result<String> {
     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
 
     // Handle result
-    let phash = phash_result
+    let (phash, metadata) = result
         .context("Task join error")?
-        .context("Failed to compute phash")?;
+        .context("Failed to compute phash and metadata")?;
 
-    log::info!("Successfully computed phash for video {}: {} chars", video_id, phash.len());
-    Ok(phash)
+    log::info!(
+        "Successfully computed phash for video {}: {} chars",
+        video_id,
+        phash.len()
+    );
+    Ok((phash, metadata))
 }
 
 #[cfg(test)]
