@@ -26,8 +26,8 @@ jobs:
       - name: Cache and Install prereqs
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: protobuf-compiler ffmpeg libavutil-dev libavformat-dev libavfilter-dev libavdevice-dev libavcodec-dev libswscale-dev libswresample-dev libblas-dev liblapack-dev
-          version: 1.2 # cache version, for manual invalidation (bumped for blas/lapack)
+          packages: protobuf-compiler ffmpeg libavutil-dev libavformat-dev libavfilter-dev libavdevice-dev libavcodec-dev libswscale-dev libswresample-dev libblas-dev liblapack-dev libblas3 liblapack3
+          version: 1.3 # cache version, for manual invalidation (bumped for blas/lapack runtime libs)
 
       # - name: Setup Go
       #   uses: actions/setup-go@v5
@@ -56,7 +56,7 @@ jobs:
 
       - name: Build
         env:
-          RUSTFLAGS: "-L /usr/lib/x86_64-linux-gnu"
+          RUSTFLAGS: "-C link-arg=-Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -L /usr/lib/x86_64-linux-gnu -l blas -l lapack"
         run: cargo build --release --bin icp-off-chain-agent --target x86_64-unknown-linux-gnu --features prod-bin
       # - name: Run tests
       #   run: cargo test --verbose
