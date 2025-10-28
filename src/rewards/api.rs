@@ -342,7 +342,7 @@ async fn get_reward_config(
 
 #[utoipa::path(
     get,
-    path = "/config/v2",
+    path = "/config_v2",
     tag = "rewards",
     responses(
         (status = 200, description = "Configuration retrieved with USD amount", body = ConfigResponseV2),
@@ -374,7 +374,6 @@ async fn get_reward_config_v2(
             )
         })?;
 
-    // Calculate reward amount in USD
     let reward_amount_usd = config.reward_amount_inr / inr_usd_rate;
 
     let config_v2 = RewardConfigV2 {
