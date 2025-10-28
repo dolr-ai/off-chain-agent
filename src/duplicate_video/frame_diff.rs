@@ -158,7 +158,9 @@ impl PHasherWithFrames {
             .hash_size(8, 8)
             .to_hasher();
 
-        Ok(hasher.hash_image(img))
+        // Convert to Luma8 for hashing (matches PHasher logic)
+        let gray = img.to_luma8();
+        Ok(hasher.hash_image(&gray))
     }
 
     /// Convert ImageHash to binary string
@@ -326,4 +328,48 @@ pub async fn upload_frame_to_gcs(
     log::info!("Frame uploaded successfully: {}", public_url);
 
     Ok(public_url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::duplicate_video::phash::compute_phash_from_cloudflare;
+
+    #[tokio::test]
+    async fn test_phash_consistency_between_functions() {
+        // Test video IDs
+        let video_id_1 = "056599298729e3541ed8ae7244aa5d95";
+        let video_id_2 = "10c48ceabac721cb6cab3a37e8c6dc1f";
+
+        // Compute using compute_phash_from_cloudflare (original function)
+        let (phash1_original, _) = compute_phash_from_cloudflare(video_id_1)
+            .await
+            .expect("Failed to compute phash for video 1");
+
+        let (phash2_original, _) = compute_phash_from_cloudflare(video_id_2)
+            .await
+            .expect("Failed to compute phash for video 2");
+
+        // Compute using compare_videos (new function)
+        let (_, _, _, phash1_compare, phash2_compare) = compare_videos(video_id_1, video_id_2)
+            .await
+            .expect("Failed to compare videos");
+
+        // Assert both methods produce identical hashes
+        assert_eq!(
+            phash1_original, phash1_compare,
+            "Video 1 phash mismatch:\nOriginal: {}\nCompare:  {}",
+            phash1_original, phash1_compare
+        );
+
+        assert_eq!(
+            phash2_original, phash2_compare,
+            "Video 2 phash mismatch:\nOriginal: {}\nCompare:  {}",
+            phash2_original, phash2_compare
+        );
+
+        println!("✅ Both functions produce identical phashes");
+        println!("Video 1 phash: {}", phash1_original);
+        println!("Video 2 phash: {}", phash2_original);
+    }
 }
