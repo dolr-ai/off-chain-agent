@@ -342,7 +342,7 @@ async fn get_reward_config(
 
 #[utoipa::path(
     get,
-    path = "/config/v2",
+    path = "/config_v2",
     tag = "rewards",
     responses(
         (status = 200, description = "Configuration retrieved with USD amount", body = ConfigResponseV2),

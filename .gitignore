@@ -12,3 +12,4 @@ google_service_account.json
 docs/
 *.hurl
 local_scripts/
+tests/
