@@ -17,6 +17,14 @@ use crate::{
 use yral_canisters_client::user_info_service::UserInfoService;
 
 #[derive(Serialize, Deserialize, ToSchema)]
+pub struct FollowUserNotificationRequest {
+    pub delegated_identity_wire: DelegatedIdentityWire,
+    #[schema(value_type = String)]
+    pub target_principal: Principal,
+    pub follower_username: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct FollowUserRequest {
     pub delegated_identity_wire: DelegatedIdentityWire,
     #[schema(value_type = String)]
@@ -124,4 +132,66 @@ pub async fn handle_follow_user(
             ))
         }
     }
+}
+
+#[utoipa::path(
+    post,
+    path = "/follow-notification",
+    request_body = FollowUserNotificationRequest,
+    tag = "user",
+    responses(
+        (status = 200, description = "Notification sent successfully", body = FollowUserResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+#[instrument(skip(state, request))]
+pub async fn handle_follow_user_notification(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<FollowUserNotificationRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // 1. Verify the user identity and get user info
+    let user_info =
+        get_user_info_from_delegated_identity_wire(&state, request.delegated_identity_wire.clone())
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    format!("Failed to get user info: {e}"),
+                )
+            })?;
+
+    let follower_principal = user_info.user_principal;
+
+    // Set Sentry user context for tracking
+    crate::middleware::set_user_context(follower_principal);
+
+    // Don't allow users to follow themselves
+    if follower_principal == request.target_principal {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Cannot follow yourself".to_string(),
+        ));
+    }
+
+    // 2. Send notification event (without calling canister)
+    let follow_payload = FollowUserPayload {
+        follower_principal_id: follower_principal,
+        follower_username: request.follower_username,
+        followee_principal_id: request.target_principal,
+    };
+
+    // Send notification asynchronously
+    let event_payload = EventPayload::FollowUser(follow_payload);
+    event_payload.send_notification(&state).await;
+
+    tracing::info!(
+        "Follow notification sent: {} -> {}",
+        follower_principal,
+        request.target_principal
+    );
+
+    // 3. Return success
+    Ok(Json(FollowUserResponse { success: true }))
 }

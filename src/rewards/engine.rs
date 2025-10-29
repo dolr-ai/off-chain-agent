@@ -143,6 +143,10 @@ impl RewardEngine {
             .is_registered_user(event.user_id, app_state)
             .await?
         {
+            let _ = self
+                .view_tracker
+                .track_view(video_id, &event.user_id, false)
+                .await?;
             return Ok(());
         }
 
@@ -152,6 +156,10 @@ impl RewardEngine {
             .is_registered_user(*publisher_user_id, app_state)
             .await?
         {
+            let _ = self
+                .view_tracker
+                .track_view(video_id, &event.user_id, false)
+                .await?;
             return Ok(());
         }
 
