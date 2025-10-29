@@ -17,10 +17,8 @@ pub fn user_router(state: Arc<AppState>) -> OpenApiRouter {
             profile_image::handle_upload_profile_image,
             profile_image::handle_delete_profile_image
         ))
-        .routes(routes!(
-            follow::handle_follow_user,
-            follow::handle_follow_user_notification
-        ))
+        .routes(routes!(follow::handle_follow_user))
+        .routes(routes!(follow::handle_follow_user_notification))
         .routes(routes!(migrate_user::handle_user_migration))
         .with_state(state)
 }
