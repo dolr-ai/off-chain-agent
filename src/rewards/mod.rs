@@ -25,9 +25,16 @@ pub struct RewardsModule {
 }
 
 impl RewardsModule {
-    pub fn new(redis_pool: RedisPool, admin_agent: ic_agent::Agent) -> Self {
+    pub async fn new(redis_pool: RedisPool, admin_agent: ic_agent::Agent) -> Self {
         let view_tracker = ViewTracker::new(redis_pool.clone());
-        let reward_engine = RewardEngine::new(redis_pool.clone(), admin_agent);
+
+        // Fetch config from Redis (or use defaults if not found)
+        let config = config::get_config(&redis_pool).await.unwrap_or_else(|e| {
+            log::warn!("Failed to get config from Redis, using defaults: {}", e);
+            config::RewardConfig::default()
+        });
+
+        let reward_engine = RewardEngine::with_config(redis_pool.clone(), admin_agent, config);
         let btc_converter = BtcConverter::new();
 
         Self {
