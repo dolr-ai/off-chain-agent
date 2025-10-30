@@ -135,29 +135,27 @@ async fn decrement_counter_for_failure(
     }
 }
 
-/// Handle video generation completion callback from Qstash
-#[instrument(skip(state))]
-pub async fn handle_video_gen_callback(
-    State(state): State<Arc<AppState>>,
-    Json(wrapper): Json<QStashCallbackWrapper>,
+/// Internal callback handler that can be used by both QStash and webhook handlers
+pub async fn handle_video_gen_callback_internal(
+    state: Arc<AppState>,
+    callback: QstashVideoGenCallback,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    log::info!(
-        "Received QStash callback for message: {} with status: {}",
-        wrapper.source_message_id,
-        wrapper.status
-    );
-
-    // 1. Parse callback (now includes deducted_amount and token_type)
-    let callback = parse_qstash_callback(&wrapper)?;
-
     log::info!(
         "Processing video generation callback for principal {} counter {}",
         callback.request_key.principal,
         callback.request_key.counter
     );
 
-    // 2. Determine status based on QStash response and callback result
-    let (status, should_decrement) = determine_callback_status(wrapper.status, &callback.result);
+    // 2. Determine status based on callback result
+    let (status, should_decrement) = match &callback.result {
+        VideoGenCallbackResult::Success(response) => (
+            VideoGenRequestStatus::Complete(response.video_url.clone()),
+            false,
+        ),
+        VideoGenCallbackResult::Failure(error) => {
+            (VideoGenRequestStatus::Failed(error.clone()), true)
+        }
+    };
 
     // 3. Update status in rate limits canister
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &state.agent);
@@ -206,4 +204,34 @@ pub async fn handle_video_gen_callback(
     }
 
     Ok(StatusCode::OK)
+}
+
+/// Handle video generation completion callback from Qstash
+#[instrument(skip(state))]
+pub async fn handle_video_gen_callback(
+    State(state): State<Arc<AppState>>,
+    Json(wrapper): Json<QStashCallbackWrapper>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    log::info!(
+        "Received QStash callback for message: {} with status: {}",
+        wrapper.source_message_id,
+        wrapper.status
+    );
+
+    // 1. Parse callback (now includes deducted_amount and token_type)
+    let callback = parse_qstash_callback(&wrapper)?;
+
+    // For QStash callbacks, we need to determine if it should decrement based on QStash status
+    let should_force_failure = wrapper.status != 200;
+    
+    let mut modified_callback = callback;
+    if should_force_failure {
+        // Override the result to be a failure if QStash request failed
+        modified_callback.result = VideoGenCallbackResult::Failure(format!(
+            "QStash request failed with status: {}", wrapper.status
+        ));
+    }
+
+    // Use the internal handler
+    handle_video_gen_callback_internal(state, modified_callback).await
 }
