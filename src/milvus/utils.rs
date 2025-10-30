@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 /// Convert binary string "010110..." (640 chars) to byte array (80 bytes) for Milvus BINARY_VECTOR
 /// Each byte represents 8 bits, MSB first
@@ -19,9 +19,7 @@ pub fn phash_to_binary_vector(phash: &str) -> Result<Vec<u8>> {
         let byte = chunk
             .iter()
             .enumerate()
-            .fold(0u8, |acc, (i, &bit)| {
-                acc | ((bit - b'0') << (7 - i))
-            });
+            .fold(0u8, |acc, (i, &bit)| acc | ((bit - b'0') << (7 - i)));
         bytes.push(byte);
     }
 
@@ -29,6 +27,7 @@ pub fn phash_to_binary_vector(phash: &str) -> Result<Vec<u8>> {
 }
 
 /// Convert byte array back to binary string for debugging/verification
+#[allow(dead_code)]
 pub fn binary_vector_to_phash(bytes: &[u8]) -> Result<String> {
     anyhow::ensure!(
         bytes.len() == 80,
@@ -48,6 +47,7 @@ pub fn binary_vector_to_phash(bytes: &[u8]) -> Result<String> {
 }
 
 /// Calculate Hamming distance between two binary strings
+#[allow(dead_code)]
 pub fn hamming_distance(hash1: &str, hash2: &str) -> u32 {
     hash1
         .chars()
@@ -94,10 +94,7 @@ mod tests {
         let result = phash_to_binary_vector(phash);
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("must be 640 bits"));
+        assert!(result.unwrap_err().to_string().contains("must be 640 bits"));
     }
 
     #[test]

@@ -64,7 +64,11 @@ pub async fn create_milvus_client(url: String) -> Result<MilvusClient> {
         let password = cred_parts[1];
         let endpoint = format!("{}://{}", scheme, host_part);
 
-        log::info!("Connecting to Milvus at {} with user: {}", host_part, username);
+        log::info!(
+            "Connecting to Milvus at {} with user: {}",
+            host_part,
+            username
+        );
 
         ClientBuilder::new(endpoint)
             .username(username)
@@ -103,10 +107,8 @@ pub async fn init_collection(client: &MilvusClient) -> Result<()> {
     log::info!("Creating new collection: {}", COLLECTION_NAME);
 
     // Create collection schema
-    let mut schema_builder = CollectionSchemaBuilder::new(
-        COLLECTION_NAME,
-        "Video phash deduplication collection",
-    );
+    let mut schema_builder =
+        CollectionSchemaBuilder::new(COLLECTION_NAME, "Video phash deduplication collection");
 
     schema_builder.add_field(FieldSchema::new_primary_varchar(
         "video_id",
@@ -121,7 +123,10 @@ pub async fn init_collection(client: &MilvusClient) -> Result<()> {
         PHASH_DIM,
     ));
 
-    schema_builder.add_field(FieldSchema::new_int64("created_at", "Timestamp when hash was ingested"));
+    schema_builder.add_field(FieldSchema::new_int64(
+        "created_at",
+        "Timestamp when hash was ingested",
+    ));
 
     let schema = schema_builder
         .build()
@@ -206,9 +211,16 @@ pub async fn search_similar_videos(
         .context("Failed to get collection")?;
 
     // Check if collection is loaded
-    if !collection.is_loaded().await.context("Failed to check if collection is loaded")? {
+    if !collection
+        .is_loaded()
+        .await
+        .context("Failed to check if collection is loaded")?
+    {
         log::warn!("Collection is not loaded, loading now...");
-        collection.load(1).await.context("Failed to load collection")?;
+        collection
+            .load(1)
+            .await
+            .context("Failed to load collection")?;
     }
 
     // Convert phash to binary vector
@@ -287,9 +299,15 @@ pub async fn insert_video_hash(
     let phash_vector = utils::phash_to_binary_vector(phash)?;
 
     // Prepare data columns
-    let video_id_field = schema.get_field("video_id").context("video_id field not found")?;
-    let phash_field = schema.get_field("phash_vector").context("phash_vector field not found")?;
-    let timestamp_field = schema.get_field("created_at").context("created_at field not found")?;
+    let video_id_field = schema
+        .get_field("video_id")
+        .context("video_id field not found")?;
+    let phash_field = schema
+        .get_field("phash_vector")
+        .context("phash_vector field not found")?;
+    let timestamp_field = schema
+        .get_field("created_at")
+        .context("created_at field not found")?;
 
     let video_ids = FieldColumn::new(video_id_field, vec![video_id.to_string()]);
     // For binary vectors, FieldColumn expects Vec<u8> (flat array of all vectors concatenated)
@@ -302,11 +320,15 @@ pub async fn insert_video_hash(
         .await
         .context("Failed to insert into Milvus")?;
 
-    log::debug!("Successfully inserted video hash for video_id: {}", video_id);
+    log::debug!(
+        "Successfully inserted video hash for video_id: {}",
+        video_id
+    );
     Ok(())
 }
 
 /// Batch insert multiple video hashes into Milvus
+#[allow(dead_code)]
 pub async fn insert_batch_video_hashes(
     client: &MilvusClient,
     records: Vec<VideoHashRecord>,
@@ -336,9 +358,15 @@ pub async fn insert_batch_video_hashes(
         timestamps.push(record.created_at);
     }
 
-    let video_id_field = schema.get_field("video_id").context("video_id field not found")?;
-    let phash_field = schema.get_field("phash_vector").context("phash_vector field not found")?;
-    let timestamp_field = schema.get_field("created_at").context("created_at field not found")?;
+    let video_id_field = schema
+        .get_field("video_id")
+        .context("video_id field not found")?;
+    let phash_field = schema
+        .get_field("phash_vector")
+        .context("phash_vector field not found")?;
+    let timestamp_field = schema
+        .get_field("created_at")
+        .context("created_at field not found")?;
 
     let video_id_column = FieldColumn::new(video_id_field, video_ids);
     // Binary vectors are stored as a flat Vec<u8> containing all vectors concatenated

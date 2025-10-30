@@ -23,6 +23,7 @@ struct Claims {
     body: String,
 }
 
+#[allow(dead_code)]
 pub async fn verify_qstash_message(
     State(state): State<QStashState>,
     headers: HeaderMap,

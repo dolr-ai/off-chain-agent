@@ -249,9 +249,7 @@ async fn process_single_video(
     const HAMMING_THRESHOLD: u32 = 10;
 
     // 1. Check if collection has any data (to avoid SDK panic on empty collection)
-    let collection_has_data = has_any_processed_videos(state)
-        .await
-        .unwrap_or(false); // Default to false if query fails
+    let collection_has_data = has_any_processed_videos(state).await.unwrap_or(false); // Default to false if query fails
 
     // 2. Search for similar videos in Milvus (skip if collection is empty)
     let similar_videos = if collection_has_data {
@@ -259,7 +257,10 @@ async fn process_single_video(
             .await
             .context("Failed to search in Milvus")?
     } else {
-        log::info!("Skipping Milvus search for video {} (empty collection)", video_id);
+        log::info!(
+            "Skipping Milvus search for video {} (empty collection)",
+            video_id
+        );
         Vec::new()
     };
 

@@ -2,13 +2,11 @@ mod verify;
 
 use std::sync::Arc;
 
-use axum::middleware;
 use axum::{extract::State, response::Response, routing::post, Json, Router};
 use hotornot_job::start_hotornot_job_v2;
 use http::StatusCode;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
-use tower::ServiceBuilder;
 use tracing::instrument;
 
 use crate::pipeline::Step;
@@ -18,7 +16,6 @@ use crate::qstash::service_canister_migration::{
     migrate_individual_user_to_service_canister, transfer_all_posts_for_the_individual_user,
     update_the_metadata_mapping,
 };
-use crate::qstash::verify::verify_qstash_message;
 use crate::setup_context;
 use crate::{
     app_state::AppState,
@@ -49,7 +46,9 @@ pub mod service_canister_migration;
 
 #[derive(Clone)]
 pub struct QStashState {
+    #[allow(dead_code)]
     decoding_key: Arc<DecodingKey>,
+    #[allow(dead_code)]
     validation: Arc<Validation>,
 }
 
