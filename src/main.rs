@@ -42,6 +42,8 @@ mod events;
 pub mod leaderboard;
 pub mod metrics;
 mod middleware;
+#[cfg(not(feature = "local-bin"))]
+mod milvus;
 mod offchain_service;
 pub mod pipeline;
 mod posts;

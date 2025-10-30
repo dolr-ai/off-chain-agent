@@ -106,6 +106,7 @@ num-traits = "0.2"
 sentry-anyhow = "0.42.0"
 ffmpeg-next = "7"
 image_hasher = "3.0.0"
+milvus-sdk-rust = "0.1.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions

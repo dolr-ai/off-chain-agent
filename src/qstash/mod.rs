@@ -42,6 +42,8 @@ pub mod client;
 pub mod dedup_index_backfill;
 pub mod duplicate;
 pub mod hotornot_job;
+#[cfg(not(feature = "local-bin"))]
+pub mod milvus_ingest;
 pub mod phash_bulk;
 pub mod service_canister_migration;
 
@@ -126,7 +128,7 @@ async fn video_deduplication_handler(
 #[instrument(skip(app_state))]
 // QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
-    Router::new()
+    let router = Router::new()
         .route("/video_deduplication", post(video_deduplication_handler))
         .route("/upload_video_gcs", post(upload_video_gcs))
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
@@ -194,10 +196,18 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/backfill_dedup_index",
             post(dedup_index_backfill::backfill_dedup_index_handler),
-        )
-        .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
-            app_state.qstash.clone(),
-            verify_qstash_message,
-        )))
+        );
+
+    #[cfg(not(feature = "local-bin"))]
+    let router = router.route(
+        "/milvus/ingest_phash",
+        post(milvus_ingest::ingest_phash_to_milvus_handler),
+    );
+
+    router
+        // .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
+        //     app_state.qstash.clone(),
+        //     verify_qstash_message,
+        // )))
         .with_state(app_state)
 }
