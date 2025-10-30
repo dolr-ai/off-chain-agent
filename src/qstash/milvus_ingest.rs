@@ -24,17 +24,65 @@ struct OperationMetrics {
     bigquery_insert_times: Vec<u128>, // microseconds
 }
 
+/// Metrics collector that can be enabled or disabled to avoid memory bloat
 #[cfg(not(feature = "local-bin"))]
-impl OperationMetrics {
-    fn merge(&mut self, other: OperationMetrics) {
-        self.redis_check_times.extend(other.redis_check_times);
-        self.milvus_search_times.extend(other.milvus_search_times);
-        self.milvus_insert_times.extend(other.milvus_insert_times);
-        self.redis_insert_times.extend(other.redis_insert_times);
-        self.bigquery_insert_times
-            .extend(other.bigquery_insert_times);
+#[derive(Debug)]
+enum MetricsCollector {
+    Enabled(OperationMetrics),
+    Disabled,
+}
+
+#[cfg(not(feature = "local-bin"))]
+impl MetricsCollector {
+    fn record_redis_check(&mut self, duration: u128) {
+        if let MetricsCollector::Enabled(m) = self {
+            m.redis_check_times.push(duration);
+        }
     }
 
+    fn record_milvus_search(&mut self, duration: u128) {
+        if let MetricsCollector::Enabled(m) = self {
+            m.milvus_search_times.push(duration);
+        }
+    }
+
+    fn record_milvus_insert(&mut self, duration: u128) {
+        if let MetricsCollector::Enabled(m) = self {
+            m.milvus_insert_times.push(duration);
+        }
+    }
+
+    fn record_redis_insert(&mut self, duration: u128) {
+        if let MetricsCollector::Enabled(m) = self {
+            m.redis_insert_times.push(duration);
+        }
+    }
+
+    fn record_bigquery_insert(&mut self, duration: u128) {
+        if let MetricsCollector::Enabled(m) = self {
+            m.bigquery_insert_times.push(duration);
+        }
+    }
+
+    fn merge(&mut self, other: MetricsCollector) {
+        if let (MetricsCollector::Enabled(m1), MetricsCollector::Enabled(m2)) = (self, other) {
+            m1.redis_check_times.extend(m2.redis_check_times);
+            m1.milvus_search_times.extend(m2.milvus_search_times);
+            m1.milvus_insert_times.extend(m2.milvus_insert_times);
+            m1.redis_insert_times.extend(m2.redis_insert_times);
+            m1.bigquery_insert_times.extend(m2.bigquery_insert_times);
+        }
+    }
+
+    fn log_summary(&self) {
+        if let MetricsCollector::Enabled(m) = self {
+            m.log_summary();
+        }
+    }
+}
+
+#[cfg(not(feature = "local-bin"))]
+impl OperationMetrics {
     fn log_summary(&self) {
         log::info!("📊 Performance Metrics (all times in microseconds):");
 
@@ -127,6 +175,9 @@ pub struct IngestPhashRequest {
 
     #[serde(default = "default_concurrency")]
     pub concurrency: usize,
+
+    #[serde(default = "default_collect_metrics")]
+    pub collect_metrics: bool,
 }
 
 fn default_limit() -> u32 {
@@ -134,7 +185,11 @@ fn default_limit() -> u32 {
 }
 
 fn default_concurrency() -> usize {
-    1 // Process 1 videos concurrently by default
+    10 // Process 10 videos concurrently by default
+}
+
+fn default_collect_metrics() -> bool {
+    false // Disabled by default to avoid memory bloat
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -299,13 +354,18 @@ async fn process_batch(
     );
 
     // 2. Process videos concurrently
+    let collect_metrics = req.collect_metrics;
     let results: Vec<_> = stream::iter(videos)
         .map(|(video_id, phash)| {
             let state = state.clone();
             let milvus_client = milvus_client.clone();
 
             async move {
-                let mut task_metrics = OperationMetrics::default();
+                let mut task_metrics = if collect_metrics {
+                    MetricsCollector::Enabled(OperationMetrics::default())
+                } else {
+                    MetricsCollector::Disabled
+                };
                 let result = process_single_video(
                     &state,
                     &milvus_client,
@@ -322,7 +382,11 @@ async fn process_batch(
         .await;
 
     // 3. Aggregate results
-    let mut metrics = OperationMetrics::default();
+    let mut metrics = if req.collect_metrics {
+        MetricsCollector::Enabled(OperationMetrics::default())
+    } else {
+        MetricsCollector::Disabled
+    };
     let mut unique_count = 0;
     let mut duplicate_count = 0;
     let mut failed = 0;
@@ -392,13 +456,18 @@ async fn process_backfill_batch(
     );
 
     // 2. Process videos concurrently
+    let collect_metrics = req.collect_metrics;
     let results: Vec<_> = stream::iter(videos)
         .map(|(video_id, phash)| {
             let state = state.clone();
             let milvus_client = milvus_client.clone();
 
             async move {
-                let mut task_metrics = OperationMetrics::default();
+                let mut task_metrics = if collect_metrics {
+                    MetricsCollector::Enabled(OperationMetrics::default())
+                } else {
+                    MetricsCollector::Disabled
+                };
                 let result = process_single_video(
                     &state,
                     &milvus_client,
@@ -415,7 +484,11 @@ async fn process_backfill_batch(
         .await;
 
     // 3. Aggregate results
-    let mut metrics = OperationMetrics::default();
+    let mut metrics = if req.collect_metrics {
+        MetricsCollector::Enabled(OperationMetrics::default())
+    } else {
+        MetricsCollector::Disabled
+    };
     let mut unique_count = 0;
     let mut duplicate_count = 0;
     let mut failed = 0;
@@ -666,7 +739,7 @@ async fn process_single_video(
     milvus_client: &MilvusClient,
     video_id: &str,
     phash: &str,
-    metrics: &mut OperationMetrics,
+    metrics: &mut MetricsCollector,
 ) -> Result<bool> {
     const HAMMING_THRESHOLD: u32 = 10;
 
@@ -674,7 +747,7 @@ async fn process_single_video(
     log::debug!("Tier 1: Checking Redis for exact phash match");
     let start = Instant::now();
     let redis_result = check_exact_duplicate_in_redis(&state.leaderboard_redis_pool, phash).await?;
-    metrics.redis_check_times.push(start.elapsed().as_micros());
+    metrics.record_redis_check(start.elapsed().as_micros());
 
     if let Some(existing_video_id) = redis_result {
         log::info!(
@@ -695,9 +768,7 @@ async fn process_single_video(
         )
         .await
         .context("Failed to store dedup status")?;
-        metrics
-            .bigquery_insert_times
-            .push(start.elapsed().as_micros());
+        metrics.record_bigquery_insert(start.elapsed().as_micros());
 
         return Ok(false); // Not unique (is duplicate)
     }
@@ -725,9 +796,7 @@ async fn process_single_video(
         );
         Vec::new()
     };
-    metrics
-        .milvus_search_times
-        .push(start.elapsed().as_micros());
+    metrics.record_milvus_search(start.elapsed().as_micros());
 
     let is_duplicate = !similar_videos.is_empty();
     let (duplicate_of, hamming_distance) = if is_duplicate {
@@ -762,16 +831,14 @@ async fn process_single_video(
         milvus::insert_video_hash(milvus_client, video_id, phash, created_at)
             .await
             .context("Failed to insert into Milvus")?;
-        metrics
-            .milvus_insert_times
-            .push(start.elapsed().as_micros());
+        metrics.record_milvus_insert(start.elapsed().as_micros());
 
         // Store in Redis (only unique hashes)
         let start = Instant::now();
         store_unique_phash_in_redis(&state.leaderboard_redis_pool, phash, video_id)
             .await
             .context("Failed to store phash in Redis")?;
-        metrics.redis_insert_times.push(start.elapsed().as_micros());
+        metrics.record_redis_insert(start.elapsed().as_micros());
     } else {
         log::debug!(
             "Video {} is a duplicate, NOT storing in Redis/Milvus",
@@ -791,9 +858,7 @@ async fn process_single_video(
     )
     .await
     .context("Failed to store dedup status")?;
-    metrics
-        .bigquery_insert_times
-        .push(start.elapsed().as_micros());
+    metrics.record_bigquery_insert(start.elapsed().as_micros());
 
     log::debug!(
         "Processed video {}: is_unique={}, duplicate_of={:?}, distance={:?}",
