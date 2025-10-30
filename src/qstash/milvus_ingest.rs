@@ -741,7 +741,7 @@ async fn process_single_video(
     phash: &str,
     metrics: &mut MetricsCollector,
 ) -> Result<bool> {
-    const HAMMING_THRESHOLD: u32 = 10;
+    const HAMMING_THRESHOLD: u32 = 20;
 
     // TIER 1: Check Redis for exact match (FAST - <1ms)
     log::debug!("Tier 1: Checking Redis for exact phash match");
