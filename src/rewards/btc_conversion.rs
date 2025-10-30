@@ -36,6 +36,12 @@ pub struct BtcConverter {
     client: reqwest::Client,
 }
 
+impl Default for BtcConverter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BtcConverter {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()
@@ -95,6 +101,42 @@ impl BtcConverter {
                 Ok(DEFAULT_BTC_INR_RATE)
             }
         }
+    }
+
+    /// Get current INR/USD exchange rate
+    pub async fn get_inr_usd_rate(&self) -> Result<f64> {
+        // Fetch ticker data to get both INR and USD rates for BTC
+        let response = self
+            .client
+            .get(BLOCKCHAIN_API_URL)
+            .send()
+            .await
+            .context("Failed to send request to Blockchain.info")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Blockchain.info API returned status: {}", response.status());
+        }
+
+        let data: BlockchainTickerResponse = response
+            .json()
+            .await
+            .context("Failed to parse Blockchain.info response")?;
+
+        let inr_data = data
+            .get("INR")
+            .context("INR currency not found in Blockchain.info response")?;
+
+        let usd_data = data
+            .get("USD")
+            .context("USD currency not found in Blockchain.info response")?;
+
+        // Calculate INR/USD rate: how many INR per 1 USD
+        // If 1 BTC = 5,000,000 INR and 1 BTC = 60,000 USD
+        // Then 1 USD = 5,000,000 / 60,000 = 83.33 INR
+        let inr_usd_rate = inr_data.last / usd_data.last;
+
+        log::debug!("INR/USD exchange rate: {} INR per USD", inr_usd_rate);
+        Ok(inr_usd_rate)
     }
 
     /// Fetch rate from Blockchain.info API
