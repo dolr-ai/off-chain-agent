@@ -158,6 +158,10 @@ path = "src/main.rs"
 name = "generate_jwt"
 path = "src/bin/generate_jwt.rs"
 
+[[bin]]
+name = "backfill_video_counts"
+path = "src/bin/backfill_video_counts.rs"
+
 [features]
 local-bin = []
 use-local-agent = []

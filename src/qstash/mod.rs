@@ -201,10 +201,15 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         );
 
     #[cfg(not(feature = "local-bin"))]
-    let router = router.route(
-        "/milvus/ingest_phash",
-        post(milvus_ingest::ingest_phash_to_milvus_handler),
-    );
+    let router = router
+        .route(
+            "/milvus/ingest_phash",
+            post(milvus_ingest::ingest_phash_to_milvus_handler),
+        )
+        .route(
+            "/milvus/backfill_unique_videos",
+            post(milvus_ingest::backfill_unique_videos_handler),
+        );
 
     router
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(

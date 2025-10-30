@@ -31,12 +31,13 @@ pub struct IngestPhashResponse {
 
 /// QStash handler to ingest video phashes from BigQuery into Milvus
 /// Checks for near-duplicates (Hamming distance < 10) and records status
+/// Spawns background task and returns immediately
 #[utoipa::path(
     post,
     path = "/qstash/milvus/ingest_phash",
     request_body = IngestPhashRequest,
     responses(
-        (status = 200, description = "Batch ingestion completed", body = IngestPhashResponse),
+        (status = 202, description = "Batch ingestion started"),
         (status = 500, description = "Internal server error")
     ),
     tag = "qstash"
@@ -45,8 +46,8 @@ pub struct IngestPhashResponse {
 pub async fn ingest_phash_to_milvus_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<IngestPhashRequest>,
-) -> Result<Json<IngestPhashResponse>, StatusCode> {
-    log::info!("Starting Milvus ingestion: limit={}", req.limit);
+) -> Result<StatusCode, StatusCode> {
+    log::info!("Starting Milvus ingestion (async): limit={}", req.limit);
 
     #[cfg(feature = "local-bin")]
     {
@@ -58,29 +59,96 @@ pub async fn ingest_phash_to_milvus_handler(
     {
         // Check if Milvus client is available
         let milvus_client = match &state.milvus_client {
-            Some(client) => client,
+            Some(client) => client.clone(),
             None => {
                 log::error!("Milvus client not initialized");
                 return Err(StatusCode::SERVICE_UNAVAILABLE);
             }
         };
 
-        match process_batch(&state, milvus_client, &req).await {
-            Ok(response) => {
-                log::info!(
-                    "Batch completed: processed={}, unique={}, duplicate={}, failed={}",
-                    response.total_processed,
-                    response.unique_count,
-                    response.duplicate_count,
-                    response.failed
-                );
-                Ok(Json(response))
+        // Spawn background task
+        tokio::spawn(async move {
+            log::info!("Background task started for Milvus ingestion");
+            match process_batch(&state, &milvus_client, &req).await {
+                Ok(response) => {
+                    log::info!(
+                        "✅ Batch completed: processed={}, unique={}, duplicate={}, failed={}",
+                        response.total_processed,
+                        response.unique_count,
+                        response.duplicate_count,
+                        response.failed
+                    );
+                }
+                Err(e) => {
+                    log::error!("❌ Batch processing failed: {}", e);
+                }
             }
-            Err(e) => {
-                log::error!("Batch processing failed: {}", e);
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
+        });
+
+        Ok(StatusCode::ACCEPTED)
+    }
+}
+
+/// QStash handler to backfill video phashes from video_unique table into Milvus
+/// Only processes videos that are in video_unique (pre-filtered unique videos)
+/// Spawns background task and returns immediately
+#[utoipa::path(
+    post,
+    path = "/qstash/milvus/backfill_unique_videos",
+    request_body = IngestPhashRequest,
+    responses(
+        (status = 202, description = "Backfill started"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "qstash"
+)]
+#[instrument(skip(state))]
+pub async fn backfill_unique_videos_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<IngestPhashRequest>,
+) -> Result<StatusCode, StatusCode> {
+    log::info!(
+        "Starting backfill from video_unique table (async): limit={}",
+        req.limit
+    );
+
+    #[cfg(feature = "local-bin")]
+    {
+        log::warn!("Milvus backfill not available in local-bin mode");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[cfg(not(feature = "local-bin"))]
+    {
+        // Check if Milvus client is available
+        let milvus_client = match &state.milvus_client {
+            Some(client) => client.clone(),
+            None => {
+                log::error!("Milvus client not initialized");
+                return Err(StatusCode::SERVICE_UNAVAILABLE);
             }
-        }
+        };
+
+        // Spawn background task
+        tokio::spawn(async move {
+            log::info!("Background task started for video_unique backfill");
+            match process_backfill_batch(&state, &milvus_client, &req).await {
+                Ok(response) => {
+                    log::info!(
+                        "✅ Backfill completed: processed={}, unique={}, duplicate={}, failed={}",
+                        response.total_processed,
+                        response.unique_count,
+                        response.duplicate_count,
+                        response.failed
+                    );
+                }
+                Err(e) => {
+                    log::error!("❌ Backfill processing failed: {}", e);
+                }
+            }
+        });
+
+        Ok(StatusCode::ACCEPTED)
     }
 }
 
@@ -151,6 +219,72 @@ async fn process_batch(
 }
 
 #[cfg(not(feature = "local-bin"))]
+async fn process_backfill_batch(
+    state: &AppState,
+    milvus_client: &MilvusClient,
+    req: &IngestPhashRequest,
+) -> Result<IngestPhashResponse> {
+    // 1. Fetch unique videos from BigQuery (video_unique JOIN videohash_phash)
+    let videos = fetch_unique_videos_for_backfill(state, req).await?;
+
+    if videos.is_empty() {
+        log::info!("No unique videos found for backfill");
+        return Ok(IngestPhashResponse {
+            total_processed: 0,
+            unique_count: 0,
+            duplicate_count: 0,
+            failed: 0,
+        });
+    }
+
+    log::info!("Backfilling {} unique videos", videos.len());
+
+    let mut unique_count = 0;
+    let mut duplicate_count = 0;
+    let mut failed = 0;
+
+    // 2. Process each video with two-tier Redis + Milvus logic
+    for (video_id, phash) in videos {
+        match process_single_video(state, milvus_client, &video_id, &phash).await {
+            Ok(is_unique) => {
+                if is_unique {
+                    unique_count += 1;
+                } else {
+                    duplicate_count += 1;
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to process video {}: {}", video_id, e);
+                failed += 1;
+            }
+        }
+    }
+
+    // Log summary statistics
+    log::info!(
+        "📊 Backfill Summary: Total={}, Unique={}, Duplicates={}, Failed={}",
+        unique_count + duplicate_count + failed,
+        unique_count,
+        duplicate_count,
+        failed
+    );
+
+    if duplicate_count > 0 {
+        log::info!(
+            "   Deduplication rate: {:.1}% of backfilled videos were duplicates",
+            (duplicate_count as f64 / (unique_count + duplicate_count) as f64) * 100.0
+        );
+    }
+
+    Ok(IngestPhashResponse {
+        total_processed: (unique_count + duplicate_count + failed),
+        unique_count,
+        duplicate_count,
+        failed,
+    })
+}
+
+#[cfg(not(feature = "local-bin"))]
 async fn fetch_unprocessed_videos(
     state: &AppState,
     req: &IngestPhashRequest,
@@ -208,6 +342,76 @@ async fn fetch_unprocessed_videos(
 }
 
 #[cfg(not(feature = "local-bin"))]
+async fn fetch_unique_videos_for_backfill(
+    state: &AppState,
+    req: &IngestPhashRequest,
+) -> Result<Vec<(String, String)>> {
+    let query = format!(
+        "SELECT video_id, phash
+         FROM
+         (
+          SELECT
+              DISTINCT t1.video_id,
+              t2.phash
+            FROM
+              `hot-or-not-feed-intelligence`.`yral_ds`.`video_unique` AS t1
+            INNER JOIN
+              `hot-or-not-feed-intelligence`.`yral_ds`.`videohash_phash` AS t2
+            ON
+              t1.video_id = t2.video_id
+         )
+         WHERE video_id NOT IN (
+           SELECT video_id
+           FROM `hot-or-not-feed-intelligence.yral_ds.video_dedup_status`
+         )
+         LIMIT {}",
+        req.limit
+    );
+
+    log::debug!("Executing BigQuery backfill query: {}", query);
+
+    let request = QueryRequest {
+        query,
+        ..Default::default()
+    };
+
+    let response = state
+        .bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await
+        .context("Failed to execute BigQuery backfill query")?;
+
+    let mut videos = Vec::new();
+
+    if let Some(rows) = response.rows.as_ref() {
+        for row in rows {
+            if row.f.len() < 2 {
+                continue;
+            }
+
+            let video_id = match &row.f[0].v {
+                Value::String(s) => s.clone(),
+                _ => continue,
+            };
+
+            let phash = match &row.f[1].v {
+                Value::String(s) => s.clone(),
+                _ => continue,
+            };
+
+            videos.push((video_id, phash));
+        }
+    }
+
+    log::info!(
+        "Fetched {} unique videos from BigQuery for backfill",
+        videos.len()
+    );
+    Ok(videos)
+}
+
+#[cfg(not(feature = "local-bin"))]
 async fn has_any_processed_videos(state: &AppState) -> Result<bool> {
     let query = "SELECT COUNT(*) as count FROM `hot-or-not-feed-intelligence.yral_ds.video_dedup_status` LIMIT 1";
 
@@ -240,6 +444,48 @@ async fn has_any_processed_videos(state: &AppState) -> Result<bool> {
 }
 
 #[cfg(not(feature = "local-bin"))]
+async fn check_exact_duplicate_in_redis(
+    redis_pool: &bb8::Pool<bb8_redis::RedisConnectionManager>,
+    phash: &str,
+) -> Result<Option<String>> {
+    let mut conn = redis_pool
+        .get()
+        .await
+        .context("Failed to get Redis connection")?;
+
+    let key = format!("video_phash:{}", phash);
+    let result: Option<String> = redis::cmd("GET")
+        .arg(&key)
+        .query_async(&mut *conn)
+        .await
+        .context("Failed to query Redis for phash")?;
+
+    Ok(result)
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn store_unique_phash_in_redis(
+    redis_pool: &bb8::Pool<bb8_redis::RedisConnectionManager>,
+    phash: &str,
+    video_id: &str,
+) -> Result<()> {
+    let mut conn = redis_pool
+        .get()
+        .await
+        .context("Failed to get Redis connection")?;
+
+    let key = format!("video_phash:{}", phash);
+    redis::cmd("SET")
+        .arg(&key)
+        .arg(video_id)
+        .query_async::<()>(&mut *conn)
+        .await
+        .context("Failed to store phash in Redis")?;
+
+    Ok(())
+}
+
+#[cfg(not(feature = "local-bin"))]
 async fn process_single_video(
     state: &AppState,
     milvus_client: &MilvusClient,
@@ -248,10 +494,43 @@ async fn process_single_video(
 ) -> Result<bool> {
     const HAMMING_THRESHOLD: u32 = 10;
 
-    // 1. Check if collection has any data (to avoid SDK panic on empty collection)
-    let collection_has_data = has_any_processed_videos(state).await.unwrap_or(false); // Default to false if query fails
+    // TIER 1: Check Redis for exact match (FAST - <1ms)
+    log::debug!("Tier 1: Checking Redis for exact phash match");
+    if let Some(existing_video_id) =
+        check_exact_duplicate_in_redis(&state.leaderboard_redis_pool, phash).await?
+    {
+        log::info!(
+            "⚡ EXACT DUPLICATE (Redis): Video {} has identical phash to {}",
+            video_id,
+            existing_video_id
+        );
 
-    // 2. Search for similar videos in Milvus (skip if collection is empty)
+        // Record in BigQuery as exact duplicate (distance = 0)
+        store_dedup_status(
+            state,
+            video_id,
+            phash,
+            false, // is_unique = false
+            Some(existing_video_id),
+            Some(0), // hamming_distance = 0 (exact match)
+        )
+        .await
+        .context("Failed to store dedup status")?;
+
+        return Ok(false); // Not unique (is duplicate)
+    }
+
+    log::debug!("Tier 1: No exact match in Redis");
+
+    // TIER 2: Check Milvus for similar matches (SLOWER - 10-50ms)
+    log::debug!(
+        "Tier 2: Checking Milvus for similar videos (Hamming distance < {})",
+        HAMMING_THRESHOLD
+    );
+
+    // Check if collection has any data (to avoid SDK panic on empty collection)
+    let collection_has_data = has_any_processed_videos(state).await.unwrap_or(false);
+
     let similar_videos = if collection_has_data {
         milvus::search_similar_videos(milvus_client, phash, HAMMING_THRESHOLD)
             .await
@@ -268,9 +547,8 @@ async fn process_single_video(
     let (duplicate_of, hamming_distance) = if is_duplicate {
         let closest = &similar_videos[0];
 
-        // Print duplicate match information
         log::info!(
-            "🔍 DUPLICATE FOUND: Video {} matches {} with Hamming distance {}",
+            "🔍 SIMILAR DUPLICATE (Milvus): Video {} matches {} with Hamming distance {}",
             video_id,
             closest.video_id,
             closest.hamming_distance
@@ -297,13 +575,32 @@ async fn process_single_video(
         (None, None)
     };
 
-    // 3. Insert into Milvus (even if duplicate, for future searches)
-    let created_at = chrono::Utc::now().timestamp();
-    milvus::insert_video_hash(milvus_client, video_id, phash, created_at)
-        .await
-        .context("Failed to insert into Milvus")?;
+    // 3. Store in Redis + Milvus (ONLY if unique)
+    if !is_duplicate {
+        log::info!(
+            "✨ UNIQUE: Video {} has a unique phash, storing in Redis + Milvus",
+            video_id
+        );
 
-    // 4. Record status in BigQuery
+        let created_at = chrono::Utc::now().timestamp();
+
+        // Store in Milvus (only unique hashes)
+        milvus::insert_video_hash(milvus_client, video_id, phash, created_at)
+            .await
+            .context("Failed to insert into Milvus")?;
+
+        // Store in Redis (only unique hashes)
+        store_unique_phash_in_redis(&state.leaderboard_redis_pool, phash, video_id)
+            .await
+            .context("Failed to store phash in Redis")?;
+    } else {
+        log::debug!(
+            "Video {} is a duplicate, NOT storing in Redis/Milvus",
+            video_id
+        );
+    }
+
+    // 4. Record status in BigQuery (ALL videos - both unique and duplicates)
     store_dedup_status(
         state,
         video_id,
