@@ -23,11 +23,22 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Cache and Install prereqs
-        uses: awalsh128/cache-apt-pkgs-action@v1
-        with:
-          packages: protobuf-compiler
-          version: 1.0 # cache version, for manual invalidation
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler \
+            ffmpeg \
+            libavutil-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libavdevice-dev \
+            libavcodec-dev \
+            libswscale-dev \
+            libswresample-dev \
+            libopenblas-dev \
+            libblas-dev \
+            liblapack-dev
 
       # - name: Setup Go
       #   uses: actions/setup-go@v5
@@ -55,6 +66,8 @@ jobs:
         run: cargo fmt --check
 
       - name: Build
+        env:
+          RUSTFLAGS: "-C link-arg=-Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -L /usr/lib/x86_64-linux-gnu -l blas -l lapack"
         run: cargo build --release --bin icp-off-chain-agent --target x86_64-unknown-linux-gnu --features prod-bin
       # - name: Run tests
       #   run: cargo test --verbose

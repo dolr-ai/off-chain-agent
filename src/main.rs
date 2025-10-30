@@ -42,6 +42,8 @@ mod events;
 pub mod leaderboard;
 pub mod metrics;
 mod middleware;
+#[cfg(not(feature = "local-bin"))]
+mod milvus;
 mod offchain_service;
 pub mod pipeline;
 mod posts;
@@ -102,6 +104,10 @@ async fn main_impl() -> Result<()> {
         .nest(
             "/api/v2/posts",
             posts::posts_router_v2(shared_state.clone()),
+        )
+        .nest(
+            "/api/v1/videos",
+            duplicate_video::router::video_router(shared_state.clone()),
         )
         .split_for_parts();
 
@@ -175,6 +181,9 @@ async fn main_impl() -> Result<()> {
 }
 
 fn main() {
+    // Initialize ffmpeg
+    ffmpeg_next::init().expect("Failed to initialize ffmpeg");
+
     // Initialize the rustls crypto provider
     rustls::crypto::ring::default_provider()
         .install_default()
