@@ -2,23 +2,139 @@ use crate::app_state::AppState;
 use crate::milvus::{self, Client as MilvusClient};
 use anyhow::{Context, Result};
 use axum::{extract::State, http::StatusCode, Json};
+use futures::stream::{self, StreamExt};
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use google_cloud_bigquery::http::tabledata::list::Value;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::instrument;
 use utoipa::ToSchema;
+
+/// Performance metrics for tracking operation timings
+#[cfg(not(feature = "local-bin"))]
+#[derive(Debug, Default)]
+struct OperationMetrics {
+    redis_check_times: Vec<u128>,     // microseconds
+    milvus_search_times: Vec<u128>,   // microseconds
+    milvus_insert_times: Vec<u128>,   // microseconds
+    redis_insert_times: Vec<u128>,    // microseconds
+    bigquery_insert_times: Vec<u128>, // microseconds
+}
+
+#[cfg(not(feature = "local-bin"))]
+impl OperationMetrics {
+    fn merge(&mut self, other: OperationMetrics) {
+        self.redis_check_times.extend(other.redis_check_times);
+        self.milvus_search_times.extend(other.milvus_search_times);
+        self.milvus_insert_times.extend(other.milvus_insert_times);
+        self.redis_insert_times.extend(other.redis_insert_times);
+        self.bigquery_insert_times
+            .extend(other.bigquery_insert_times);
+    }
+
+    fn log_summary(&self) {
+        log::info!("📊 Performance Metrics (all times in microseconds):");
+
+        if !self.redis_check_times.is_empty() {
+            let total: u128 = self.redis_check_times.iter().sum();
+            let avg = total / self.redis_check_times.len() as u128;
+            let min = *self.redis_check_times.iter().min().unwrap();
+            let max = *self.redis_check_times.iter().max().unwrap();
+            log::info!(
+                "  Redis Check: count={}, total={}µs ({:.2}ms), avg={}µs, min={}µs, max={}µs",
+                self.redis_check_times.len(),
+                total,
+                total as f64 / 1000.0,
+                avg,
+                min,
+                max
+            );
+        }
+
+        if !self.milvus_search_times.is_empty() {
+            let total: u128 = self.milvus_search_times.iter().sum();
+            let avg = total / self.milvus_search_times.len() as u128;
+            let min = *self.milvus_search_times.iter().min().unwrap();
+            let max = *self.milvus_search_times.iter().max().unwrap();
+            log::info!(
+                "  Milvus Search: count={}, total={}µs ({:.2}ms), avg={}µs, min={}µs, max={}µs",
+                self.milvus_search_times.len(),
+                total,
+                total as f64 / 1000.0,
+                avg,
+                min,
+                max
+            );
+        }
+
+        if !self.milvus_insert_times.is_empty() {
+            let total: u128 = self.milvus_insert_times.iter().sum();
+            let avg = total / self.milvus_insert_times.len() as u128;
+            let min = *self.milvus_insert_times.iter().min().unwrap();
+            let max = *self.milvus_insert_times.iter().max().unwrap();
+            log::info!(
+                "  Milvus Insert: count={}, total={}µs ({:.2}ms), avg={}µs, min={}µs, max={}µs",
+                self.milvus_insert_times.len(),
+                total,
+                total as f64 / 1000.0,
+                avg,
+                min,
+                max
+            );
+        }
+
+        if !self.redis_insert_times.is_empty() {
+            let total: u128 = self.redis_insert_times.iter().sum();
+            let avg = total / self.redis_insert_times.len() as u128;
+            let min = *self.redis_insert_times.iter().min().unwrap();
+            let max = *self.redis_insert_times.iter().max().unwrap();
+            log::info!(
+                "  Redis Insert: count={}, total={}µs ({:.2}ms), avg={}µs, min={}µs, max={}µs",
+                self.redis_insert_times.len(),
+                total,
+                total as f64 / 1000.0,
+                avg,
+                min,
+                max
+            );
+        }
+
+        if !self.bigquery_insert_times.is_empty() {
+            let total: u128 = self.bigquery_insert_times.iter().sum();
+            let avg = total / self.bigquery_insert_times.len() as u128;
+            let min = *self.bigquery_insert_times.iter().min().unwrap();
+            let max = *self.bigquery_insert_times.iter().max().unwrap();
+            log::info!(
+                "  BigQuery Insert: count={}, total={}µs ({:.2}ms), avg={}µs, min={}µs, max={}µs",
+                self.bigquery_insert_times.len(),
+                total,
+                total as f64 / 1000.0,
+                avg,
+                min,
+                max
+            );
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct IngestPhashRequest {
     #[serde(default = "default_limit")]
     pub limit: u32,
+
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
 }
 
 fn default_limit() -> u32 {
     1000
+}
+
+fn default_concurrency() -> usize {
+    1 // Process 1 videos concurrently by default
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -47,7 +163,11 @@ pub async fn ingest_phash_to_milvus_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<IngestPhashRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    log::info!("Starting Milvus ingestion (async): limit={}", req.limit);
+    log::info!(
+        "Starting Milvus ingestion (async): limit={}, concurrency={}",
+        req.limit,
+        req.concurrency
+    );
 
     #[cfg(feature = "local-bin")]
     {
@@ -108,8 +228,9 @@ pub async fn backfill_unique_videos_handler(
     Json(req): Json<IngestPhashRequest>,
 ) -> Result<StatusCode, StatusCode> {
     log::info!(
-        "Starting backfill from video_unique table (async): limit={}",
-        req.limit
+        "Starting backfill from video_unique table (async): limit={}, concurrency={}",
+        req.limit,
+        req.concurrency
     );
 
     #[cfg(feature = "local-bin")]
@@ -171,24 +292,48 @@ async fn process_batch(
         });
     }
 
-    log::info!("Processing {} videos", videos.len());
+    log::info!(
+        "Processing {} videos with concurrency={}",
+        videos.len(),
+        req.concurrency
+    );
 
+    // 2. Process videos concurrently
+    let results: Vec<_> = stream::iter(videos)
+        .map(|(video_id, phash)| {
+            let state = state.clone();
+            let milvus_client = milvus_client.clone();
+
+            async move {
+                let mut task_metrics = OperationMetrics::default();
+                let result = process_single_video(
+                    &state,
+                    &milvus_client,
+                    &video_id,
+                    &phash,
+                    &mut task_metrics,
+                )
+                .await;
+                (result, task_metrics)
+            }
+        })
+        .buffer_unordered(req.concurrency)
+        .collect()
+        .await;
+
+    // 3. Aggregate results
+    let mut metrics = OperationMetrics::default();
     let mut unique_count = 0;
     let mut duplicate_count = 0;
     let mut failed = 0;
 
-    // 2. Process each video
-    for (video_id, phash) in videos {
-        match process_single_video(state, milvus_client, &video_id, &phash).await {
-            Ok(is_unique) => {
-                if is_unique {
-                    unique_count += 1;
-                } else {
-                    duplicate_count += 1;
-                }
-            }
+    for (result, task_metrics) in results {
+        metrics.merge(task_metrics);
+        match result {
+            Ok(true) => unique_count += 1,
+            Ok(false) => duplicate_count += 1,
             Err(e) => {
-                log::error!("Failed to process video {}: {}", video_id, e);
+                log::error!("Failed to process video: {}", e);
                 failed += 1;
             }
         }
@@ -209,6 +354,9 @@ async fn process_batch(
             (duplicate_count as f64 / (unique_count + duplicate_count) as f64) * 100.0
         );
     }
+
+    // Log performance metrics
+    metrics.log_summary();
 
     Ok(IngestPhashResponse {
         total_processed: (unique_count + duplicate_count + failed),
@@ -237,24 +385,48 @@ async fn process_backfill_batch(
         });
     }
 
-    log::info!("Backfilling {} unique videos", videos.len());
+    log::info!(
+        "Backfilling {} unique videos with concurrency={}",
+        videos.len(),
+        req.concurrency
+    );
 
+    // 2. Process videos concurrently
+    let results: Vec<_> = stream::iter(videos)
+        .map(|(video_id, phash)| {
+            let state = state.clone();
+            let milvus_client = milvus_client.clone();
+
+            async move {
+                let mut task_metrics = OperationMetrics::default();
+                let result = process_single_video(
+                    &state,
+                    &milvus_client,
+                    &video_id,
+                    &phash,
+                    &mut task_metrics,
+                )
+                .await;
+                (result, task_metrics)
+            }
+        })
+        .buffer_unordered(req.concurrency)
+        .collect()
+        .await;
+
+    // 3. Aggregate results
+    let mut metrics = OperationMetrics::default();
     let mut unique_count = 0;
     let mut duplicate_count = 0;
     let mut failed = 0;
 
-    // 2. Process each video with two-tier Redis + Milvus logic
-    for (video_id, phash) in videos {
-        match process_single_video(state, milvus_client, &video_id, &phash).await {
-            Ok(is_unique) => {
-                if is_unique {
-                    unique_count += 1;
-                } else {
-                    duplicate_count += 1;
-                }
-            }
+    for (result, task_metrics) in results {
+        metrics.merge(task_metrics);
+        match result {
+            Ok(true) => unique_count += 1,
+            Ok(false) => duplicate_count += 1,
             Err(e) => {
-                log::error!("Failed to process video {}: {}", video_id, e);
+                log::error!("Failed to process video: {}", e);
                 failed += 1;
             }
         }
@@ -275,6 +447,9 @@ async fn process_backfill_batch(
             (duplicate_count as f64 / (unique_count + duplicate_count) as f64) * 100.0
         );
     }
+
+    // Log performance metrics
+    metrics.log_summary();
 
     Ok(IngestPhashResponse {
         total_processed: (unique_count + duplicate_count + failed),
@@ -491,14 +666,17 @@ async fn process_single_video(
     milvus_client: &MilvusClient,
     video_id: &str,
     phash: &str,
+    metrics: &mut OperationMetrics,
 ) -> Result<bool> {
     const HAMMING_THRESHOLD: u32 = 10;
 
     // TIER 1: Check Redis for exact match (FAST - <1ms)
     log::debug!("Tier 1: Checking Redis for exact phash match");
-    if let Some(existing_video_id) =
-        check_exact_duplicate_in_redis(&state.leaderboard_redis_pool, phash).await?
-    {
+    let start = Instant::now();
+    let redis_result = check_exact_duplicate_in_redis(&state.leaderboard_redis_pool, phash).await?;
+    metrics.redis_check_times.push(start.elapsed().as_micros());
+
+    if let Some(existing_video_id) = redis_result {
         log::info!(
             "⚡ EXACT DUPLICATE (Redis): Video {} has identical phash to {}",
             video_id,
@@ -506,6 +684,7 @@ async fn process_single_video(
         );
 
         // Record in BigQuery as exact duplicate (distance = 0)
+        let start = Instant::now();
         store_dedup_status(
             state,
             video_id,
@@ -516,6 +695,9 @@ async fn process_single_video(
         )
         .await
         .context("Failed to store dedup status")?;
+        metrics
+            .bigquery_insert_times
+            .push(start.elapsed().as_micros());
 
         return Ok(false); // Not unique (is duplicate)
     }
@@ -531,6 +713,7 @@ async fn process_single_video(
     // Check if collection has any data (to avoid SDK panic on empty collection)
     let collection_has_data = has_any_processed_videos(state).await.unwrap_or(false);
 
+    let start = Instant::now();
     let similar_videos = if collection_has_data {
         milvus::search_similar_videos(milvus_client, phash, HAMMING_THRESHOLD)
             .await
@@ -542,6 +725,9 @@ async fn process_single_video(
         );
         Vec::new()
     };
+    metrics
+        .milvus_search_times
+        .push(start.elapsed().as_micros());
 
     let is_duplicate = !similar_videos.is_empty();
     let (duplicate_of, hamming_distance) = if is_duplicate {
@@ -553,19 +739,6 @@ async fn process_single_video(
             closest.video_id,
             closest.hamming_distance
         );
-
-        // Print all matches if there are multiple
-        if similar_videos.len() > 1 {
-            log::info!("  Additional matches for {}:", video_id);
-            for (idx, similar) in similar_videos.iter().skip(1).enumerate() {
-                log::info!(
-                    "    {}. {} (distance: {})",
-                    idx + 2,
-                    similar.video_id,
-                    similar.hamming_distance
-                );
-            }
-        }
 
         (
             Some(closest.video_id.clone()),
@@ -585,14 +758,20 @@ async fn process_single_video(
         let created_at = chrono::Utc::now().timestamp();
 
         // Store in Milvus (only unique hashes)
+        let start = Instant::now();
         milvus::insert_video_hash(milvus_client, video_id, phash, created_at)
             .await
             .context("Failed to insert into Milvus")?;
+        metrics
+            .milvus_insert_times
+            .push(start.elapsed().as_micros());
 
         // Store in Redis (only unique hashes)
+        let start = Instant::now();
         store_unique_phash_in_redis(&state.leaderboard_redis_pool, phash, video_id)
             .await
             .context("Failed to store phash in Redis")?;
+        metrics.redis_insert_times.push(start.elapsed().as_micros());
     } else {
         log::debug!(
             "Video {} is a duplicate, NOT storing in Redis/Milvus",
@@ -601,6 +780,7 @@ async fn process_single_video(
     }
 
     // 4. Record status in BigQuery (ALL videos - both unique and duplicates)
+    let start = Instant::now();
     store_dedup_status(
         state,
         video_id,
@@ -611,6 +791,9 @@ async fn process_single_video(
     )
     .await
     .context("Failed to store dedup status")?;
+    metrics
+        .bigquery_insert_times
+        .push(start.elapsed().as_micros());
 
     log::debug!(
         "Processed video {}: is_unique={}, duplicate_of={:?}, distance={:?}",

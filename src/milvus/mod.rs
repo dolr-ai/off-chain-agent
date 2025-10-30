@@ -231,12 +231,12 @@ pub async fn search_similar_videos(
     let mut search_option = SearchOption::new();
     search_option.add_param("nprobe", serde_json::json!(10));
 
-    // Search for top 10 nearest neighbors (we'll filter by threshold later)
+    // Search for top 1 nearest neighbor (most similar match)
     let results = collection
         .search(
             query_vectors,
             "phash_vector",
-            10, // top_k
+            1, // top_k - only need the closest match for deduplication
             MetricType::HAMMING,
             vec!["video_id".to_string()],
             &search_option,
