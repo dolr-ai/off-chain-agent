@@ -23,11 +23,22 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Cache and Install prereqs
-        uses: awalsh128/cache-apt-pkgs-action@v1
-        with:
-          packages: protobuf-compiler ffmpeg libavutil-dev libavformat-dev libavfilter-dev libavdevice-dev libavcodec-dev libswscale-dev libswresample-dev libblas-dev liblapack-dev libblas3 liblapack3
-          version: 1.3 # cache version, for manual invalidation (bumped for blas/lapack runtime libs)
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler \
+            ffmpeg \
+            libavutil-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libavdevice-dev \
+            libavcodec-dev \
+            libswscale-dev \
+            libswresample-dev \
+            libopenblas-dev \
+            libblas-dev \
+            liblapack-dev
 
       # - name: Setup Go
       #   uses: actions/setup-go@v5
