@@ -49,6 +49,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Clippy check
+        env:
+          RUSTFLAGS: "-C link-arg=-Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -L /usr/lib/x86_64-linux-gnu -l blas -l lapack"
         run: cargo clippy --no-deps --release -- --deny warnings --allow deprecated
 
       - name: Formatting check
