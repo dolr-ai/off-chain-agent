@@ -4,12 +4,17 @@ use tracing::info;
 use videogen_common::{VideoGenError, VideoGenInput, VideoGenResponse};
 
 use crate::app_state::AppState;
-use crate::consts::{REPLICATE_API_URL, REPLICATE_WAN2_5_MODEL};
+use crate::consts::{OFF_CHAIN_AGENT_URL, REPLICATE_API_URL, REPLICATE_WAN2_5_MODEL};
+use crate::videogen::replicate_webhook::generate_webhook_url;
 
 #[derive(Serialize)]
 pub struct ReplicatePredictionRequest {
     pub version: String,
     pub input: Wan25Input,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webhook: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -37,9 +42,10 @@ pub struct ReplicatePredictionResponse {
     pub error: Option<String>,
 }
 
-pub async fn generate(
+pub async fn generate_with_context(
     input: VideoGenInput,
     app_state: &AppState,
+    context: &crate::videogen::qstash_types::QstashVideoGenRequest,
 ) -> Result<VideoGenResponse, VideoGenError> {
     let VideoGenInput::Wan25(model) = input else {
         return Err(VideoGenError::InvalidInput(
@@ -54,7 +60,12 @@ pub async fn generate(
 
     let client = reqwest::Client::new();
 
-    // Build request with hardcoded parameters
+    let webhook_url = generate_webhook_url(
+        OFF_CHAIN_AGENT_URL.as_str(),
+        &context.request_key.principal.to_string(),
+        context.request_key.counter,
+    );
+
     let request = ReplicatePredictionRequest {
         version: REPLICATE_WAN2_5_MODEL.to_string(),
         input: Wan25Input {
@@ -65,6 +76,8 @@ pub async fn generate(
             negative_prompt: Some("".to_string()),
             enable_prompt_expansion: true,
         },
+        webhook: Some(webhook_url),
+        metadata: None,
     };
 
     // Submit prediction
@@ -104,16 +117,19 @@ pub async fn generate(
         prediction_response.id
     );
 
-    // Poll for completion
-    let video_url = poll_for_completion(&prediction_response.id, api_key).await?;
-
+    // With webhooks, return immediately - the webhook will handle completion
+    info!(
+        "Using webhook for Wan 2.5 prediction {}, returning immediately",
+        prediction_response.id
+    );
     Ok(VideoGenResponse {
         operation_id: prediction_response.id,
-        video_url,
+        video_url: String::new(), // Will be filled by webhook
         provider: "wan2_5".to_string(),
     })
 }
 
+#[allow(dead_code)]
 async fn poll_for_completion(prediction_id: &str, api_key: &str) -> Result<String, VideoGenError> {
     let client = reqwest::Client::new();
     let status_url = format!("{REPLICATE_API_URL}/predictions/{prediction_id}");
