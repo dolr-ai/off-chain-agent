@@ -23,6 +23,10 @@
             darwin.apple_sdk.frameworks.Foundation
             pkgs.darwin.libiconv
           ] else []);
+
+        shellHook = ''
+          ./setup_git_hook.sh
+        '';
       };
     };
 }
