@@ -1,10 +1,14 @@
+use aws_config::sso::token;
 use axum::http::StatusCode;
 use candid::Principal;
 use std::sync::Arc;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
-use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequest, VideoGenRequestKey};
+use yral_canisters_client::rate_limits::{
+    RateLimits, TokenType as CanisterTokenType, VideoGenRequest, VideoGenRequestKey,
+};
 use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 
+use crate::canister;
 use crate::{
     app_state::AppState,
     consts::{RATE_LIMITS_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID},
@@ -176,13 +180,20 @@ pub async fn verify_rate_limit_and_create_request_v1(
     // Create rate limits client
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
 
-    // Use the v1 method that handles both rate limit check and request creation
+    let canister_token_type = match token_type {
+        TokenType::Free => CanisterTokenType::Free,
+        TokenType::Sats => CanisterTokenType::Sats,
+        TokenType::Dolr => CanisterTokenType::Dolr,
+    };
+
+    // Use the v2 method that handles both rate limit check and request creation
     let request_key_result = rate_limits_client
-        .create_video_generation_request_v_1(
+        .create_video_generation_request_v_2(
             user_principal,
             model.to_string(),
             prompt.to_string(),
             property.to_string(),
+            canister_token_type,
             is_registered,
             is_paid,
             payment_amount_str,

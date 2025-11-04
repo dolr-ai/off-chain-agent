@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use candid::Principal;
+use cloud_storage::Token;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::instrument;
@@ -16,6 +17,8 @@ use crate::{
         webhook_signature::{verify_webhook_signature, WebhookHeaders},
     },
 };
+
+use yral_canisters_client::rate_limits::TokenType as CanisterTokenType;
 
 /// Replicate webhook payload structure
 #[derive(Debug, Deserialize, Serialize)]
@@ -163,6 +166,15 @@ pub async fn handle_replicate_webhook(
             // Convert to callback result
             let callback_result = convert_replicate_status(&payload);
 
+            let token_type = match video_gen_request.token_type {
+                Some(token_type_canister) => match token_type_canister {
+                    CanisterTokenType::Free => TokenType::Free,
+                    CanisterTokenType::Sats => TokenType::Sats,
+                    CanisterTokenType::Dolr => TokenType::Dolr,
+                },
+                None => TokenType::Free,
+            };
+
             // Create callback data compatible with existing system
             let callback = QstashVideoGenCallback {
                 request_key: crate::videogen::VideoGenRequestKey {
@@ -174,7 +186,7 @@ pub async fn handle_replicate_webhook(
                 deducted_amount: video_gen_request
                     .payment_amount
                     .and_then(|a| a.parse::<u64>().ok()),
-                token_type: TokenType::Free, //TODO: verify once the videogen is updated.
+                token_type,
             };
 
             // Use existing callback handler logic
