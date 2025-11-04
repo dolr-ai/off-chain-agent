@@ -58,6 +58,7 @@ fn parse_qstash_callback(
 }
 
 /// Determine status based on QStash response and callback result
+#[allow(dead_code)]
 fn determine_callback_status(
     qstash_status: u16,
     result: &VideoGenCallbackResult,
@@ -223,12 +224,13 @@ pub async fn handle_video_gen_callback(
 
     // For QStash callbacks, we need to determine if it should decrement based on QStash status
     let should_force_failure = wrapper.status != 200;
-    
+
     let mut modified_callback = callback;
     if should_force_failure {
         // Override the result to be a failure if QStash request failed
         modified_callback.result = VideoGenCallbackResult::Failure(format!(
-            "QStash request failed with status: {}", wrapper.status
+            "QStash request failed with status: {}",
+            wrapper.status
         ));
     }
 

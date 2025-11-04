@@ -1,4 +1,3 @@
-use aws_config::sso::token;
 use axum::http::StatusCode;
 use candid::Principal;
 use std::sync::Arc;
@@ -8,7 +7,6 @@ use yral_canisters_client::rate_limits::{
 };
 use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 
-use crate::canister;
 use crate::{
     app_state::AppState,
     consts::{RATE_LIMITS_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID},
@@ -101,7 +99,7 @@ pub async fn fetch_request(
 
     let videogen_request_key = VideoGenRequestKey {
         principal: user_principal,
-        counter: counter,
+        counter,
     };
 
     let request_result = rate_limits_client

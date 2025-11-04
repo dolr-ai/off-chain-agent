@@ -63,7 +63,7 @@ pub async fn generate_with_context(
     // Check if we should use webhook (when context is provided)
 
     let webhook_url = generate_webhook_url(
-        &OFF_CHAIN_AGENT_URL.as_str(),
+        OFF_CHAIN_AGENT_URL.as_str(),
         &context.request_key.principal.to_string(),
         context.request_key.counter,
     );

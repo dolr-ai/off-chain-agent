@@ -129,6 +129,7 @@ pub async fn generate_with_context(
     })
 }
 
+#[allow(dead_code)]
 async fn poll_for_completion(prediction_id: &str, api_key: &str) -> Result<String, VideoGenError> {
     let client = reqwest::Client::new();
     let status_url = format!("{REPLICATE_API_URL}/predictions/{prediction_id}");

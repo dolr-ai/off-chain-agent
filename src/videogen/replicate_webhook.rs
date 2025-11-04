@@ -4,7 +4,6 @@ use axum::{
     Json,
 };
 use candid::Principal;
-use cloud_storage::Token;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::instrument;
