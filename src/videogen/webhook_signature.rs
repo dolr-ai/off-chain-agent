@@ -100,10 +100,10 @@ pub fn verify_webhook_signature(
     mac.update(signed_content.as_bytes());
     let generated_signature = hex::encode(mac.finalize().into_bytes());
 
-    // Parse expected signature (remove "v1=" prefix if present)
+    // Parse expected signature (remove "v1," prefix if present)
     let expected_signature = headers
         .signature
-        .strip_prefix("v1=")
+        .strip_prefix("v1,")
         .unwrap_or(&headers.signature);
 
     // Compare signatures in constant time
