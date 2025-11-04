@@ -176,7 +176,7 @@ pub async fn queue_to_qstash_with_rollback(
             if uses_webhook {
                 None
             } else {
-                Some(callback_url)
+                Some(&callback_url)
             },
         )
         .await
