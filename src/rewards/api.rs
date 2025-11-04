@@ -19,6 +19,65 @@ use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+#[cfg(not(feature = "local-bin"))]
+use google_cloud_bigquery::http::job::query::QueryRequest;
+
+/// Query BigQuery to get post_id from video_id
+#[cfg(not(feature = "local-bin"))]
+#[allow(dead_code)]
+async fn query_post_id_from_bigquery(
+    bigquery_client: &google_cloud_bigquery::client::Client,
+    video_id: &str,
+) -> Option<String> {
+    let query = format!(
+        "SELECT JSON_EXTRACT_SCALAR(params, '$.post_id') as post_id \
+         FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics` \
+         WHERE event = 'video_upload_successful' \
+         AND JSON_EXTRACT_SCALAR(params, '$.video_id') = '{}' \
+         LIMIT 1",
+        video_id
+    );
+
+    let request = QueryRequest {
+        query,
+        ..Default::default()
+    };
+
+    match bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await
+    {
+        Ok(result) => {
+            let rows = result.rows.unwrap_or_default();
+            if rows.is_empty() {
+                log::warn!("No post_id found in BigQuery for video_id: {}", video_id);
+                return None;
+            }
+
+            // Extract post_id from first row
+            let row = &rows[0];
+            match &row.f[0].v {
+                google_cloud_bigquery::http::tabledata::list::Value::String(s) => {
+                    log::debug!("Found post_id {} for video_id {}", s, video_id);
+                    Some(s.clone())
+                }
+                _ => {
+                    log::warn!(
+                        "Unexpected value type for post_id in BigQuery for video_id: {}",
+                        video_id
+                    );
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to query BigQuery for post_id: {}", e);
+            None
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct PaginationParams {
     #[serde(default = "default_limit")]
@@ -57,6 +116,22 @@ pub struct ConfigResponse {
     pub config: Option<RewardConfig>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardConfigV2 {
+    pub reward_amount_inr: f64,
+    pub reward_amount_usd: f64,
+    pub view_milestone: u64,
+    pub min_watch_duration: f64,
+    pub fraud_threshold: usize,
+    pub shadow_ban_duration: u64,
+    pub config_version: u64,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ConfigResponseV2 {
+    pub config: Option<RewardConfigV2>,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct BulkVideoStatsRequest {
     pub video_ids: Vec<String>,
@@ -90,6 +165,7 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_user_reward_history))
         .routes(routes!(get_creator_reward_history))
         .routes(routes!(get_reward_config))
+        .routes(routes!(get_reward_config_v2))
         .routes(routes!(bulk_get_video_stats))
         .routes(routes!(bulk_get_video_stats_v2))
         .with_state(state)
@@ -263,6 +339,57 @@ async fn get_reward_config(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/config_v2",
+    tag = "rewards",
+    responses(
+        (status = 200, description = "Configuration retrieved with USD amount", body = ConfigResponseV2),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+async fn get_reward_config_v2(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ConfigResponseV2>, (StatusCode, String)> {
+    // Get config from RewardEngine (fetches from Redis)
+    let config = state.rewards_module.reward_engine.get_config().await;
+
+    // Return None if reward_amount_inr is 0 (rewards disabled)
+    if config.reward_amount_inr == 0.0 {
+        return Ok(Json(ConfigResponseV2 { config: None }));
+    }
+
+    // Get INR/USD exchange rate
+    let inr_usd_rate = state
+        .rewards_module
+        .btc_converter
+        .get_inr_usd_rate()
+        .await
+        .map_err(|e| {
+            log::error!("Failed to get INR/USD exchange rate: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get exchange rate: {}", e),
+            )
+        })?;
+
+    let reward_amount_usd = config.reward_amount_inr / inr_usd_rate;
+
+    let config_v2 = RewardConfigV2 {
+        reward_amount_inr: config.reward_amount_inr,
+        reward_amount_usd,
+        view_milestone: config.view_milestone,
+        min_watch_duration: config.min_watch_duration,
+        fraud_threshold: config.fraud_threshold,
+        shadow_ban_duration: config.shadow_ban_duration,
+        config_version: config.config_version,
+    };
+
+    Ok(Json(ConfigResponseV2 {
+        config: Some(config_v2),
+    }))
+}
+
 pub async fn update_reward_config(
     State(state): State<Arc<AppState>>,
     Json(new_config): Json<RewardConfig>,
@@ -350,6 +477,7 @@ async fn bulk_get_video_stats_v2(
                 total_count_all: 0,
                 last_milestone: 0,
             });
+
             VideoStatsV2 {
                 video_id: video_id.clone(),
                 count: stats.count,

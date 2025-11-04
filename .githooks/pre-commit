@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -e
+
+echo "Running cargo fmt check..."
+cargo fmt --check
+if [ $? -ne 0 ]; then
+  echo "cargo fmt check failed. Run 'cargo fmt' to fix formatting. Commit aborted."
+  exit 1
+fi
+
+echo "Running cargo clippy..."
+cargo clippy --no-deps --release -- --deny warnings --allow deprecated
+if [ $? -ne 0 ]; then
+  echo "cargo clippy failed. Fix clippy warnings. Commit aborted."
+  exit 1
+fi
+
+
+echo "All pre-commit checks passed!"

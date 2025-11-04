@@ -97,6 +97,18 @@ impl RewardEngine {
         event: VideoDurationWatchedPayloadV2,
         app_state: &Arc<AppState>,
     ) -> Result<()> {
+        // if event.source.is_some() {
+        log::info!(
+            "Processing video view event: {:?} ; publisher: {:?} ; user_id: {:?}",
+            event,
+            event
+                .publisher_user_id
+                .unwrap_or_else(Principal::anonymous)
+                .to_text(),
+            event.user_id.to_text()
+        );
+        // }
+
         let config = get_config(&self.redis_pool)
             .await
             .map_err(|e| {
@@ -104,24 +116,40 @@ impl RewardEngine {
                 e
             })
             .unwrap_or_default();
+        let video_id = event.video_id.as_ref().context("Missing video_id")?;
         if event.absolute_watched < config.min_watch_duration {
+            if event.client_type == Some("web".to_string()) {
+                let _ = self
+                    .view_tracker
+                    .track_view(video_id, &event.user_id, false)
+                    .await?;
+            }
+
             return Ok(());
         }
 
-        let video_id = event.video_id.as_ref().context("Missing video_id")?;
         let publisher_user_id = event
             .publisher_user_id
             .as_ref()
             .context("Missing publisher_user_id")?;
-        let is_logged_in = event.is_logged_in.unwrap_or(false);
+        let is_logged_in = event.is_logged_in.unwrap_or(true);
+
+        // Determine if we should track views based on client_type and absolute_watched
+        // Only track if client_type is "web" OR (not "web" AND absolute_watched is 3.0-4.5)
+        let should_track = match event.client_type.as_deref() {
+            Some("web") => true,
+            _ => event.absolute_watched >= 3.0 && event.absolute_watched <= 4.5,
+        };
 
         // For non-logged-in users, only track total_count_all and exit
         if !is_logged_in {
             // Track the view (only increments total_count_all)
-            let _ = self
-                .view_tracker
-                .track_view(video_id, &event.user_id, false)
-                .await?;
+            if should_track {
+                let _ = self
+                    .view_tracker
+                    .track_view(video_id, &event.user_id, false)
+                    .await?;
+            }
             return Ok(());
         }
 
@@ -131,6 +159,12 @@ impl RewardEngine {
             .is_registered_user(event.user_id, app_state)
             .await?
         {
+            if should_track {
+                let _ = self
+                    .view_tracker
+                    .track_view(video_id, &event.user_id, false)
+                    .await?;
+            }
             return Ok(());
         }
 
@@ -140,6 +174,12 @@ impl RewardEngine {
             .is_registered_user(*publisher_user_id, app_state)
             .await?
         {
+            if should_track {
+                let _ = self
+                    .view_tracker
+                    .track_view(video_id, &event.user_id, false)
+                    .await?;
+            }
             return Ok(());
         }
 

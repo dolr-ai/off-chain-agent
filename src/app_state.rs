@@ -64,7 +64,8 @@ impl AppState {
     pub async fn new(app_config: AppConfig) -> Self {
         let leaderboard_redis_pool = init_leaderboard_redis_pool().await;
         let agent = init_agent().await;
-        let mut rewards_module = RewardsModule::new(leaderboard_redis_pool.clone(), agent.clone());
+        let mut rewards_module =
+            RewardsModule::new(leaderboard_redis_pool.clone(), agent.clone()).await;
 
         // Initialize the rewards module (loads Lua scripts)
         if let Err(e) = rewards_module.initialize().await {
