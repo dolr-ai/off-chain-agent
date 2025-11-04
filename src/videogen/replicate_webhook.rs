@@ -35,7 +35,6 @@ pub struct ReplicateWebhookPayload {
 pub struct WebhookQueryParams {
     pub principal: String,
     pub counter: u64,
-    pub token_type: String,
 }
 
 /// Metadata we include in the Replicate prediction to track our internal state
