@@ -18,11 +18,25 @@ pub enum WebhookError {
 impl From<WebhookError> for (StatusCode, String) {
     fn from(error: WebhookError) -> Self {
         match error {
-            WebhookError::InvalidSignature => (StatusCode::UNAUTHORIZED, "Invalid signature".to_string()),
-            WebhookError::TimestampOutOfRange => (StatusCode::UNAUTHORIZED, "Timestamp outside acceptable range".to_string()),
-            WebhookError::MissingHeaders => (StatusCode::BAD_REQUEST, "Missing required headers".to_string()),
-            WebhookError::InvalidTimestamp => (StatusCode::BAD_REQUEST, "Invalid timestamp format".to_string()),
-            WebhookError::InvalidFormat => (StatusCode::BAD_REQUEST, "Invalid webhook format".to_string()),
+            WebhookError::InvalidSignature => {
+                (StatusCode::UNAUTHORIZED, "Invalid signature".to_string())
+            }
+            WebhookError::TimestampOutOfRange => (
+                StatusCode::UNAUTHORIZED,
+                "Timestamp outside acceptable range".to_string(),
+            ),
+            WebhookError::MissingHeaders => (
+                StatusCode::BAD_REQUEST,
+                "Missing required headers".to_string(),
+            ),
+            WebhookError::InvalidTimestamp => (
+                StatusCode::BAD_REQUEST,
+                "Invalid timestamp format".to_string(),
+            ),
+            WebhookError::InvalidFormat => (
+                StatusCode::BAD_REQUEST,
+                "Invalid webhook format".to_string(),
+            ),
         }
     }
 }
@@ -42,13 +56,13 @@ impl WebhookHeaders {
             .and_then(|v| v.to_str().ok())
             .ok_or(WebhookError::MissingHeaders)?
             .to_string();
-        
+
         let timestamp = headers
             .get("webhook-timestamp")
             .and_then(|v| v.to_str().ok())
             .ok_or(WebhookError::MissingHeaders)?
             .to_string();
-        
+
         let signature = headers
             .get("webhook-signature")
             .and_then(|v| v.to_str().ok())
@@ -73,7 +87,12 @@ pub fn verify_webhook_signature(
     validate_timestamp(&headers.timestamp)?;
 
     // Construct signed content: webhook_id.webhook_timestamp.payload
-    let signed_content = format!("{}.{}.{}", headers.id, headers.timestamp, String::from_utf8_lossy(payload));
+    let signed_content = format!(
+        "{}.{}.{}",
+        headers.id,
+        headers.timestamp,
+        String::from_utf8_lossy(payload)
+    );
 
     // Generate HMAC signature
     let mut mac = HmacSha256::new_from_slice(signing_secret.as_bytes())
@@ -82,12 +101,16 @@ pub fn verify_webhook_signature(
     let generated_signature = hex::encode(mac.finalize().into_bytes());
 
     // Parse expected signature (remove "v1=" prefix if present)
-    let expected_signature = headers.signature
+    let expected_signature = headers
+        .signature
         .strip_prefix("v1=")
         .unwrap_or(&headers.signature);
 
     // Compare signatures in constant time
-    if !constant_time_eq(expected_signature.as_bytes(), generated_signature.as_bytes()) {
+    if !constant_time_eq(
+        expected_signature.as_bytes(),
+        generated_signature.as_bytes(),
+    ) {
         return Err(WebhookError::InvalidSignature);
     }
 
@@ -130,8 +153,8 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use axum::http::{HeaderMap, HeaderName, HeaderValue};
+    use std::collections::HashMap;
 
     #[test]
     fn test_webhook_headers_extraction() {

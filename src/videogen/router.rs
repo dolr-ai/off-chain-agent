@@ -1,6 +1,6 @@
+use axum::{routing::post, Router};
 use std::sync::Arc;
 use utoipa_axum::{router::OpenApiRouter, routes};
-use axum::{routing::post, Router};
 
 use crate::{
     app_state::AppState,
@@ -26,6 +26,9 @@ pub fn videogen_router_v2<S>(state: Arc<AppState>) -> OpenApiRouter<S> {
 /// Replicate webhook router - separate from API docs since it's an internal endpoint
 pub fn replicate_webhook_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
-        .route("/webhook", post(replicate_webhook::handle_replicate_webhook))
+        .route(
+            "/webhook",
+            post(replicate_webhook::handle_replicate_webhook),
+        )
         .with_state(state)
 }
