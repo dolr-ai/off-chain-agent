@@ -174,9 +174,9 @@ pub async fn queue_to_qstash_with_rollback(
         .queue_video_generation(
             &qstash_request,
             if uses_webhook {
-                Some(&callback_url)
-            } else {
                 None
+            } else {
+                Some(callback_url)
             },
         )
         .await
