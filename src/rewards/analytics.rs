@@ -57,7 +57,6 @@ pub async fn send_btc_video_viewed_event(
             "publisher_user_id": publisher_user_id,
             "user_id": user_id_text,
             "principal": user_id_text,
-            "time": timestamp,
             "is_logged_in": is_logged_in,
             "canister_id": canister_id.map(|c| c.to_text()),
             "is_unique_view": is_unique_view,
@@ -69,6 +68,7 @@ pub async fn send_btc_video_viewed_event(
             "like_count": like_count,
             "view_count_reward_allocated": view_count_reward_allocated,
             "reward_amount_inr": reward_amount_inr,
+            "ts": timestamp,
         });
 
         if let Err(e) = send_event_internal(payload).await {
