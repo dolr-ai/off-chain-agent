@@ -18,7 +18,7 @@ use log::error;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tracing::instrument;
 use yral_ml_feed_cache::consts::{
     USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX, USER_LIKE_HISTORY_PLAIN_POST_ITEM_SUFFIX_V2,
@@ -961,30 +961,70 @@ pub async fn upload_gcs_impl(
     );
     let name = format!("{uid}.mp4");
 
-    let file = reqwest::Client::new()
-        .get(&url)
-        .send()
-        .await?
-        .bytes_stream();
+    log::info!("Downloading video from Cloudflare Stream: {}", url);
 
-    // write to GCS
-    let gcs_client = cloud_storage::Client::default();
-    let mut res_obj = gcs_client
-        .object()
-        .create_streamed("yral-videos", file, None, &name, "video/mp4")
-        .await?;
+    // Download the video bytes
+    let response = reqwest::Client::new().get(&url).send().await?;
 
-    let mut hashmap = HashMap::new();
-    hashmap.insert(
-        "publisher_user_id".to_string(),
-        publisher_user_id.to_string(),
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Failed to download video from Cloudflare Stream: HTTP {}",
+            response.status()
+        ));
+    }
+
+    let video_bytes = response.bytes().await?;
+    log::info!(
+        "Downloaded {} bytes from Cloudflare Stream",
+        video_bytes.len()
     );
-    hashmap.insert("post_id".to_string(), post_id.to_string());
-    hashmap.insert("timestamp".to_string(), timestamp_str.to_string());
-    res_obj.metadata = Some(hashmap);
 
-    // update
-    let _ = gcs_client.object().update(&res_obj).await?;
+    log::info!("Uploading video to GCS bucket 'yral-videos' as {}", name);
+
+    // Upload to GCS
+    let gcs_client = cloud_storage::Client::default();
+    gcs_client
+        .object()
+        .create("yral-videos", video_bytes.to_vec(), &name, "video/mp4")
+        .await
+        .map_err(|e| {
+            log::error!("Failed to upload to GCS: {}", e);
+            anyhow::anyhow!("GCS upload failed: {}", e)
+        })?;
+
+    log::info!("Reading object from GCS to update metadata");
+
+    // Now update metadata since create doesn't accept it
+    let mut obj = gcs_client
+        .object()
+        .read("yral-videos", &name)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to read object from GCS: {}", e);
+            anyhow::anyhow!("Failed to read GCS object for metadata update: {}", e)
+        })?;
+
+    obj.metadata = Some(
+        [
+            (
+                "publisher_user_id".to_string(),
+                publisher_user_id.to_string(),
+            ),
+            ("post_id".to_string(), post_id.to_string()),
+            ("timestamp".to_string(), timestamp_str.to_string()),
+        ]
+        .into_iter()
+        .collect(),
+    );
+
+    log::info!("Updating GCS object metadata");
+
+    gcs_client.object().update(&obj).await.map_err(|e| {
+        log::error!("Failed to update GCS metadata: {}", e);
+        anyhow::anyhow!("GCS metadata update failed: {}", e)
+    })?;
+
+    log::info!("Successfully uploaded video {} to GCS with metadata", uid);
 
     Ok(())
 }
