@@ -10,6 +10,7 @@ pub mod router;
 pub mod signature;
 pub mod token_operations;
 pub mod types;
+pub mod upload_ai_generated_video_to_canister_in_drafts;
 pub mod utils;
 pub mod webhook_signature;
 

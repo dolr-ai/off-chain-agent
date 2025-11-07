@@ -76,6 +76,7 @@ pub async fn generate_video_with_identity(
         input,
         metadata.token_type,
         identity_request.delegated_identity.clone(),
+        None,
     )
     .await?;
 

@@ -6,8 +6,8 @@ use ic_agent::{
 };
 use std::sync::Arc;
 use videogen_common::{
-    TokenType, VideoGenError, VideoGenProvider, VideoGenQueuedResponse, VideoGenRequest,
-    VideoGenRequestWithIdentity, VideoGenerator,
+    types_v2::VideoUploadHandling, TokenType, VideoGenError, VideoGenProvider,
+    VideoGenQueuedResponse, VideoGenRequest, VideoGenRequestWithIdentity, VideoGenerator,
 };
 
 use super::qstash_types::QstashVideoGenRequest;
@@ -230,6 +230,7 @@ pub async fn process_video_generation(
     video_gen_input: videogen_common::VideoGenInput,
     token_type: TokenType,
     delegated_identity_wire: yral_types::delegated_identity::DelegatedIdentityWire,
+    handle_video_upload: Option<VideoUploadHandling>,
 ) -> Result<crate::videogen::VideoGenRequestKey, (StatusCode, Json<VideoGenError>)> {
     // Extract metadata from the input
     let model_id = video_gen_input.model_id();
@@ -301,6 +302,7 @@ pub async fn process_video_generation(
         property: property.to_string(),
         deducted_amount,
         token_type,
+        handle_video_upload,
     };
 
     // Queue to Qstash with automatic rollback on failure

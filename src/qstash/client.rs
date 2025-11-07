@@ -13,10 +13,15 @@ use serde_json::json;
 use tracing::instrument;
 
 use crate::{
-    canister::snapshot::snapshot_v2::BackupUserCanisterPayload, consts::OFF_CHAIN_AGENT_URL,
-    events::event::UploadVideoInfoV2, posts::report_post::ReportPostRequestV3,
+    canister::snapshot::snapshot_v2::BackupUserCanisterPayload,
+    consts::OFF_CHAIN_AGENT_URL,
+    events::event::UploadVideoInfoV2,
+    posts::report_post::ReportPostRequestV3,
     qstash::service_canister_migration::MigrateIndividualUserRequest,
-    videogen::qstash_types::QstashVideoGenRequest,
+    videogen::{
+        qstash_types::QstashVideoGenRequest,
+        upload_ai_generated_video_to_canister_in_drafts::UploadAiVideoToCanisterRequest,
+    },
 };
 use videogen_common::VideoGenerator;
 
@@ -459,6 +464,31 @@ impl QStashClient {
                 .header("Upstash-Flow-Control-Key", fc_key)
                 .header("Upstash-Flow-Control-Value", fc_value);
         }
+
+        req_builder.send().await?;
+
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn upload_ai_generated_video_to_canister_in_drafts(
+        &self,
+        request: UploadAiVideoToCanisterRequest,
+    ) -> anyhow::Result<()> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/upload_ai_generated_video_to_canister_in_drafts")
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
+
+        // Get flow control from the model using the VideoGenerator trait
+
+        let req_builder = self
+            .client
+            .post(url)
+            .json(&request)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST");
 
         req_builder.send().await?;
 

@@ -153,6 +153,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(crate::videogen::qstash_callback::handle_video_gen_callback),
         )
         .route(
+            "/upload_ai_generated_video_to_canister_in_drafts",
+            post(crate::videogen::qstash_process::upload_ai_generated_video_to_canister_in_drafts),
+        )
+        .route(
             "/tournament/create",
             post(crate::leaderboard::handlers::create_tournament_handler),
         )

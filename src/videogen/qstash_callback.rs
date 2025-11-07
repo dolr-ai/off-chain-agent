@@ -1,9 +1,11 @@
 use axum::{extract::State, http::StatusCode, Json};
 use base64;
+use google_cloud_alloydb_v1::model::execute_sql_metadata::Status;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
+use videogen_common::types_v2::VideoUploadHandling;
 use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequestKey, VideoGenRequestStatus};
 
 use crate::{
@@ -11,6 +13,7 @@ use crate::{
     consts::RATE_LIMITS_CANISTER_ID,
     videogen::{
         qstash_types::{QstashVideoGenCallback, VideoGenCallbackResult},
+        upload_ai_generated_video_to_canister_in_drafts::UploadAiVideoToCanisterRequest,
         utils::get_hon_worker_jwt_token,
     },
 };
@@ -165,7 +168,7 @@ pub async fn handle_video_gen_callback_internal(
         counter: callback.request_key.counter,
     };
 
-    update_rate_limit_status(&rate_limits_client, request_key.clone(), status).await?;
+    update_rate_limit_status(&rate_limits_client, request_key.clone(), status.clone()).await?;
 
     // 4. Handle failure cleanup if needed
     if should_decrement {
@@ -204,7 +207,28 @@ pub async fn handle_video_gen_callback_internal(
         }
     }
 
-    Ok(StatusCode::OK)
+    if let VideoGenRequestStatus::Complete(ai_video_url) = &status {
+        match callback.handle_video_upload {
+            Some(VideoUploadHandling::ServerDraft) => {
+                state
+                    .qstash_client
+                    .upload_ai_generated_video_to_canister_in_drafts(
+                        UploadAiVideoToCanisterRequest {
+                            ai_video_url: ai_video_url.clone(),
+                            user_id: callback.request_key.principal,
+                        },
+                    )
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+                Ok(StatusCode::OK)
+            }
+
+            _ => Ok::<_, (StatusCode, String)>(StatusCode::OK),
+        }
+    } else {
+        Ok(StatusCode::OK)
+    }
 }
 
 /// Handle video generation completion callback from Qstash

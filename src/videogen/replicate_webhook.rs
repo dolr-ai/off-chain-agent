@@ -7,10 +7,11 @@ use candid::Principal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::instrument;
-use videogen_common::{TokenType, VideoGenError, VideoGenResponse};
+use videogen_common::{types_v2::VideoUploadHandling, TokenType, VideoGenError, VideoGenResponse};
 
 use crate::{
     app_state::AppState,
+    canister::snapshot::upload,
     videogen::{
         qstash_types::{QstashVideoGenCallback, VideoGenCallbackResult},
         webhook_signature::{verify_webhook_signature, WebhookHeaders},
@@ -35,6 +36,8 @@ pub struct ReplicateWebhookPayload {
 pub struct WebhookQueryParams {
     pub principal: String,
     pub counter: u64,
+    #[serde(default)]
+    pub handle_video_upload: Option<VideoUploadHandling>,
 }
 
 /// Metadata we include in the Replicate prediction to track our internal state
@@ -185,6 +188,7 @@ pub async fn handle_replicate_webhook(
                     .payment_amount
                     .and_then(|a| a.parse::<u64>().ok()),
                 token_type,
+                handle_video_upload: params.handle_video_upload,
             };
 
             // Use existing callback handler logic
@@ -211,12 +215,18 @@ pub async fn handle_replicate_webhook(
 }
 
 /// Generate webhook URL for a Replicate prediction with principal and counter
-pub fn generate_webhook_url(base_url: &str, principal: &str, counter: u64) -> String {
+pub fn generate_webhook_url(
+    base_url: &str,
+    principal: &str,
+    counter: u64,
+    handle_video_upload: &str,
+) -> String {
     format!(
-        "{}/replicate/webhook?principal={}&counter={}",
+        "{}/replicate/webhook?principal={}&counter={}&handle_video_upload={}",
         base_url.trim_end_matches('/'),
         principal,
-        counter
+        counter,
+        handle_video_upload
     )
 }
 
@@ -242,14 +252,14 @@ mod tests {
         let base_url = "https://example.com";
         let principal = "test-principal-123";
         let counter = 42;
-        let webhook_url = generate_webhook_url(base_url, principal, counter);
+        let webhook_url = generate_webhook_url(base_url, principal, counter, "Client");
         assert_eq!(
             webhook_url,
             "https://example.com/replicate/webhook?principal=test-principal-123&counter=42"
         );
 
         let base_url_with_slash = "https://example.com/";
-        let webhook_url = generate_webhook_url(base_url_with_slash, principal, counter);
+        let webhook_url = generate_webhook_url(base_url_with_slash, principal, counter, "Client");
         assert_eq!(
             webhook_url,
             "https://example.com/replicate/webhook?principal=test-principal-123&counter=42"

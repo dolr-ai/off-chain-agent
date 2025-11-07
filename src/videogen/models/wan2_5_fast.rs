@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::info;
-use videogen_common::{VideoGenError, VideoGenInput, VideoGenResponse};
+use videogen_common::{
+    types_v2::VideoUploadHandling, VideoGenError, VideoGenInput, VideoGenResponse,
+};
 
 use crate::app_state::AppState;
 use crate::consts::{OFF_CHAIN_AGENT_URL, REPLICATE_API_URL, REPLICATE_WAN2_5_FAST_MODEL};
@@ -61,11 +63,17 @@ pub async fn generate_with_context(
     let client = reqwest::Client::new();
 
     // Check if we should use webhook (when context is provided)
+    let video_upload_handling_str = match &context.handle_video_upload {
+        Some(VideoUploadHandling::Client) => "Client",
+        Some(VideoUploadHandling::ServerDraft) => "ServerDraft",
+        None => "Client", // Default to Client if None
+    };
 
     let webhook_url = generate_webhook_url(
         OFF_CHAIN_AGENT_URL.as_str(),
         &context.request_key.principal.to_string(),
         context.request_key.counter,
+        video_upload_handling_str,
     );
 
     // Build request with hardcoded parameters

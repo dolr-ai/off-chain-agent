@@ -15,6 +15,9 @@ pub static BIGQUERY_INGESTION_URL: Lazy<Url> = Lazy::new(|| {
     Url::parse("https://bigquery.googleapis.com/bigquery/v2/projects/hot-or-not-feed-intelligence/datasets/analytics_335143420/tables/test_events_analytics/insertAll").unwrap()
 });
 
+pub static YRAL_UPLOAD_VIDEO_WORKER_URL: Lazy<Url> =
+    Lazy::new(|| Url::parse("https://yral-upload-video.go-bazzinga.workers.dev").unwrap());
+
 #[allow(dead_code)]
 pub const PLATFORM_ORCHESTRATOR_ID: &str = "74zq4-iqaaa-aaaam-ab53a-cai";
 
