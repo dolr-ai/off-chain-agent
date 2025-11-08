@@ -45,7 +45,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
             format!("Bearer {}", yral_cloudflare_worker_token),
         )
         .json(&json!({
-            "user-id": user_id.to_string(),
+            "user_id": user_id.to_string(),
         }))
         .send()
         .await?;
