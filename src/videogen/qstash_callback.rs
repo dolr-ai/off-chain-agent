@@ -1,6 +1,5 @@
 use axum::{extract::State, http::StatusCode, Json};
 use base64;
-use google_cloud_alloydb_v1::model::execute_sql_metadata::Status;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;

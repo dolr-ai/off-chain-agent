@@ -11,7 +11,6 @@ use videogen_common::{types_v2::VideoUploadHandling, TokenType, VideoGenError, V
 
 use crate::{
     app_state::AppState,
-    canister::snapshot::upload,
     videogen::{
         qstash_types::{QstashVideoGenCallback, VideoGenCallbackResult},
         webhook_signature::{verify_webhook_signature, WebhookHeaders},
