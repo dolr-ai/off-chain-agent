@@ -117,6 +117,7 @@ pub async fn generate_video_with_identity_v2(
         video_gen_input,
         unified_request.token_type,
         identity_request.delegated_identity.clone(),
+        identity_request.upload_handling,
     )
     .await?;
 

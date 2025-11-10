@@ -1,12 +1,15 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use std::sync::Arc;
 use tracing::instrument;
 use videogen_common::{VideoGenError, VideoGenInput, VideoGenerator};
 
 use crate::{
     app_state::AppState,
-    videogen::qstash_types::{
-        QstashVideoGenCallback, QstashVideoGenRequest, VideoGenCallbackResult,
+    videogen::{
+        qstash_types::{QstashVideoGenCallback, QstashVideoGenRequest, VideoGenCallbackResult},
+        upload_ai_generated_video_to_canister_in_drafts::{
+            upload_ai_generated_video_to_canister_impl, UploadAiVideoToCanisterRequest,
+        },
     },
 };
 
@@ -56,6 +59,7 @@ pub async fn process_video_generation(
         property: request.property,
         deducted_amount: request.deducted_amount,
         token_type: request.token_type,
+        handle_video_upload: request.handle_video_upload,
     };
 
     // Return the callback data as the response
@@ -68,4 +72,14 @@ pub async fn process_video_generation(
             ))),
         )
     })?))
+}
+
+pub async fn upload_ai_generated_video_to_canister_in_drafts(
+    State(_state): State<Arc<AppState>>,
+    Json(request): Json<UploadAiVideoToCanisterRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    match upload_ai_generated_video_to_canister_impl(&request.ai_video_url, request.user_id).await {
+        Ok(()) => Ok(StatusCode::OK),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    }
 }
