@@ -272,6 +272,86 @@ pub async fn download_video_from_cloudflare(video_id: &str, output_path: &Path) 
     Ok(())
 }
 
+/// Download video from any URL to local path
+pub async fn download_video_from_url(url: &str, output_path: &Path) -> Result<()> {
+    log::info!("Downloading video from URL: {}", url);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .context("Failed to create HTTP client")?;
+
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .context("Failed to send request")?;
+
+    if !response.status().is_success() {
+        anyhow::bail!("Failed to download video: HTTP {}", response.status());
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .context("Failed to read response bytes")?;
+
+    tokio::fs::write(output_path, &bytes)
+        .await
+        .context("Failed to write video file")?;
+
+    log::info!("Video downloaded successfully to: {:?}", output_path);
+
+    Ok(())
+}
+
+/// Compute phash for a video by downloading from any URL
+/// Downloads video, computes hash and extracts metadata, cleans up temp files automatically
+/// Returns tuple of (phash, metadata)
+pub async fn compute_phash_from_url(url: &str) -> Result<(String, VideoMetadata)> {
+    log::info!("Computing phash for video from URL: {}", url);
+
+    // Create temp directory
+    let temp_dir = std::env::temp_dir().join(format!("dedup_{}", uuid::Uuid::new_v4()));
+    tokio::fs::create_dir_all(&temp_dir)
+        .await
+        .context("Failed to create temp directory")?;
+
+    // Generate unique filename using UUID
+    let video_path = temp_dir.join(format!("{}.mp4", uuid::Uuid::new_v4()));
+
+    // Download from URL
+    let download_result = download_video_from_url(url, &video_path).await;
+    if let Err(e) = download_result {
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+        return Err(e);
+    }
+
+    // Compute phash and extract metadata in blocking task
+    let video_path_clone = video_path.clone();
+    let url_clone = url.to_string();
+    let result = tokio::task::spawn_blocking(move || {
+        let phash = PHasher::new().compute_hash(&video_path_clone)?;
+        let metadata = extract_metadata(&video_path_clone, url_clone)?;
+        Ok::<_, anyhow::Error>((phash, metadata))
+    })
+    .await;
+
+    // Cleanup temp directory
+    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+
+    // Handle result
+    let (phash, metadata) = result
+        .context("Task join error")?
+        .context("Failed to compute phash and metadata")?;
+
+    log::info!(
+        "Successfully computed phash for video from URL: {} chars",
+        phash.len()
+    );
+    Ok((phash, metadata))
+}
+
 /// Compute phash for a video by downloading from Cloudflare
 /// Downloads video, computes hash and extracts metadata, cleans up temp files automatically
 /// Returns tuple of (phash, metadata)

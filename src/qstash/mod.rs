@@ -75,6 +75,7 @@ struct VideoHashIndexingRequest {
     publisher_data: VideoPublisherDataV2,
 }
 
+#[cfg(not(feature = "local-bin"))]
 #[instrument(skip(state))]
 async fn video_deduplication_handler(
     State(state): State<Arc<AppState>>,
@@ -96,6 +97,7 @@ async fn video_deduplication_handler(
             &state.agent,
             &state.bigquery_client,
             &state.milvus_client,
+            &state.leaderboard_redis_pool,
             &req.video_id,
             &req.video_url,
             publisher_data,
@@ -132,8 +134,14 @@ async fn video_deduplication_handler(
 #[instrument(skip(app_state))]
 // QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
-    let router = Router::new()
-        .route("/video_deduplication", post(video_deduplication_handler))
+    let mut router = Router::new();
+
+    #[cfg(not(feature = "local-bin"))]
+    {
+        router = router.route("/video_deduplication", post(video_deduplication_handler));
+    }
+
+    let router = router
         .route("/upload_video_gcs", post(upload_video_gcs))
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
@@ -219,6 +227,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/milvus/deduplicate_videos",
             post(milvus_ingest::deduplicate_videos_handler),
+        )
+        .route(
+            "/milvus/check_duplicate",
+            post(milvus_ingest::check_duplicate_handler),
         );
 
     router

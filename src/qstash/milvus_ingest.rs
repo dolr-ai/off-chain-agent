@@ -254,6 +254,33 @@ pub struct DeduplicateResponse {
     pub failed: u32,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CheckDuplicateRequest {
+    pub video_url: String,
+
+    #[serde(default = "default_check_threshold")]
+    pub hamming_threshold: u32,
+}
+
+fn default_check_threshold() -> u32 {
+    30
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DuplicateInfo {
+    pub matched_video_id: String,
+    pub hamming_distance: u32,
+    pub phash: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CheckDuplicateResponse {
+    pub is_duplicate: bool,
+    pub duplicate_info: Option<DuplicateInfo>,
+    pub computed_phash: String,
+    pub threshold_used: u32,
+}
+
 /// QStash handler to ingest video phashes from BigQuery into Milvus
 /// Checks for near-duplicates (Hamming distance < 10) and records status
 /// Spawns background task and returns immediately
@@ -1715,4 +1742,127 @@ async fn store_dedup_status_with_table(
     }
 
     Ok(())
+}
+
+/// Check if a video is duplicate using Milvus without storing it
+/// This endpoint is for checking duplicates without modifying the database
+#[cfg(not(feature = "local-bin"))]
+#[utoipa::path(
+    post,
+    path = "/milvus/check_duplicate",
+    request_body = CheckDuplicateRequest,
+    responses(
+        (status = 200, description = "Duplicate check completed", body = CheckDuplicateResponse),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "milvus"
+)]
+pub async fn check_duplicate_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CheckDuplicateRequest>,
+) -> Result<Json<CheckDuplicateResponse>, StatusCode> {
+    log::info!(
+        "Checking duplicate for video URL: {} with threshold {}",
+        req.video_url,
+        req.hamming_threshold
+    );
+
+    // Compute phash from any video URL
+    let (phash, _metadata) = crate::duplicate_video::phash::compute_phash_from_url(&req.video_url)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to compute phash for URL {}: {}", req.video_url, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    log::info!("Computed phash: {} for URL: {}", phash, req.video_url);
+
+    // TIER 1: Check Redis for exact match (FAST - <1ms)
+    log::debug!("Tier 1: Checking Redis for exact phash match");
+    let redis_key = format!("video_phash:{}", phash);
+    let mut redis_conn = state.leaderboard_redis_pool.get().await.map_err(|e| {
+        log::error!("Failed to get Redis connection: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let exact_match: Option<String> = redis::cmd("GET")
+        .arg(&redis_key)
+        .query_async(&mut *redis_conn)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to query Redis: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    if let Some(matching_video_id) = exact_match {
+        log::info!(
+            "⚡ EXACT DUPLICATE (Redis): URL {} has identical phash to video {}",
+            req.video_url,
+            matching_video_id
+        );
+
+        return Ok(Json(CheckDuplicateResponse {
+            is_duplicate: true,
+            duplicate_info: Some(DuplicateInfo {
+                matched_video_id: matching_video_id,
+                hamming_distance: 0,
+                phash: phash.clone(),
+            }),
+            computed_phash: phash,
+            threshold_used: req.hamming_threshold,
+        }));
+    }
+
+    log::debug!("Tier 1: No exact match in Redis");
+
+    // TIER 2: Check Milvus for similar matches (SLOWER - 10-50ms)
+    log::debug!(
+        "Tier 2: Checking Milvus for similar videos (Hamming distance <= {})",
+        req.hamming_threshold
+    );
+
+    if let Some(milvus_client) = &state.milvus_client {
+        match crate::milvus::search_similar_videos(milvus_client, &phash, req.hamming_threshold)
+            .await
+        {
+            Ok(results) => {
+                if let Some(nearest) = results.first() {
+                    log::info!(
+                        "🔍 SIMILAR DUPLICATE (Milvus): URL {} matches video {} with distance {}",
+                        req.video_url,
+                        nearest.video_id,
+                        nearest.hamming_distance
+                    );
+
+                    return Ok(Json(CheckDuplicateResponse {
+                        is_duplicate: true,
+                        duplicate_info: Some(DuplicateInfo {
+                            matched_video_id: nearest.video_id.clone(),
+                            hamming_distance: nearest.hamming_distance,
+                            phash: phash.clone(),
+                        }),
+                        computed_phash: phash,
+                        threshold_used: req.hamming_threshold,
+                    }));
+                } else {
+                    log::info!("✨ UNIQUE: URL {} has no similar matches", req.video_url);
+                }
+            }
+            Err(e) => {
+                log::error!("Milvus search failed for URL {}: {}", req.video_url, e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+    } else {
+        log::warn!("Milvus client not available");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    // No duplicates found
+    Ok(Json(CheckDuplicateResponse {
+        is_duplicate: false,
+        duplicate_info: None,
+        computed_phash: phash,
+        threshold_used: req.hamming_threshold,
+    }))
 }

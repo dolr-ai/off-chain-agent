@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSystemTime};
 
+type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VideoPublisherDataV2 {
     pub publisher_principal: String,
@@ -249,14 +251,58 @@ impl VideoHashDuplication {
         Ok(())
     }
 
+    /// Check Redis for exact phash match (tier-1 caching)
+    async fn check_exact_duplicate_in_redis(
+        redis_pool: &RedisPool,
+        phash: &str,
+    ) -> Result<Option<String>, anyhow::Error> {
+        let mut conn = redis_pool
+            .get()
+            .await
+            .context("Failed to get Redis connection")?;
+
+        let key = format!("video_phash:{}", phash);
+        let result: Option<String> = redis::cmd("GET")
+            .arg(&key)
+            .query_async(&mut *conn)
+            .await
+            .context("Failed to query Redis for phash")?;
+
+        Ok(result)
+    }
+
+    /// Store unique phash in Redis for fast exact match lookups
+    async fn store_unique_phash_in_redis(
+        redis_pool: &RedisPool,
+        phash: &str,
+        video_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        let mut conn = redis_pool
+            .get()
+            .await
+            .context("Failed to get Redis connection")?;
+
+        let key = format!("video_phash:{}", phash);
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(video_id)
+            .query_async::<()>(&mut *conn)
+            .await
+            .context("Failed to store phash in Redis")?;
+
+        Ok(())
+    }
+
     /// V2 version that uses Milvus for deduplication instead of DedupIndex canister
-    /// Provides configurable hamming distance threshold and graceful fallback
+    /// Provides configurable hamming distance threshold, Redis tier-1 caching, and graceful fallback
+    #[cfg(not(feature = "local-bin"))]
     #[allow(clippy::too_many_arguments)]
     pub async fn process_video_deduplication_v2<'a>(
         &self,
         agent: &ic_agent::Agent,
         bigquery_client: &google_cloud_bigquery::client::Client,
         milvus_client: &Option<crate::milvus::Client>,
+        redis_pool: &RedisPool,
         video_id: &str,
         _video_url: &str,
         publisher_data: VideoPublisherDataV2,
@@ -277,7 +323,43 @@ impl VideoHashDuplication {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
 
-        // Check for duplicates using Milvus (with fallback to DedupIndex)
+        // TIER 1: Check Redis for exact match (FAST - <1ms)
+        log::debug!("Tier 1: Checking Redis for exact phash match");
+        if let Ok(Some(existing_video_id)) =
+            Self::check_exact_duplicate_in_redis(redis_pool, &phash).await
+        {
+            log::info!(
+                "⚡ EXACT DUPLICATE (Redis): Video {} has identical phash to {}",
+                video_id,
+                existing_video_id
+            );
+
+            // Store metadata
+            self.store_videohash_original(bigquery_client, video_id, &phash)
+                .await?;
+            self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
+                .await?;
+
+            // Continue with video processing pipeline
+            let timestamp = chrono::Utc::now().to_rfc3339();
+            publish_video_callback(
+                video_id,
+                publisher_data.post_id,
+                timestamp,
+                &publisher_data.publisher_principal,
+            )
+            .await?;
+
+            return Ok(());
+        }
+
+        log::debug!("Tier 1: No exact match in Redis");
+
+        // TIER 2: Check Milvus for similar matches (SLOWER - 10-50ms)
+        log::debug!(
+            "Tier 2: Checking Milvus for similar videos (Hamming distance < {})",
+            hamming_threshold
+        );
         let is_duplicate = if let Some(client) = milvus_client {
             log::debug!(
                 "Checking Milvus for duplicates with threshold {}",
@@ -288,8 +370,7 @@ impl VideoHashDuplication {
                     let is_dup = !results.is_empty();
                     if is_dup {
                         log::info!(
-                            "Duplicate video detected via Milvus: hash: {} | video_id: {} | matches: {} videos",
-                            phash,
+                            "🔍 SIMILAR DUPLICATE (Milvus): Video {} matches {} videos",
                             video_id,
                             results.len()
                         );
@@ -325,21 +406,36 @@ impl VideoHashDuplication {
             .await?;
 
         if !is_duplicate {
-            // Insert into Milvus if unique and client available
+            log::info!("✨ UNIQUE: Video {} has a unique phash", video_id);
+
+            // Insert into Milvus + Redis (only for unique videos)
             if let Some(client) = milvus_client {
                 let created_at = chrono::Utc::now().timestamp();
+
+                // Insert into Milvus
                 log::debug!("Inserting unique video into Milvus: {}", video_id);
                 if let Err(e) =
                     crate::milvus::insert_video_hash(client, video_id, &phash, created_at).await
                 {
                     log::error!("Failed to insert video {} into Milvus: {}", video_id, e);
-                    // Continue processing even if Milvus insert fails
+                }
+
+                // Insert into Redis for fast exact match caching
+                if let Err(e) =
+                    Self::store_unique_phash_in_redis(redis_pool, &phash, video_id).await
+                {
+                    log::error!("Failed to insert video {} into Redis: {}", video_id, e);
                 }
             }
 
             self.store_unique_video(video_id, &phash).await?;
             self.store_unique_video_v2(video_id, &phash).await?;
-            log::info!("Unique video recorded: video_id [{video_id}]");
+            log::info!("Unique video recorded in BigQuery: video_id [{video_id}]");
+        } else {
+            log::debug!(
+                "Video {} is a duplicate, NOT storing in Milvus/Redis",
+                video_id
+            );
         }
 
         // Always proceed with normal video processing, regardless of duplicate status
