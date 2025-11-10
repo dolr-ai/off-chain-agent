@@ -278,6 +278,79 @@ pub async fn search_similar_videos(
     Ok(similar_videos)
 }
 
+/// Search for top 2 nearest neighbors to get self-match and nearest neighbor
+/// Used for new deduplication strategy where caller filters out self-match
+pub async fn search_similar_videos_topk2(
+    client: &MilvusClient,
+    phash: &str,
+) -> Result<Vec<SearchResult>> {
+    log::debug!("Searching for top 2 nearest neighbors (including self)");
+
+    // Get the collection
+    let collection = client
+        .get_collection(COLLECTION_NAME)
+        .await
+        .context("Failed to get collection")?;
+
+    // Check if collection is loaded
+    if !collection
+        .is_loaded()
+        .await
+        .context("Failed to check if collection is loaded")?
+    {
+        log::warn!("Collection is not loaded, loading now...");
+        collection
+            .load(1)
+            .await
+            .context("Failed to load collection")?;
+    }
+
+    // Convert phash to binary vector
+    let query_vector = utils::phash_to_binary_vector(phash)?;
+    let query_vectors = vec![Value::Binary(Cow::Owned(query_vector))];
+
+    // Prepare search parameters
+    let mut search_option = SearchOption::new();
+    search_option.add_param("nprobe", serde_json::json!(10));
+
+    // Search for top 2: [self-match, nearest_neighbor]
+    let results = collection
+        .search(
+            query_vectors,
+            "phash_vector",
+            2, // top_k=2 to get both self and nearest neighbor
+            MetricType::HAMMING,
+            vec!["video_id".to_string()],
+            &search_option,
+        )
+        .await
+        .context("Failed to search in Milvus")?;
+
+    // Parse and return all results (caller will filter self-match)
+    let mut similar_videos = Vec::new();
+
+    for result_set in results {
+        for i in 0..result_set.size as usize {
+            let hamming_dist = result_set.score[i] as u32;
+
+            // Extract video_id from result
+            if let Some(Value::String(video_id)) = result_set.id.get(i) {
+                similar_videos.push(SearchResult {
+                    video_id: video_id.to_string(),
+                    hamming_distance: hamming_dist,
+                });
+            }
+        }
+    }
+
+    // Sort by distance (closest first)
+    similar_videos.sort_by_key(|r| r.hamming_distance);
+
+    log::debug!("Found {} results from top-k=2 search", similar_videos.len());
+
+    Ok(similar_videos)
+}
+
 /// Insert a single video hash into Milvus
 pub async fn insert_video_hash(
     client: &MilvusClient,

@@ -92,12 +92,14 @@ async fn video_deduplication_handler(
     let qstash_client = state.qstash_client.clone();
 
     if let Err(e) = duplicate::VideoHashDuplication
-        .process_video_deduplication(
+        .process_video_deduplication_v2(
             &state.agent,
             &state.bigquery_client,
+            &state.milvus_client,
             &req.video_id,
             &req.video_url,
             publisher_data,
+            30, // Default hamming threshold
             move |vid_id, post_id, timestamp, publisher_user_id| {
                 // Clone the values to ensure they have 'static lifetime
                 let vid_id = vid_id.to_string();
@@ -209,6 +211,14 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/milvus/backfill_unique_videos",
             post(milvus_ingest::backfill_unique_videos_handler),
+        )
+        .route(
+            "/milvus/bulk_ingest_unique_hashes",
+            post(milvus_ingest::bulk_ingest_unique_hashes_handler),
+        )
+        .route(
+            "/milvus/deduplicate_videos",
+            post(milvus_ingest::deduplicate_videos_handler),
         );
 
     router

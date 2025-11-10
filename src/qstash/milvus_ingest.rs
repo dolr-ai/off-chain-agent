@@ -3,6 +3,7 @@ use crate::milvus::{self, Client as MilvusClient};
 use anyhow::{Context, Result};
 use axum::{extract::State, http::StatusCode, Json};
 use futures::stream::{self, StreamExt};
+use google_cloud_bigquery::http::job::get_query_results::GetQueryResultsRequest;
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use google_cloud_bigquery::http::tabledata::list::Value;
@@ -192,8 +193,61 @@ fn default_collect_metrics() -> bool {
     false // Disabled by default to avoid memory bloat
 }
 
+fn default_batch_size() -> usize {
+    1000
+}
+
+fn default_hamming_distance() -> u32 {
+    30
+}
+
+/// Get BigQuery table name for given hamming distance threshold
+fn get_bigquery_table(hamming_distance: u32) -> String {
+    format!("video_dedup_status_HAM{}", hamming_distance)
+}
+
+/// Get Redis key for phash (same for all thresholds)
+fn get_redis_key(phash: &str) -> String {
+    format!("video_phash:{}", phash)
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct IngestPhashResponse {
+    pub total_processed: u32,
+    pub unique_count: u32,
+    pub duplicate_count: u32,
+    pub failed: u32,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct BulkIngestRequest {
+    #[serde(default = "default_batch_size")]
+    pub batch_size: usize,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BulkIngestResponse {
+    pub total_inserted: u32,
+    pub failed: u32,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DeduplicateRequest {
+    #[serde(default = "default_limit")]
+    pub limit: u32,
+
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
+
+    #[serde(default = "default_hamming_distance")]
+    pub hamming_distance: u32, // 10, 20, 30, 40, 50
+
+    #[serde(default = "default_collect_metrics")]
+    pub collect_metrics: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DeduplicateResponse {
     pub total_processed: u32,
     pub unique_count: u32,
     pub duplicate_count: u32,
@@ -914,6 +968,745 @@ async fn store_dedup_status(
         )
         .await
         .context("Failed to insert into BigQuery")?;
+
+    if let Some(errors) = result.insert_errors {
+        if !errors.is_empty() {
+            anyhow::bail!("BigQuery insert errors: {:?}", errors);
+        }
+    }
+
+    Ok(())
+}
+
+/// QStash handler to bulk ingest ALL unique videos from video_unique table into Milvus + Redis
+/// Phase 1: Index all unique videos (no deduplication logic)
+#[cfg(not(feature = "local-bin"))]
+#[utoipa::path(
+    post,
+    path = "/qstash/milvus/bulk_ingest_unique_hashes",
+    request_body = BulkIngestRequest,
+    responses(
+        (status = 202, description = "Bulk ingestion started"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "qstash"
+)]
+#[instrument(skip(state))]
+pub async fn bulk_ingest_unique_hashes_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<BulkIngestRequest>,
+) -> Result<StatusCode, StatusCode> {
+    log::info!(
+        "Starting bulk ingestion of unique videos (async): batch_size={}",
+        req.batch_size
+    );
+
+    // Check if Milvus client is available
+    let milvus_client = match &state.milvus_client {
+        Some(client) => client.clone(),
+        None => {
+            log::error!("Milvus client not initialized");
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
+
+    // Spawn background task
+    tokio::spawn(async move {
+        log::info!("Background task started for bulk ingestion");
+        match process_bulk_ingest(&state, &milvus_client, &req).await {
+            Ok(response) => {
+                log::info!(
+                    "✅ Bulk ingestion completed: total_inserted={}, failed={}",
+                    response.total_inserted,
+                    response.failed
+                );
+            }
+            Err(e) => {
+                log::error!("❌ Bulk ingestion failed: {}", e);
+            }
+        }
+    });
+
+    Ok(StatusCode::ACCEPTED)
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn process_bulk_ingest(
+    state: &AppState,
+    milvus_client: &MilvusClient,
+    req: &BulkIngestRequest,
+) -> Result<BulkIngestResponse> {
+    log::info!("Fetching ALL unique videos from video_unique table");
+
+    // 1. Fetch ALL unique videos from BigQuery (video_unique JOIN videohash_phash)
+    let videos = fetch_all_unique_videos(state).await?;
+
+    if videos.is_empty() {
+        log::info!("No unique videos found");
+        return Ok(BulkIngestResponse {
+            total_inserted: 0,
+            failed: 0,
+        });
+    }
+
+    log::info!(
+        "Found {} unique videos, starting bulk insert with batch_size={}",
+        videos.len(),
+        req.batch_size
+    );
+
+    // 2. Bulk insert into Milvus and Redis in batches
+    let mut total_inserted = 0;
+    let mut failed = 0;
+
+    for chunk in videos.chunks(req.batch_size) {
+        match bulk_insert_to_milvus_and_redis(state, milvus_client, chunk).await {
+            Ok(count) => {
+                total_inserted += count;
+                log::info!(
+                    "Inserted batch of {} videos (total: {})",
+                    count,
+                    total_inserted
+                );
+            }
+            Err(e) => {
+                log::error!("Failed to insert batch: {}", e);
+                failed += chunk.len() as u32;
+            }
+        }
+    }
+
+    log::info!(
+        "📊 Bulk Ingestion Summary: Total={}, Failed={}",
+        total_inserted,
+        failed
+    );
+
+    Ok(BulkIngestResponse {
+        total_inserted,
+        failed,
+    })
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn fetch_all_unique_videos(state: &AppState) -> Result<Vec<(String, String)>> {
+    let query = "SELECT video_id, phash
+         FROM
+         (
+          SELECT
+              DISTINCT t1.video_id,
+              t2.phash
+            FROM
+              `hot-or-not-feed-intelligence`.`yral_ds`.`video_unique` AS t1
+            INNER JOIN
+              `hot-or-not-feed-intelligence`.`yral_ds`.`videohash_phash` AS t2
+            ON
+              t1.video_id = t2.video_id
+         )";
+
+    log::debug!("Executing BigQuery query for ALL unique videos with pagination");
+
+    let request = QueryRequest {
+        query: query.to_string(),
+        max_results: Some(10000), // Fetch 10K rows per page
+        ..Default::default()
+    };
+
+    let mut response = state
+        .bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await
+        .context("Failed to execute BigQuery query for all unique videos")?;
+
+    let mut videos = Vec::new();
+    let mut page_count = 1;
+
+    // Process first page
+    if let Some(rows) = response.rows.as_ref() {
+        for row in rows {
+            if row.f.len() < 2 {
+                continue;
+            }
+
+            let video_id = match &row.f[0].v {
+                Value::String(s) => s.clone(),
+                _ => continue,
+            };
+
+            let phash = match &row.f[1].v {
+                Value::String(s) => s.clone(),
+                _ => continue,
+            };
+
+            videos.push((video_id, phash));
+        }
+    }
+
+    log::info!(
+        "Fetched page {} with {} videos (total so far: {})",
+        page_count,
+        response.rows.as_ref().map(|r| r.len()).unwrap_or(0),
+        videos.len()
+    );
+
+    // Paginate through remaining results
+    while let Some(page_token) = response.page_token.as_ref() {
+        if page_token.is_empty() {
+            break;
+        }
+
+        page_count += 1;
+        log::debug!("Fetching page {} with token: {}", page_count, page_token);
+
+        // Fetch next page using getQueryResults
+        let job_ref = &response.job_reference;
+        let get_results_req = GetQueryResultsRequest {
+            start_index: 0,
+            page_token: Some(page_token.clone()),
+            max_results: Some(10000),
+            timeout_ms: None,
+            location: job_ref.location.clone(),
+            format_options: None,
+        };
+
+        let get_results_response = state
+            .bigquery_client
+            .job()
+            .get_query_results(&job_ref.project_id, &job_ref.job_id, &get_results_req)
+            .await
+            .context(format!("Failed to fetch page {}", page_count))?;
+
+        // Convert GetQueryResultsResponse to QueryResponse format for processing
+        response.rows = get_results_response.rows;
+        response.page_token = get_results_response.page_token;
+
+        if let Some(rows) = response.rows.as_ref() {
+            for row in rows {
+                if row.f.len() < 2 {
+                    continue;
+                }
+
+                let video_id = match &row.f[0].v {
+                    Value::String(s) => s.clone(),
+                    _ => continue,
+                };
+
+                let phash = match &row.f[1].v {
+                    Value::String(s) => s.clone(),
+                    _ => continue,
+                };
+
+                videos.push((video_id, phash));
+            }
+        }
+
+        log::info!(
+            "Fetched page {} with {} videos (total so far: {})",
+            page_count,
+            response.rows.as_ref().map(|r| r.len()).unwrap_or(0),
+            videos.len()
+        );
+    }
+
+    log::info!(
+        "✅ Fetched ALL {} unique videos from BigQuery across {} pages",
+        videos.len(),
+        page_count
+    );
+    Ok(videos)
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn bulk_insert_to_milvus_and_redis(
+    state: &AppState,
+    milvus_client: &MilvusClient,
+    videos: &[(String, String)],
+) -> Result<u32> {
+    let created_at = chrono::Utc::now().timestamp();
+
+    // Prepare batch for Milvus
+    let records: Vec<milvus::VideoHashRecord> = videos
+        .iter()
+        .filter_map(
+            |(video_id, phash)| match milvus::utils::phash_to_binary_vector(phash) {
+                Ok(phash_vector) => Some(milvus::VideoHashRecord {
+                    video_id: video_id.clone(),
+                    phash_vector,
+                    created_at,
+                }),
+                Err(e) => {
+                    log::error!("Failed to convert phash for {}: {}", video_id, e);
+                    None
+                }
+            },
+        )
+        .collect();
+
+    // Insert batch into Milvus
+    milvus::insert_batch_video_hashes(milvus_client, records)
+        .await
+        .context("Failed to insert batch into Milvus")?;
+
+    // Insert into Redis using pipeline (for exact match caching)
+    let mut conn = state
+        .leaderboard_redis_pool
+        .get()
+        .await
+        .context("Failed to get Redis connection")?;
+
+    // Use Redis pipeline for batch SET operations (much faster than individual SETs)
+    let mut pipe = redis::pipe();
+    for (video_id, phash) in videos {
+        let redis_key = get_redis_key(phash);
+        pipe.set(&redis_key, video_id);
+    }
+
+    pipe.query_async::<()>(&mut *conn)
+        .await
+        .context("Failed to store phashes in Redis")?;
+
+    Ok(videos.len() as u32)
+}
+
+/// QStash handler to deduplicate videos at a specific hamming distance threshold
+/// Phase 2: Find duplicates using top_k=2 search and write to threshold-specific BigQuery table
+#[cfg(not(feature = "local-bin"))]
+#[utoipa::path(
+    post,
+    path = "/qstash/milvus/deduplicate_videos",
+    request_body = DeduplicateRequest,
+    responses(
+        (status = 202, description = "Deduplication started"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "qstash"
+)]
+#[instrument(skip(state))]
+pub async fn deduplicate_videos_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<DeduplicateRequest>,
+) -> Result<StatusCode, StatusCode> {
+    log::info!(
+        "Starting video deduplication (async): limit={}, threshold={}, concurrency={}",
+        req.limit,
+        req.hamming_distance,
+        req.concurrency
+    );
+
+    // Check if Milvus client is available
+    let milvus_client = match &state.milvus_client {
+        Some(client) => client.clone(),
+        None => {
+            log::error!("Milvus client not initialized");
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
+
+    // Spawn background task
+    tokio::spawn(async move {
+        log::info!("Background task started for video deduplication");
+        match process_deduplicate(&state, &milvus_client, &req).await {
+            Ok(response) => {
+                log::info!(
+                    "✅ Deduplication completed: processed={}, unique={}, duplicate={}, failed={}",
+                    response.total_processed,
+                    response.unique_count,
+                    response.duplicate_count,
+                    response.failed
+                );
+            }
+            Err(e) => {
+                log::error!("❌ Deduplication failed: {}", e);
+            }
+        }
+    });
+
+    Ok(StatusCode::ACCEPTED)
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn process_deduplicate(
+    state: &AppState,
+    milvus_client: &MilvusClient,
+    req: &DeduplicateRequest,
+) -> Result<DeduplicateResponse> {
+    log::info!(
+        "Deduplicating videos with hamming_distance <= {}",
+        req.hamming_distance
+    );
+
+    // 1. Fetch unprocessed videos (not in threshold-specific table)
+    let videos = fetch_unprocessed_videos_for_threshold(state, req).await?;
+
+    if videos.is_empty() {
+        log::info!("No unprocessed videos found for this threshold");
+        return Ok(DeduplicateResponse {
+            total_processed: 0,
+            unique_count: 0,
+            duplicate_count: 0,
+            failed: 0,
+        });
+    }
+
+    log::info!(
+        "Processing {} videos with concurrency={} for threshold={}",
+        videos.len(),
+        req.concurrency,
+        req.hamming_distance
+    );
+
+    // 2. Process videos concurrently
+    let collect_metrics = req.collect_metrics;
+    let hamming_distance = req.hamming_distance;
+    let results: Vec<_> = stream::iter(videos)
+        .map(|(video_id, phash)| {
+            let state = state.clone();
+            let milvus_client = milvus_client.clone();
+
+            async move {
+                let mut task_metrics = if collect_metrics {
+                    MetricsCollector::Enabled(OperationMetrics::default())
+                } else {
+                    MetricsCollector::Disabled
+                };
+                let result = process_deduplicate_video(
+                    &state,
+                    &milvus_client,
+                    &video_id,
+                    &phash,
+                    hamming_distance,
+                    &mut task_metrics,
+                )
+                .await;
+                (result, task_metrics)
+            }
+        })
+        .buffer_unordered(req.concurrency)
+        .collect()
+        .await;
+
+    // 3. Aggregate results
+    let mut metrics = if req.collect_metrics {
+        MetricsCollector::Enabled(OperationMetrics::default())
+    } else {
+        MetricsCollector::Disabled
+    };
+    let mut unique_count = 0;
+    let mut duplicate_count = 0;
+    let mut failed = 0;
+
+    for (result, task_metrics) in results {
+        metrics.merge(task_metrics);
+        match result {
+            Ok(true) => unique_count += 1, // is_unique = true
+            Ok(false) => duplicate_count += 1,
+            Err(e) => {
+                log::error!("Failed to process video: {}", e);
+                failed += 1;
+            }
+        }
+    }
+
+    // Log summary statistics
+    log::info!(
+        "📊 Deduplication Summary (HAM{}): Total={}, Unique={}, Duplicates={}, Failed={}",
+        req.hamming_distance,
+        unique_count + duplicate_count + failed,
+        unique_count,
+        duplicate_count,
+        failed
+    );
+
+    if duplicate_count > 0 {
+        log::info!(
+            "   Deduplication rate: {:.1}% of processed videos were duplicates",
+            (duplicate_count as f64 / (unique_count + duplicate_count) as f64) * 100.0
+        );
+    }
+
+    // Log performance metrics
+    metrics.log_summary();
+
+    Ok(DeduplicateResponse {
+        total_processed: (unique_count + duplicate_count + failed),
+        unique_count,
+        duplicate_count,
+        failed,
+    })
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn fetch_unprocessed_videos_for_threshold(
+    state: &AppState,
+    req: &DeduplicateRequest,
+) -> Result<Vec<(String, String)>> {
+    let table_name = get_bigquery_table(req.hamming_distance);
+    let query = format!(
+        "SELECT video_id, phash
+         FROM `hot-or-not-feed-intelligence.yral_ds.videohash_phash`
+         WHERE video_id NOT IN (
+           SELECT video_id
+           FROM `hot-or-not-feed-intelligence.yral_ds.{}`
+         )
+         LIMIT {}",
+        table_name, req.limit
+    );
+
+    log::debug!(
+        "Executing BigQuery query for unprocessed videos (table: {}) with pagination",
+        table_name
+    );
+
+    let request = QueryRequest {
+        query,
+        max_results: Some(10000), // Fetch 10K rows per page
+        ..Default::default()
+    };
+
+    let mut response = state
+        .bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await
+        .context("Failed to execute BigQuery query for unprocessed videos")?;
+
+    let mut videos = Vec::new();
+    let mut page_count = 1;
+
+    // Process first page
+    if let Some(rows) = response.rows.as_ref() {
+        for row in rows {
+            if row.f.len() < 2 {
+                continue;
+            }
+
+            let video_id = match &row.f[0].v {
+                Value::String(s) => s.clone(),
+                _ => continue,
+            };
+
+            let phash = match &row.f[1].v {
+                Value::String(s) => s.clone(),
+                _ => continue,
+            };
+
+            videos.push((video_id, phash));
+        }
+    }
+
+    log::info!(
+        "Fetched page {} with {} videos for HAM{} (total so far: {})",
+        page_count,
+        response.rows.as_ref().map(|r| r.len()).unwrap_or(0),
+        req.hamming_distance,
+        videos.len()
+    );
+
+    // Paginate through remaining results (up to the limit)
+    while let Some(page_token) = response.page_token.as_ref() {
+        if page_token.is_empty() || videos.len() >= req.limit as usize {
+            break;
+        }
+
+        page_count += 1;
+        log::debug!(
+            "Fetching page {} for HAM{} with token: {}",
+            page_count,
+            req.hamming_distance,
+            page_token
+        );
+
+        // Fetch next page using getQueryResults
+        let job_ref = &response.job_reference;
+        let get_results_req = GetQueryResultsRequest {
+            start_index: 0,
+            page_token: Some(page_token.clone()),
+            max_results: Some(10000),
+            timeout_ms: None,
+            location: job_ref.location.clone(),
+            format_options: None,
+        };
+
+        let get_results_response = state
+            .bigquery_client
+            .job()
+            .get_query_results(&job_ref.project_id, &job_ref.job_id, &get_results_req)
+            .await
+            .context(format!(
+                "Failed to fetch page {} for HAM{}",
+                page_count, req.hamming_distance
+            ))?;
+
+        // Convert GetQueryResultsResponse to QueryResponse format for processing
+        response.rows = get_results_response.rows;
+        response.page_token = get_results_response.page_token;
+
+        if let Some(rows) = response.rows.as_ref() {
+            for row in rows {
+                if videos.len() >= req.limit as usize {
+                    break; // Stop if we've reached the limit
+                }
+
+                if row.f.len() < 2 {
+                    continue;
+                }
+
+                let video_id = match &row.f[0].v {
+                    Value::String(s) => s.clone(),
+                    _ => continue,
+                };
+
+                let phash = match &row.f[1].v {
+                    Value::String(s) => s.clone(),
+                    _ => continue,
+                };
+
+                videos.push((video_id, phash));
+            }
+        }
+
+        log::info!(
+            "Fetched page {} with {} videos for HAM{} (total so far: {})",
+            page_count,
+            response.rows.as_ref().map(|r| r.len()).unwrap_or(0),
+            req.hamming_distance,
+            videos.len()
+        );
+    }
+
+    log::info!(
+        "✅ Fetched {} unprocessed videos for HAM{} across {} pages",
+        videos.len(),
+        req.hamming_distance,
+        page_count
+    );
+    Ok(videos)
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn process_deduplicate_video(
+    state: &AppState,
+    milvus_client: &MilvusClient,
+    video_id: &str,
+    phash: &str,
+    hamming_distance: u32,
+    metrics: &mut MetricsCollector,
+) -> Result<bool> {
+    // Search for top 2 results: [self-match, nearest_neighbor]
+    log::debug!("Searching for duplicates of video: {}", video_id);
+    let start = Instant::now();
+    let results = milvus::search_similar_videos_topk2(milvus_client, phash)
+        .await
+        .context("Failed to search in Milvus")?;
+    metrics.record_milvus_search(start.elapsed().as_micros());
+
+    // Filter out self-match (distance=0 or same video_id)
+    let nearest_neighbor = results
+        .into_iter()
+        .find(|r| r.hamming_distance > 0 && r.video_id != video_id);
+
+    let (is_unique, duplicate_of, distance) = if let Some(neighbor) = nearest_neighbor {
+        if neighbor.hamming_distance <= hamming_distance {
+            log::info!(
+                "🔍 DUPLICATE (HAM{}): Video {} matches {} with distance {}",
+                hamming_distance,
+                video_id,
+                neighbor.video_id,
+                neighbor.hamming_distance
+            );
+            (
+                false,
+                Some(neighbor.video_id),
+                Some(neighbor.hamming_distance),
+            )
+        } else {
+            log::info!(
+                "✨ UNIQUE (HAM{}): Video {} has no duplicates within threshold (nearest: {} at distance {})",
+                hamming_distance,
+                video_id,
+                neighbor.video_id,
+                neighbor.hamming_distance
+            );
+            (true, None, None)
+        }
+    } else {
+        log::info!(
+            "✨ UNIQUE (HAM{}): Video {} has no other videos in index",
+            hamming_distance,
+            video_id
+        );
+        (true, None, None)
+    };
+
+    // Store in threshold-specific BigQuery table
+    let start = Instant::now();
+    store_dedup_status_with_table(
+        state,
+        video_id,
+        phash,
+        is_unique,
+        duplicate_of,
+        distance,
+        hamming_distance,
+    )
+    .await
+    .context("Failed to store dedup status")?;
+    metrics.record_bigquery_insert(start.elapsed().as_micros());
+
+    Ok(is_unique)
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn store_dedup_status_with_table(
+    state: &AppState,
+    video_id: &str,
+    phash: &str,
+    is_unique: bool,
+    duplicate_of: Option<String>,
+    hamming_distance_actual: Option<u32>,
+    hamming_distance_threshold: u32,
+) -> Result<()> {
+    let table_name = get_bigquery_table(hamming_distance_threshold);
+
+    let row_data = json!({
+        "video_id": video_id,
+        "phash": phash,
+        "is_duplicate": !is_unique,
+        "duplicate_of": duplicate_of,
+        "hamming_distance": hamming_distance_actual,
+        "ingested_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    let request = InsertAllRequest {
+        rows: vec![Row {
+            insert_id: Some(format!(
+                "dedup_{}_{}_{}",
+                hamming_distance_threshold,
+                video_id,
+                chrono::Utc::now().timestamp_millis()
+            )),
+            json: row_data,
+        }],
+        ignore_unknown_values: Some(false),
+        skip_invalid_rows: Some(false),
+        ..Default::default()
+    };
+
+    let result = state
+        .bigquery_client
+        .tabledata()
+        .insert(
+            "hot-or-not-feed-intelligence",
+            "yral_ds",
+            &table_name,
+            &request,
+        )
+        .await
+        .context(format!(
+            "Failed to insert into BigQuery table {}",
+            table_name
+        ))?;
 
     if let Some(errors) = result.insert_errors {
         if !errors.is_empty() {

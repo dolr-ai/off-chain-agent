@@ -24,6 +24,7 @@ pub struct VideoPublisherDataV2 {
 pub struct VideoHashDuplication;
 
 impl VideoHashDuplication {
+    #[allow(dead_code)]
     pub async fn process_video_deduplication<'a>(
         &self,
         agent: &ic_agent::Agent,
@@ -228,8 +229,8 @@ impl VideoHashDuplication {
         let bigquery_client = app_state::init_bigquery_client().await;
 
         let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique_v2` 
-             (video_id, videohash, created_at) 
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique_v2`
+             (video_id, videohash, created_at)
              VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
 
@@ -244,6 +245,112 @@ impl VideoHashDuplication {
             .job()
             .query("hot-or-not-feed-intelligence", &request)
             .await?;
+
+        Ok(())
+    }
+
+    /// V2 version that uses Milvus for deduplication instead of DedupIndex canister
+    /// Provides configurable hamming distance threshold and graceful fallback
+    #[allow(clippy::too_many_arguments)]
+    pub async fn process_video_deduplication_v2<'a>(
+        &self,
+        agent: &ic_agent::Agent,
+        bigquery_client: &google_cloud_bigquery::client::Client,
+        milvus_client: &Option<crate::milvus::Client>,
+        video_id: &str,
+        _video_url: &str,
+        publisher_data: VideoPublisherDataV2,
+        hamming_threshold: u32,
+        publish_video_callback: impl FnOnce(
+            &str,
+            String,
+            String,
+            &str,
+        )
+            -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
+    ) -> Result<(), anyhow::Error> {
+        log::info!(
+            "Computing phash for video ID: {video_id} (v2 with Milvus, threshold={})",
+            hamming_threshold
+        );
+        let (phash, metadata) = compute_phash_from_cloudflare(video_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
+
+        // Check for duplicates using Milvus (with fallback to DedupIndex)
+        let is_duplicate = if let Some(client) = milvus_client {
+            log::debug!(
+                "Checking Milvus for duplicates with threshold {}",
+                hamming_threshold
+            );
+            match crate::milvus::search_similar_videos(client, &phash, hamming_threshold).await {
+                Ok(results) => {
+                    let is_dup = !results.is_empty();
+                    if is_dup {
+                        log::info!(
+                            "Duplicate video detected via Milvus: hash: {} | video_id: {} | matches: {} videos",
+                            phash,
+                            video_id,
+                            results.len()
+                        );
+                    }
+                    is_dup
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Milvus search failed ({}), falling back to DedupIndex: {}",
+                        video_id,
+                        e
+                    );
+                    // Fallback to DedupIndex canister
+                    DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent)
+                        .is_duplicate(phash.clone())
+                        .await
+                        .context("Couldn't check if the video is duplicate (fallback)")?
+                }
+            }
+        } else {
+            log::debug!("Milvus client not available, using DedupIndex canister");
+            // No Milvus client, use DedupIndex canister
+            DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent)
+                .is_duplicate(phash.clone())
+                .await
+                .context("Couldn't check if the video is duplicate")?
+        };
+
+        // Store the phash regardless of duplication status
+        self.store_videohash_original(bigquery_client, video_id, &phash)
+            .await?;
+        self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
+            .await?;
+
+        if !is_duplicate {
+            // Insert into Milvus if unique and client available
+            if let Some(client) = milvus_client {
+                let created_at = chrono::Utc::now().timestamp();
+                log::debug!("Inserting unique video into Milvus: {}", video_id);
+                if let Err(e) =
+                    crate::milvus::insert_video_hash(client, video_id, &phash, created_at).await
+                {
+                    log::error!("Failed to insert video {} into Milvus: {}", video_id, e);
+                    // Continue processing even if Milvus insert fails
+                }
+            }
+
+            self.store_unique_video(video_id, &phash).await?;
+            self.store_unique_video_v2(video_id, &phash).await?;
+            log::info!("Unique video recorded: video_id [{video_id}]");
+        }
+
+        // Always proceed with normal video processing, regardless of duplicate status
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        publish_video_callback(
+            video_id,
+            publisher_data.post_id,
+            timestamp,
+            &publisher_data.publisher_principal,
+        )
+        .await?;
 
         Ok(())
     }
