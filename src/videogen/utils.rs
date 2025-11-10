@@ -153,6 +153,8 @@ pub async fn queue_to_qstash_with_rollback(
     jwt_token: String,
     user_principal: Principal,
 ) -> Result<(), (StatusCode, Json<VideoGenError>)> {
+    let uses_webhook = qstash_request.input.supports_webhook_callbacks();
+
     // Build callback URL
     let callback_url = OFF_CHAIN_AGENT_URL
         .join("qstash/video_gen_callback")
@@ -169,7 +171,14 @@ pub async fn queue_to_qstash_with_rollback(
     // Attempt to queue
     if let Err(e) = app_state
         .qstash_client
-        .queue_video_generation(&qstash_request, &callback_url)
+        .queue_video_generation(
+            &qstash_request,
+            if uses_webhook {
+                None
+            } else {
+                Some(&callback_url)
+            },
+        )
         .await
     {
         log::error!("Failed to queue video generation: {e}. Rolling back balance.");

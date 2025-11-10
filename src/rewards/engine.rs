@@ -391,6 +391,21 @@ impl RewardEngine {
                     .set_last_milestone(video_id, milestone_number)
                     .await?;
 
+                // Send analytics event
+                analytics::send_btc_rewarded_event(
+                    analytics::BtcRewardedEventParams {
+                        creator_id,
+                        video_id,
+                        milestone: milestone_number,
+                        reward_btc: btc_amount,
+                        reward_inr: config.reward_amount_inr,
+                        view_count,
+                        tx_id: Some(tx_id.clone()),
+                    },
+                    app_state,
+                )
+                .await;
+
                 // Send notification to creator
                 self.send_reward_notification(
                     creator_id,

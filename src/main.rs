@@ -116,6 +116,7 @@ async fn main_impl() -> Result<()> {
 
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
+    let replicate_webhook_routes = videogen::router::replicate_webhook_router(shared_state.clone());
 
     let http = Router::new()
         .route("/healthz", get(health_handler))
@@ -125,6 +126,7 @@ async fn main_impl() -> Result<()> {
             post(enqueue_storj_backfill_item),
         )
         .nest("/qstash", qstash_routes)
+        .nest("/replicate", replicate_webhook_routes)
         .fallback_service(router)
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB limit
         .layer(CorsLayer::permissive())

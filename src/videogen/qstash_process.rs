@@ -31,17 +31,20 @@ pub async fn process_video_generation(
             crate::videogen::models::inttest::generate(request.input, &state).await
         }
         VideoGenInput::Wan25(_) => {
-            crate::videogen::models::wan2_5::generate(request.input, &state).await
+            let input = request.input.clone();
+            crate::videogen::models::wan2_5::generate_with_context(input, &state, &request).await
         }
         VideoGenInput::Wan25Fast(_) => {
-            crate::videogen::models::wan2_5_fast::generate(request.input, &state).await
+            let input = request.input.clone();
+            crate::videogen::models::wan2_5_fast::generate_with_context(input, &state, &request)
+                .await
         }
         _ => Err(VideoGenError::UnsupportedModel(
             request.input.model_id().to_string(),
         )),
     };
 
-    // Prepare callback data
+    // Prepare callback data for non-webhook or error cases
     let callback_result = match result {
         Ok(response) => VideoGenCallbackResult::Success(response),
         Err(e) => VideoGenCallbackResult::Failure(e.to_string()),

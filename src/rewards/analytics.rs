@@ -20,6 +20,16 @@ pub struct BtcVideoViewedEventParams<'a> {
     pub is_logged_in: bool,
 }
 
+pub struct BtcRewardedEventParams<'a> {
+    pub creator_id: &'a Principal,
+    pub video_id: &'a str,
+    pub milestone: u64,
+    pub reward_btc: f64,
+    pub reward_inr: f64,
+    pub view_count: u64,
+    pub tx_id: Option<String>,
+}
+
 /// Send btc_video_viewed event to marketing analytics server
 pub async fn send_btc_video_viewed_event(
     params: BtcVideoViewedEventParams<'_>,
@@ -73,6 +83,60 @@ pub async fn send_btc_video_viewed_event(
 
         if let Err(e) = send_event_internal(payload).await {
             log::error!("Failed to send btc_video_viewed event: {}", e);
+        }
+    });
+}
+
+/// Send btc_rewarded event to marketing analytics server
+pub async fn send_btc_rewarded_event(
+    params: BtcRewardedEventParams<'_>,
+    app_state: &Arc<AppState>,
+) {
+    // Spawn async task to avoid blocking
+    let creator_id = *params.creator_id;
+    let creator_id_text = params.creator_id.to_text();
+    let video_id = params.video_id.to_string();
+    let milestone = params.milestone;
+    let reward_btc = params.reward_btc;
+    let reward_inr = params.reward_inr;
+    let view_count = params.view_count;
+    let tx_id = params.tx_id.clone();
+    let app_state = app_state.clone();
+
+    tokio::spawn(async move {
+        // Fetch canister_id inside spawn (non-blocking)
+        let canister_id = app_state
+            .get_individual_canister_by_user_principal(creator_id)
+            .await
+            .ok();
+
+        // Build JSON payload
+        let timestamp = chrono::Utc::now().timestamp();
+        let payload = json!({
+            "event": "btc_rewarded",
+            "creator_id": creator_id_text,
+            "principal": creator_id_text,
+            "canister_id": canister_id.map(|c| c.to_text()),
+            "video_id": video_id,
+            "milestone": milestone,
+            "reward_btc": reward_btc,
+            "reward_inr": reward_inr,
+            "view_count": view_count,
+            "tx_id": tx_id,
+            "ts": timestamp,
+        });
+
+        if let Err(e) = send_event_internal(payload).await {
+            log::error!("Failed to send btc_rewarded event: {}", e);
+        } else {
+            log::info!(
+                "Successfully sent btc_rewarded event for creator {} (video: {}, milestone: {}, BTC: {:.8}, INR: {:.2})",
+                creator_id_text,
+                video_id,
+                milestone,
+                reward_btc,
+                reward_inr
+            );
         }
     });
 }

@@ -2,7 +2,9 @@ use axum::http::StatusCode;
 use candid::Principal;
 use std::sync::Arc;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
-use yral_canisters_client::rate_limits::RateLimits;
+use yral_canisters_client::rate_limits::{
+    RateLimits, TokenType as CanisterTokenType, VideoGenRequest, VideoGenRequestKey,
+};
 use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 
 use crate::{
@@ -88,6 +90,49 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
     }
 }
 
+pub async fn fetch_request(
+    user_principal: Principal,
+    counter: u64,
+    app_state: &Arc<AppState>,
+) -> Result<VideoGenRequest, (StatusCode, VideoGenError)> {
+    let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
+
+    let videogen_request_key = VideoGenRequestKey {
+        principal: user_principal,
+        counter,
+    };
+
+    let request_result = rate_limits_client
+        .get_video_generation_request(videogen_request_key)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                VideoGenError::NetworkError(format!(
+                    "Failed to fetch video generation request: {e}"
+                )),
+            )
+        })?;
+
+    match request_result {
+        Some(request) => {
+            log::info!(
+                "Fetched video generation request for principal {} counter {}",
+                user_principal,
+                counter
+            );
+            Ok(request)
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            VideoGenError::InvalidInput(format!(
+                "Request not found for principal {} counter {}",
+                user_principal, counter
+            )),
+        )),
+    }
+}
+
 /// Verifies rate limit and creates video generation request if allowed (v1 with payment support)
 ///
 /// # Arguments
@@ -133,13 +178,20 @@ pub async fn verify_rate_limit_and_create_request_v1(
     // Create rate limits client
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
 
-    // Use the v1 method that handles both rate limit check and request creation
+    let canister_token_type = match token_type {
+        TokenType::Free => CanisterTokenType::Free,
+        TokenType::Sats => CanisterTokenType::Sats,
+        TokenType::Dolr => CanisterTokenType::Dolr,
+    };
+
+    // Use the v2 method that handles both rate limit check and request creation
     let request_key_result = rate_limits_client
-        .create_video_generation_request_v_1(
+        .create_video_generation_request_v_2(
             user_principal,
             model.to_string(),
             prompt.to_string(),
             property.to_string(),
+            canister_token_type,
             is_registered,
             is_paid,
             payment_amount_str,
