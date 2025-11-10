@@ -1,5 +1,11 @@
 pub mod utils;
 
+#[cfg(not(feature = "local-bin"))]
+pub mod api;
+
+#[cfg(not(feature = "local-bin"))]
+pub mod router;
+
 use anyhow::{Context, Result};
 use milvus::client::{Client as MilvusClient, ClientBuilder};
 use milvus::collection::SearchOption;

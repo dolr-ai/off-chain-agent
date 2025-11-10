@@ -227,10 +227,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/milvus/deduplicate_videos",
             post(milvus_ingest::deduplicate_videos_handler),
-        )
-        .route(
-            "/milvus/check_duplicate",
-            post(milvus_ingest::check_duplicate_handler),
         );
 
     router

@@ -74,7 +74,7 @@ async fn main_impl() -> Result<()> {
         .layer(NewSentryLayer::new_from_top())
         .layer(SentryHttpLayer::with_transaction());
 
-    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+    let router = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/api/v1/posts", posts::posts_router(shared_state.clone()))
         .nest(
             "/api/v1/events",
@@ -108,8 +108,15 @@ async fn main_impl() -> Result<()> {
         .nest(
             "/api/v1/videos",
             duplicate_video::router::video_router(shared_state.clone()),
-        )
-        .split_for_parts();
+        );
+
+    #[cfg(not(feature = "local-bin"))]
+    let router = router.nest(
+        "/api/v1/milvus",
+        milvus::router::milvus_router(shared_state.clone()),
+    );
+
+    let (router, api) = router.split_for_parts();
 
     let router =
         router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()));
