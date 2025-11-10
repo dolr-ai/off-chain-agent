@@ -59,11 +59,11 @@ jobs:
       - name: Use rust cache
         uses: Swatinem/rust-cache@v2
 
-      # - name: Clippy check
-      #   run: cargo clippy --no-deps --release -- --deny warnings --allow deprecated
+      - name: Clippy check
+        run: cargo clippy --no-deps --release -- --deny warnings --allow deprecated
 
-      # - name: Formatting check
-      #   run: cargo fmt --check
+      - name: Formatting check
+        run: cargo fmt --check
 
       - name: Build
         env:
