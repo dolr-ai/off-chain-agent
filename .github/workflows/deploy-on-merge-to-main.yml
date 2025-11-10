@@ -73,6 +73,7 @@ jobs:
           flyctl secrets set "YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY=$YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "SERVICE_CANISTER_MIGRATION_REDIS_URL=$SERVICE_CANISTER_MIGRATION_REDIS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set "ANALYTICS_SERVER_TOKEN=$ANALYTICS_SERVER_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "MILVUS_URL=$MILVUS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set REPLICATE_WEBHOOK_SIGNING_SECRET="$REPLICATE_WEBHOOK_SIGNING_SECRET" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
@@ -113,6 +114,7 @@ jobs:
           BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}
           YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY: ${{ secrets.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}
           ANALYTICS_SERVER_TOKEN: ${{ secrets.ANALYTICS_SERVER_TOKEN }}
+          MILVUS_URL: ${{ secrets.MILVUS_URL }}
           REPLICATE_WEBHOOK_SIGNING_SECRET: ${{ secrets.REPLICATE_WEBHOOK_SIGNING_SECRET }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml

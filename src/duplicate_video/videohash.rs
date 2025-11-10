@@ -1,3 +1,7 @@
+// NOTE: This is the old videohash implementation kept for reference
+// The new phash implementation in phash.rs is now used instead
+#![allow(dead_code)]
+
 use image::imageops::FilterType;
 use image::DynamicImage;
 use log;

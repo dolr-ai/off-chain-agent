@@ -7,6 +7,15 @@ RUN apt-get update \
     ca-certificates \
     curl \
     ffmpeg \
+    libavutil-dev \
+    libavformat-dev \
+    libavfilter-dev \
+    libavdevice-dev \
+    libavcodec-dev \
+    libswscale-dev \
+    libswresample-dev \
+    libblas-dev \
+    liblapack-dev \
     unzip
 
 RUN curl -L https://github.com/storj/storj/releases/latest/download/uplink_linux_amd64.zip -o uplink_linux_amd64.zip

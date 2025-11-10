@@ -64,7 +64,7 @@ utoipa = "5.3.1"
 utoipa-axum = "0.2.0"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 tower-http = { version = "0.6.2", features = ["cors", "limit"] }
-image = "0.24"
+image = "0.25"
 rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
 storj-interface = { git = "https://github.com/yral-dapp/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
@@ -105,6 +105,9 @@ async-channel = "2.3.1"
 num-bigint = "0.4"
 num-traits = "0.2"
 sentry-anyhow = "0.42.0"
+ffmpeg-next = "7"
+image_hasher = "3.0.0"
+milvus-sdk-rust = "0.1.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
@@ -155,6 +158,10 @@ path = "src/main.rs"
 [[bin]]
 name = "generate_jwt"
 path = "src/bin/generate_jwt.rs"
+
+[[bin]]
+name = "backfill_video_counts"
+path = "src/bin/backfill_video_counts.rs"
 
 [features]
 local-bin = []

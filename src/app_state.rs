@@ -16,6 +16,8 @@ use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::identity::Secp256k1Identity;
 use ic_agent::Agent;
+#[cfg(not(feature = "local-bin"))]
+use milvus::client::Client as MilvusClient;
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
@@ -58,6 +60,8 @@ pub struct AppState {
     pub config: AppConfig,
     pub replicate_api_token: String,
     pub user_migration_api_key: String,
+    #[cfg(not(feature = "local-bin"))]
+    pub milvus_client: Option<MilvusClient>,
 }
 
 impl AppState {
@@ -71,6 +75,9 @@ impl AppState {
         if let Err(e) = rewards_module.initialize().await {
             log::error!("Failed to initialize rewards module: {}", e);
         }
+
+        #[cfg(not(feature = "local-bin"))]
+        let milvus_client = init_milvus_client(&app_config).await;
 
         AppState {
             admin_identity: init_identity(),
@@ -108,6 +115,8 @@ impl AppState {
             replicate_api_token: env::var("REPLICATE_API_TOKEN").unwrap_or_default(),
             user_migration_api_key: env::var("YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY")
                 .expect("YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY is not set"),
+            #[cfg(not(feature = "local-bin"))]
+            milvus_client,
         }
     }
 
@@ -333,4 +342,37 @@ async fn init_service_canister_migration_redis_pool() -> RedisPool {
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
     RedisPool::builder().build(manager).await.unwrap()
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn init_milvus_client(app_config: &AppConfig) -> Option<MilvusClient> {
+    use crate::milvus;
+
+    let milvus_url = match &app_config.milvus_url {
+        Some(url) => url,
+        None => {
+            log::warn!("MILVUS_URL not set, Milvus functionality will be disabled");
+            return None;
+        }
+    };
+
+    log::info!("Initializing Milvus client at {}", milvus_url);
+
+    match milvus::create_milvus_client(milvus_url.clone()).await {
+        Ok(client) => {
+            log::info!("Milvus client connected successfully");
+
+            // Initialize collection if it doesn't exist
+            if let Err(e) = milvus::init_collection(&client).await {
+                log::error!("Failed to initialize Milvus collection: {}", e);
+                return None;
+            }
+
+            Some(client)
+        }
+        Err(e) => {
+            log::error!("Failed to connect to Milvus: {}", e);
+            None
+        }
+    }
 }

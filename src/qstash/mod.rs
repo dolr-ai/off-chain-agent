@@ -39,13 +39,19 @@ use crate::{
 };
 
 pub mod client;
+pub mod dedup_index_backfill;
 pub mod duplicate;
 pub mod hotornot_job;
+#[cfg(not(feature = "local-bin"))]
+pub mod milvus_ingest;
+pub mod phash_bulk;
 pub mod service_canister_migration;
 
 #[derive(Clone)]
 pub struct QStashState {
+    #[allow(dead_code)]
     decoding_key: Arc<DecodingKey>,
+    #[allow(dead_code)]
     validation: Arc<Validation>,
 }
 
@@ -69,6 +75,7 @@ struct VideoHashIndexingRequest {
     publisher_data: VideoPublisherDataV2,
 }
 
+#[cfg(not(feature = "local-bin"))]
 #[instrument(skip(state))]
 async fn video_deduplication_handler(
     State(state): State<Arc<AppState>>,
@@ -86,12 +93,15 @@ async fn video_deduplication_handler(
     let qstash_client = state.qstash_client.clone();
 
     if let Err(e) = duplicate::VideoHashDuplication
-        .process_video_deduplication(
+        .process_video_deduplication_v2(
             &state.agent,
             &state.bigquery_client,
+            &state.milvus_client,
+            &state.leaderboard_redis_pool,
             &req.video_id,
             &req.video_url,
             publisher_data,
+            30, // Default hamming threshold
             move |vid_id, post_id, timestamp, publisher_user_id| {
                 // Clone the values to ensure they have 'static lifetime
                 let vid_id = vid_id.to_string();
@@ -124,8 +134,14 @@ async fn video_deduplication_handler(
 #[instrument(skip(app_state))]
 // QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
-    Router::new()
-        .route("/video_deduplication", post(video_deduplication_handler))
+    let mut router = Router::new();
+
+    #[cfg(not(feature = "local-bin"))]
+    {
+        router = router.route("/video_deduplication", post(video_deduplication_handler));
+    }
+
+    let router = router
         .route("/upload_video_gcs", post(upload_video_gcs))
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
@@ -185,6 +201,39 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(crate::leaderboard::handlers::end_tournament_handler),
         )
         .route("/rewards/update_config", post(update_reward_config))
+        .route(
+            "/compute_video_phash",
+            post(phash_bulk::compute_video_phash_handler),
+        )
+        .route(
+            "/bulk_compute_phash",
+            post(phash_bulk::bulk_compute_phash_handler),
+        )
+        .route(
+            "/backfill_dedup_index",
+            post(dedup_index_backfill::backfill_dedup_index_handler),
+        );
+
+    #[cfg(not(feature = "local-bin"))]
+    let router = router
+        .route(
+            "/milvus/ingest_phash",
+            post(milvus_ingest::ingest_phash_to_milvus_handler),
+        )
+        .route(
+            "/milvus/backfill_unique_videos",
+            post(milvus_ingest::backfill_unique_videos_handler),
+        )
+        .route(
+            "/milvus/bulk_ingest_unique_hashes",
+            post(milvus_ingest::bulk_ingest_unique_hashes_handler),
+        )
+        .route(
+            "/milvus/deduplicate_videos",
+            post(milvus_ingest::deduplicate_videos_handler),
+        );
+
+    router
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
