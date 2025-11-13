@@ -59,6 +59,23 @@ pub static STORJ_BACKUP_CANISTER_ACCESS_GRANT: Lazy<String> = Lazy::new(|| {
 
 pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
 
+// Storj Public Bucket URLs
+pub const STORJ_SFW_BUCKET_URL: &str =
+    "https://link.storjshare.io/raw/jx6vm3ebgb4gt3gfkmcrw62bl7rq/yral-videos";
+pub const STORJ_NSFW_BUCKET_URL: &str =
+    "https://link.storjshare.io/raw/jwait7tp3civp6cbaot4zzjbheqq/yral-nsfw-videos";
+
+/// Construct Storj video URL based on NSFW status
+/// By default, videos are in SFW bucket until moved to NSFW bucket after detection
+pub fn get_storj_video_url(video_id: &str, is_nsfw: bool) -> String {
+    let bucket_url = if is_nsfw {
+        STORJ_NSFW_BUCKET_URL
+    } else {
+        STORJ_SFW_BUCKET_URL
+    };
+    format!("{}/{}.mp4", bucket_url, video_id)
+}
+
 // Rate Limiting Constants
 pub static RATE_LIMITS_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
     "h2jgv-ayaaa-aaaas-qbh4a-cai"

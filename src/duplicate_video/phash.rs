@@ -234,14 +234,13 @@ pub fn extract_metadata(video_path: &Path, video_id: String) -> Result<VideoMeta
     })
 }
 
-/// Download video from Cloudflare stream URL
+/// Download video from Storj (defaults to SFW bucket)
+/// Note: At deduplication time, NSFW status is not yet known, so we always use SFW bucket
 pub async fn download_video_from_cloudflare(video_id: &str, output_path: &Path) -> Result<()> {
-    let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        video_id
-    );
+    // Use SFW bucket by default (NSFW status not determined yet at dedup time)
+    let url = crate::consts::get_storj_video_url(video_id, false);
 
-    log::info!("Downloading video from Cloudflare: {}", url);
+    log::info!("Downloading video from Storj: {}", url);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
