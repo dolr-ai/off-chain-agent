@@ -1,4 +1,5 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use serde_json::json;
 use std::sync::Arc;
 use tracing::instrument;
 use videogen_common::{VideoGenError, VideoGenInput, VideoGenerator};
@@ -12,6 +13,19 @@ use crate::{
         },
     },
 };
+
+pub async fn process_prompt_generation(
+    State(_state): State<Arc<AppState>>,
+    Json(request): Json<QstashVideoGenRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<VideoGenError>)> {
+    log::info!(
+        "Processing prompt generation for user {} with model {}",
+        request.user_principal,
+        request.input.model_id()
+    );
+
+    Ok(Json(json!({})))
+}
 
 /// Process video generation request from Qstash queue
 #[instrument(skip(state))]
@@ -40,6 +54,11 @@ pub async fn process_video_generation(
         VideoGenInput::Wan25Fast(_) => {
             let input = request.input.clone();
             crate::videogen::models::wan2_5_fast::generate_with_context(input, &state, &request)
+                .await
+        }
+        VideoGenInput::SpeechToVideo(_) => {
+            let input = request.input.clone();
+            crate::videogen::models::speech_to_video::generate_with_context(input, &state, &request)
                 .await
         }
         _ => Err(VideoGenError::UnsupportedModel(
