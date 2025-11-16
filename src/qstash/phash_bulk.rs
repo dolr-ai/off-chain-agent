@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use crate::duplicate_video::phash::{download_video_from_cloudflare, extract_metadata, PHasher};
+use crate::duplicate_video::phash::{download_video_from_storj, extract_metadata, PHasher};
 use crate::pipeline::Step;
 use crate::setup_context;
 use axum::{extract::State, response::Response, Json};
@@ -73,7 +73,7 @@ pub async fn compute_video_phash_handler(
     let video_path = temp_dir.join(format!("{}.mp4", req.video_id));
 
     if let Err(e) =
-        download_video_from_cloudflare(&req.publisher_user_id, &req.video_id, &video_path).await
+        download_video_from_storj(&req.publisher_user_id, &req.video_id, &video_path).await
     {
         log::error!("Failed to download video {}: {}", req.video_id, e);
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;

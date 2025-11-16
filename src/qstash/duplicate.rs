@@ -4,7 +4,7 @@ use crate::events::types::string_or_number;
 use crate::{
     app_state,
     consts::DEDUP_INDEX_CANISTER_ID,
-    duplicate_video::phash::{compute_phash_from_cloudflare, VideoMetadata},
+    duplicate_video::phash::{compute_phash_from_storj, VideoMetadata},
 };
 use anyhow::Context;
 use google_cloud_bigquery::http::job::query::QueryRequest;
@@ -44,7 +44,7 @@ impl VideoHashDuplication {
     ) -> Result<(), anyhow::Error> {
         log::info!("Computing phash for video ID: {video_id}");
         let (phash, metadata) =
-            compute_phash_from_cloudflare(&publisher_data.publisher_principal, video_id)
+            compute_phash_from_storj(&publisher_data.publisher_principal, video_id)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
 
@@ -321,7 +321,7 @@ impl VideoHashDuplication {
             hamming_threshold
         );
         let (phash, metadata) =
-            compute_phash_from_cloudflare(&publisher_data.publisher_principal, video_id)
+            compute_phash_from_storj(&publisher_data.publisher_principal, video_id)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
 

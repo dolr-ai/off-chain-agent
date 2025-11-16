@@ -236,7 +236,7 @@ pub fn extract_metadata(video_path: &Path, video_id: String) -> Result<VideoMeta
 
 /// Download video from Storj (defaults to SFW bucket)
 /// Note: At deduplication time, NSFW status is not yet known, so we always use SFW bucket
-pub async fn download_video_from_cloudflare(
+pub async fn download_video_from_storj(
     publisher_user_id: &str,
     video_id: &str,
     output_path: &Path,
@@ -358,7 +358,7 @@ pub async fn compute_phash_from_url(url: &str) -> Result<(String, VideoMetadata)
 /// Compute phash for a video by downloading from Storj
 /// Downloads video, computes hash and extracts metadata, cleans up temp files automatically
 /// Returns tuple of (phash, metadata)
-pub async fn compute_phash_from_cloudflare(
+pub async fn compute_phash_from_storj(
     publisher_user_id: &str,
     video_id: &str,
 ) -> Result<(String, VideoMetadata)> {
@@ -372,8 +372,7 @@ pub async fn compute_phash_from_cloudflare(
 
     let video_path = temp_dir.join(format!("{}.mp4", video_id));
 
-    let download_result =
-        download_video_from_cloudflare(publisher_user_id, video_id, &video_path).await;
+    let download_result = download_video_from_storj(publisher_user_id, video_id, &video_path).await;
     if let Err(e) = download_result {
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
         return Err(e);
