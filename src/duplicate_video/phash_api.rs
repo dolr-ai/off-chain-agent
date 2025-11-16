@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use crate::duplicate_video::phash::compute_phash_from_cloudflare;
+use crate::duplicate_video::phash::compute_phash_from_storj;
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -11,6 +11,7 @@ use utoipa::ToSchema;
 pub struct ComputePhashRequest {
     /// Video ID to process
     pub video_id: String,
+    pub publisher_user_id: String,
 }
 
 /// Response with computed phash and metadata
@@ -53,8 +54,7 @@ pub async fn compute_phash_api(
 ) -> Result<Json<ComputePhashResponse>, StatusCode> {
     log::info!("Computing phash for video ID (API): {}", req.video_id);
 
-    // Use shared helper function to compute phash and extract metadata
-    let (phash, metadata) = compute_phash_from_cloudflare(&req.video_id)
+    let (phash, metadata) = compute_phash_from_storj(&req.publisher_user_id, &req.video_id)
         .await
         .map_err(|e| {
             log::error!("Failed to compute phash for {}: {}", req.video_id, e);

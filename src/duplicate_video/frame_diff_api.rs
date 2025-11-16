@@ -10,7 +10,9 @@ use super::frame_diff::{compare_videos, upload_frame_to_gcs};
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CompareVideosRequest {
+    pub publisher_user_id_1: String,
     pub video_id_1: String,
+    pub publisher_user_id_2: String,
     pub video_id_2: String,
 }
 
@@ -57,18 +59,22 @@ pub async fn compare_videos_api(
     );
 
     // Compare videos and get differing frame indices with hamming distances
-    let (differing_frames, frames1, frames2, video1_phash, video2_phash) =
-        compare_videos(&req.video_id_1, &req.video_id_2)
-            .await
-            .map_err(|e| {
-                log::error!(
-                    "Failed to compare videos {} vs {}: {}",
-                    req.video_id_1,
-                    req.video_id_2,
-                    e
-                );
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+    let (differing_frames, frames1, frames2, video1_phash, video2_phash) = compare_videos(
+        &req.publisher_user_id_1,
+        &req.video_id_1,
+        &req.publisher_user_id_2,
+        &req.video_id_2,
+    )
+    .await
+    .map_err(|e| {
+        log::error!(
+            "Failed to compare videos {} vs {}: {}",
+            req.video_id_1,
+            req.video_id_2,
+            e
+        );
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let total_frames = frames1.len();
 

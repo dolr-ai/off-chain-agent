@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::log;
 
-use super::phash::download_video_from_cloudflare;
+use super::phash::download_video_from_storj;
 
 const GCS_BUCKET: &str = "yral-dedup-analysis";
 
@@ -220,7 +220,9 @@ fn hamming_distance(hash1: &str, hash2: &str) -> u32 {
 
 /// Compare two videos and return indices where frames differ along with hamming distances and concatenated phashes
 pub async fn compare_videos(
+    publisher_user_id_1: &str,
     video_id_1: &str,
+    publisher_user_id_2: &str,
     video_id_2: &str,
 ) -> Result<(
     Vec<(usize, u32)>,
@@ -240,8 +242,8 @@ pub async fn compare_videos(
 
     // Download videos concurrently
     tokio::try_join!(
-        download_video_from_cloudflare(video_id_1, &video_path_1),
-        download_video_from_cloudflare(video_id_2, &video_path_2)
+        download_video_from_storj(publisher_user_id_1, video_id_1, &video_path_1),
+        download_video_from_storj(publisher_user_id_2, video_id_2, &video_path_2)
     )?;
 
     // Compute frame hashes and extract frames concurrently
@@ -333,27 +335,34 @@ pub async fn upload_frame_to_gcs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::duplicate_video::phash::compute_phash_from_cloudflare;
+    use crate::duplicate_video::phash::compute_phash_from_storj;
 
     #[tokio::test]
     async fn test_phash_consistency_between_functions() {
-        // Test video IDs
+        // Test video IDs and publisher IDs
+        let publisher_user_id_1 = "test_publisher_1";
         let video_id_1 = "056599298729e3541ed8ae7244aa5d95";
+        let publisher_user_id_2 = "test_publisher_2";
         let video_id_2 = "10c48ceabac721cb6cab3a37e8c6dc1f";
 
-        // Compute using compute_phash_from_cloudflare (original function)
-        let (phash1_original, _) = compute_phash_from_cloudflare(video_id_1)
+        // Compute using compute_phash_from_storj (original function)
+        let (phash1_original, _) = compute_phash_from_storj(publisher_user_id_1, video_id_1)
             .await
             .expect("Failed to compute phash for video 1");
 
-        let (phash2_original, _) = compute_phash_from_cloudflare(video_id_2)
+        let (phash2_original, _) = compute_phash_from_storj(publisher_user_id_2, video_id_2)
             .await
             .expect("Failed to compute phash for video 2");
 
         // Compute using compare_videos (new function)
-        let (_, _, _, phash1_compare, phash2_compare) = compare_videos(video_id_1, video_id_2)
-            .await
-            .expect("Failed to compare videos");
+        let (_, _, _, phash1_compare, phash2_compare) = compare_videos(
+            publisher_user_id_1,
+            video_id_1,
+            publisher_user_id_2,
+            video_id_2,
+        )
+        .await
+        .expect("Failed to compare videos");
 
         // Assert both methods produce identical hashes
         assert_eq!(

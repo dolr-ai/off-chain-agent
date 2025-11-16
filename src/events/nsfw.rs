@@ -134,9 +134,8 @@ pub async fn extract_frames_and_upload(
     });
 
     let video_id = payload.video_id;
-    let video_path = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
-    );
+    let publisher_user_id = &payload.video_info.publisher_user_id;
+    let video_path = crate::consts::get_storj_video_url(publisher_user_id, &video_id, false);
     let output_dir = create_output_directory(&video_id)?;
     let frames = extract_frames(&video_path, output_dir.clone()).await?;
     #[cfg(not(feature = "local-bin"))]

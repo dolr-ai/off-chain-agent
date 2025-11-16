@@ -97,10 +97,8 @@ impl Event {
 
                 let publisher_user_id = params.publisher_user_id.to_text();
 
-                // Construct video URL
-                let video_url = format!(
-                    "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{video_id}/downloads/default.mp4"
-                );
+                let video_url =
+                    crate::consts::get_storj_video_url(&publisher_user_id, &video_id, false);
 
                 log::info!("Sending video for deduplication check: {video_id}");
 
@@ -956,28 +954,24 @@ pub async fn upload_gcs_impl(
     post_id: String,
     timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
-    let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{uid}/downloads/default.mp4"
-    );
+    // Download from Storj (SFW bucket - NSFW status not yet determined at this stage)
+    let url = crate::consts::get_storj_video_url(publisher_user_id, uid, false);
     let name = format!("{uid}.mp4");
 
-    log::info!("Downloading video from Cloudflare Stream: {}", url);
+    log::info!("Downloading video from Storj: {}", url);
 
     // Download the video bytes
     let response = reqwest::Client::new().get(&url).send().await?;
 
     if !response.status().is_success() {
         return Err(anyhow::anyhow!(
-            "Failed to download video from Cloudflare Stream: HTTP {}",
+            "Failed to download video from Storj: HTTP {}",
             response.status()
         ));
     }
 
     let video_bytes = response.bytes().await?;
-    log::info!(
-        "Downloaded {} bytes from Cloudflare Stream",
-        video_bytes.len()
-    );
+    log::info!("Downloaded {} bytes from Storj", video_bytes.len());
 
     log::info!("Uploading video to GCS bucket 'yral-videos' as {}", name);
 

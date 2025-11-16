@@ -590,10 +590,10 @@ impl QStashClient {
         Ok(())
     }
 
-    #[instrument(skip(self, video_ids))]
+    #[instrument(skip(self, video_data))]
     pub async fn queue_compute_phash_batch(
         &self,
-        video_ids: Vec<String>,
+        video_data: Vec<(String, String)>, // (video_id, publisher_user_id)
         rate_limit: u32,
         parallelism: u32,
     ) -> anyhow::Result<()> {
@@ -603,13 +603,14 @@ impl QStashClient {
         let qstash_batch_url = self.base_url.join("batch")?;
 
         log::info!("Compute phash batch URL: {}", qstash_batch_url);
-        log::info!("Queuing {} videos for phash computation", video_ids.len());
+        log::info!("Queuing {} videos for phash computation", video_data.len());
 
-        let requests: Vec<serde_json::Value> = video_ids
+        let requests: Vec<serde_json::Value> = video_data
             .iter()
-            .map(|video_id| {
+            .map(|(video_id, publisher_user_id)| {
                 let payload = json!({
-                    "video_id": video_id
+                    "video_id": video_id,
+                    "publisher_user_id": publisher_user_id
                 });
                 let body_str = serde_json::to_string(&payload).unwrap_or_else(|e| {
                     tracing::error!("Failed to serialize ComputePhashRequest: {}", e);

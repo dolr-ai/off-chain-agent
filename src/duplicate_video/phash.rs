@@ -234,14 +234,17 @@ pub fn extract_metadata(video_path: &Path, video_id: String) -> Result<VideoMeta
     })
 }
 
-/// Download video from Cloudflare stream URL
-pub async fn download_video_from_cloudflare(video_id: &str, output_path: &Path) -> Result<()> {
-    let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        video_id
-    );
+/// Download video from Storj (defaults to SFW bucket)
+/// Note: At deduplication time, NSFW status is not yet known, so we always use SFW bucket
+pub async fn download_video_from_storj(
+    publisher_user_id: &str,
+    video_id: &str,
+    output_path: &Path,
+) -> Result<()> {
+    // Use SFW bucket by default (NSFW status not determined yet at dedup time)
+    let url = crate::consts::get_storj_video_url(publisher_user_id, video_id, false);
 
-    log::info!("Downloading video from Cloudflare: {}", url);
+    log::info!("Downloading video from Storj: {}", url);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
@@ -352,11 +355,14 @@ pub async fn compute_phash_from_url(url: &str) -> Result<(String, VideoMetadata)
     Ok((phash, metadata))
 }
 
-/// Compute phash for a video by downloading from Cloudflare
+/// Compute phash for a video by downloading from Storj
 /// Downloads video, computes hash and extracts metadata, cleans up temp files automatically
 /// Returns tuple of (phash, metadata)
-pub async fn compute_phash_from_cloudflare(video_id: &str) -> Result<(String, VideoMetadata)> {
-    log::info!("Computing phash for video ID from Cloudflare: {}", video_id);
+pub async fn compute_phash_from_storj(
+    publisher_user_id: &str,
+    video_id: &str,
+) -> Result<(String, VideoMetadata)> {
+    log::info!("Computing phash for video ID from Storj: {}", video_id);
 
     // Create temp directory
     let temp_dir = std::env::temp_dir().join(format!("dedup_{}", uuid::Uuid::new_v4()));
@@ -366,8 +372,7 @@ pub async fn compute_phash_from_cloudflare(video_id: &str) -> Result<(String, Vi
 
     let video_path = temp_dir.join(format!("{}.mp4", video_id));
 
-    // Download from Cloudflare
-    let download_result = download_video_from_cloudflare(video_id, &video_path).await;
+    let download_result = download_video_from_storj(publisher_user_id, video_id, &video_path).await;
     if let Err(e) = download_result {
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
         return Err(e);
@@ -402,7 +407,6 @@ pub async fn compute_phash_from_cloudflare(video_id: &str) -> Result<(String, Vi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_phash_creation() {
