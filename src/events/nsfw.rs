@@ -134,8 +134,8 @@ pub async fn extract_frames_and_upload(
     });
 
     let video_id = payload.video_id;
-    // Download from Storj SFW bucket (NSFW not yet determined at frame extraction stage)
-    let video_path = crate::consts::get_storj_video_url(&video_id, false);
+    let publisher_user_id = &payload.video_info.publisher_user_id;
+    let video_path = crate::consts::get_storj_video_url(publisher_user_id, &video_id, false);
     let output_dir = create_output_directory(&video_id)?;
     let frames = extract_frames(&video_path, output_dir.clone()).await?;
     #[cfg(not(feature = "local-bin"))]

@@ -97,8 +97,8 @@ impl Event {
 
                 let publisher_user_id = params.publisher_user_id.to_text();
 
-                // Construct video URL from Storj (SFW bucket - NSFW not yet determined)
-                let video_url = crate::consts::get_storj_video_url(&video_id, false);
+                let video_url =
+                    crate::consts::get_storj_video_url(&publisher_user_id, &video_id, false);
 
                 log::info!("Sending video for deduplication check: {video_id}");
 
@@ -955,7 +955,7 @@ pub async fn upload_gcs_impl(
     timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
     // Download from Storj (SFW bucket - NSFW status not yet determined at this stage)
-    let url = crate::consts::get_storj_video_url(uid, false);
+    let url = crate::consts::get_storj_video_url(publisher_user_id, uid, false);
     let name = format!("{uid}.mp4");
 
     log::info!("Downloading video from Storj: {}", url);

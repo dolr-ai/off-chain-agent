@@ -43,9 +43,10 @@ impl VideoHashDuplication {
             -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
     ) -> Result<(), anyhow::Error> {
         log::info!("Computing phash for video ID: {video_id}");
-        let (phash, metadata) = compute_phash_from_cloudflare(video_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
+        let (phash, metadata) =
+            compute_phash_from_cloudflare(&publisher_data.publisher_principal, video_id)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
 
         let is_duplicate = DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent)
             .is_duplicate(phash.clone())
@@ -319,9 +320,10 @@ impl VideoHashDuplication {
             "Computing phash for video ID: {video_id} (v2 with Milvus, threshold={})",
             hamming_threshold
         );
-        let (phash, metadata) = compute_phash_from_cloudflare(video_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
+        let (phash, metadata) =
+            compute_phash_from_cloudflare(&publisher_data.publisher_principal, video_id)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to compute phash: {}", e))?;
 
         // TIER 1: Check Redis for exact match (FAST - <1ms)
         log::debug!("Tier 1: Checking Redis for exact phash match");

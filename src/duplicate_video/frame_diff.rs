@@ -220,7 +220,9 @@ fn hamming_distance(hash1: &str, hash2: &str) -> u32 {
 
 /// Compare two videos and return indices where frames differ along with hamming distances and concatenated phashes
 pub async fn compare_videos(
+    publisher_user_id_1: &str,
     video_id_1: &str,
+    publisher_user_id_2: &str,
     video_id_2: &str,
 ) -> Result<(
     Vec<(usize, u32)>,
@@ -240,8 +242,8 @@ pub async fn compare_videos(
 
     // Download videos concurrently
     tokio::try_join!(
-        download_video_from_cloudflare(video_id_1, &video_path_1),
-        download_video_from_cloudflare(video_id_2, &video_path_2)
+        download_video_from_cloudflare(publisher_user_id_1, video_id_1, &video_path_1),
+        download_video_from_cloudflare(publisher_user_id_2, video_id_2, &video_path_2)
     )?;
 
     // Compute frame hashes and extract frames concurrently

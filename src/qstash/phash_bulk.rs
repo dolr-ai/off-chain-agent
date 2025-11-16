@@ -16,6 +16,7 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ComputePhashRequest {
     pub video_id: String,
+    pub publisher_user_id: String,
 }
 
 /// Request payload for bulk phash computation
@@ -71,8 +72,9 @@ pub async fn compute_video_phash_handler(
 
     let video_path = temp_dir.join(format!("{}.mp4", req.video_id));
 
-    // Download video from Cloudflare
-    if let Err(e) = download_video_from_cloudflare(&req.video_id, &video_path).await {
+    if let Err(e) =
+        download_video_from_cloudflare(&req.publisher_user_id, &req.video_id, &video_path).await
+    {
         log::error!("Failed to download video {}: {}", req.video_id, e);
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
@@ -187,12 +189,14 @@ pub async fn bulk_compute_phash_handler(
 async fn fetch_video_ids_from_bigquery(
     state: &AppState,
     req: &BulkComputePhashRequest,
-) -> Result<Vec<String>, anyhow::Error> {
+) -> Result<Vec<(String, String)>, anyhow::Error> {
     // Query bot-generated videos that haven't been processed yet
     let query = format!(
-        "SELECT t1.video_id
+        "SELECT t1.video_id, t1.publisher_user_id
          FROM (
-           SELECT DISTINCT JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id
+           SELECT DISTINCT
+             JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id,
+             JSON_EXTRACT_SCALAR(params, '$.publisher_user_id') AS publisher_user_id
            FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
            WHERE event = 'video_upload_successful'
              AND JSON_EXTRACT_SCALAR(params, '$.country') LIKE '%-BOT'
@@ -221,27 +225,32 @@ async fn fetch_video_ids_from_bigquery(
             .query("hot-or-not-feed-intelligence", &request)
             .await?;
 
-        let mut video_ids = Vec::new();
+        let mut video_data = Vec::new();
 
         if let Some(rows) = response.rows.as_ref() {
             for row in rows {
-                if !row.f.is_empty() {
-                    if let google_cloud_bigquery::http::tabledata::list::Value::String(s) =
-                        &row.f[0].v
+                if row.f.len() >= 2 {
+                    if let (
+                        google_cloud_bigquery::http::tabledata::list::Value::String(video_id),
+                        google_cloud_bigquery::http::tabledata::list::Value::String(publisher_id),
+                    ) = (&row.f[0].v, &row.f[1].v)
                     {
-                        video_ids.push(s.clone());
+                        video_data.push((video_id.clone(), publisher_id.clone()));
                     }
                 }
             }
         }
 
-        Ok(video_ids)
+        Ok(video_data)
     }
 
     #[cfg(feature = "local-bin")]
     {
         // Return dummy data for local testing
-        Ok(vec!["test_video_1".to_string(), "test_video_2".to_string()])
+        Ok(vec![
+            ("test_video_1".to_string(), "test_publisher_1".to_string()),
+            ("test_video_2".to_string(), "test_publisher_2".to_string()),
+        ])
     }
 }
 
