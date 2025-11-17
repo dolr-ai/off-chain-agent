@@ -9,7 +9,6 @@ use crate::{
     consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
     events::event::UploadVideoInfoV2,
     pipeline::Step,
-    qstash::client::QStashClient,
     setup_context,
 };
 use anyhow::Error;
