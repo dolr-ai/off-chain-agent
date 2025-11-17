@@ -101,7 +101,6 @@ pub static USER_POST_SERVICE_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
 // LumaLabs Constants
 pub const LUMALABS_API_URL: &str = "https://api.lumalabs.ai/dream-machine/v1";
 pub const LUMALABS_IMAGE_BUCKET: &str = "videogen_tmp_image_store";
-pub const SPEECH_TO_VIDEO_AUDIO_BUCKET: &str = "speech-to-video-audio-store";
 
 // Replicate Constants
 pub const REPLICATE_API_URL: &str = "https://api.replicate.com/v1";

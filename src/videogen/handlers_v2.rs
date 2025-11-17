@@ -1,4 +1,3 @@
-use axum::debug_handler;
 use axum::{extract::State, http::StatusCode, Json};
 use ic_agent::identity::{DelegatedIdentity, Identity};
 use std::sync::Arc;
@@ -8,7 +7,7 @@ use videogen_common::{
 };
 
 use crate::app_state::AppState;
-use crate::utils::gcs::{maybe_upload_image_to_gcs, upload_audio_if_needed};
+use crate::utils::gcs::maybe_upload_image_to_gcs;
 use cloud_storage::Client;
 
 /// Helper function to process images in unified request
@@ -27,29 +26,6 @@ async fn process_input_image_v2(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(VideoGenError::NetworkError(format!(
                         "Failed to upload image: {e}"
-                    ))),
-                )
-            })?;
-    }
-    Ok(())
-}
-
-/// Helper function to process audio in unified request
-/// Uploads large audio to GCS and replaces them with URLs
-async fn process_input_audio(
-    audio: &mut Option<videogen_common::AudioData>,
-    gcs_client: Arc<Client>,
-    user_principal: &str,
-) -> Result<(), (StatusCode, Json<VideoGenError>)> {
-    if let Some(audio_data) = audio {
-        *audio_data = upload_audio_if_needed(gcs_client, audio_data.clone(), user_principal)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to upload audio to GCS: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(VideoGenError::NetworkError(format!(
-                        "Failed to upload audio: {e}"
                     ))),
                 )
             })?;
@@ -99,10 +75,9 @@ pub async fn get_providers_all() -> Json<ProvidersResponse> {
     ),
     tag = "VideoGen V2"
 )]
-#[debug_handler]
 pub async fn generate_video_with_identity_v2(
     State(app_state): State<Arc<AppState>>,
-    Json(mut identity_request): Json<VideoGenRequestWithIdentityV2>,
+    Json(identity_request): Json<VideoGenRequestWithIdentityV2>,
 ) -> Result<Json<VideoGenQueuedResponseV2>, (StatusCode, Json<VideoGenError>)> {
     // Validate identity and extract user principal
     let user_principal = validate_delegated_identity_v2(&identity_request)?;
@@ -118,17 +93,10 @@ pub async fn generate_video_with_identity_v2(
         ));
     }
 
-    // process audio if present - upload large audio to GCS
-    process_input_audio(
-        &mut identity_request.request.audio,
-        app_state.gcs_client.clone(),
-        &user_principal.to_string(),
-    )
-    .await?;
-
     // Process image if present - upload large images to GCS
+    let mut unified_request = identity_request.request.clone();
     process_input_image_v2(
-        &mut identity_request.request.image,
+        &mut unified_request.image,
         app_state.gcs_client.clone(),
         &user_principal.to_string(),
     )
@@ -136,7 +104,7 @@ pub async fn generate_video_with_identity_v2(
 
     // Adapt unified request to model-specific format
     let video_gen_input = ADAPTER_REGISTRY
-        .adapt_request(identity_request.request.clone())
+        .adapt_request(unified_request.clone())
         .map_err(|e| (StatusCode::BAD_REQUEST, Json(e)))?;
 
     // Get provider for response
@@ -147,7 +115,7 @@ pub async fn generate_video_with_identity_v2(
         &app_state,
         user_principal,
         video_gen_input,
-        identity_request.request.token_type,
+        unified_request.token_type,
         identity_request.delegated_identity.clone(),
         identity_request.upload_handling,
     )

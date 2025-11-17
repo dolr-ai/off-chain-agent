@@ -3,9 +3,7 @@ use cloud_storage::Client;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tracing::info;
-use videogen_common::{AudioData, AudioInput, ImageData, ImageInput};
-
-use crate::consts::SPEECH_TO_VIDEO_AUDIO_BUCKET;
+use videogen_common::{ImageData, ImageInput};
 
 /// Configuration for GCS image storage
 pub struct GcsImageConfig {
@@ -22,56 +20,6 @@ impl Default for GcsImageConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1024 * 1024), // 1MB default
-        }
-    }
-}
-pub struct GcsAudioConfig {
-    pub bucket: String,
-    pub size_threshold_bytes: usize,
-}
-
-impl Default for GcsAudioConfig {
-    fn default() -> Self {
-        Self {
-            bucket: std::env::var("GCS_VIDEOGEN_AUDIO_BUCKET")
-                .unwrap_or_else(|_| SPEECH_TO_VIDEO_AUDIO_BUCKET.to_string()),
-            size_threshold_bytes: std::env::var("AUDIO_SIZE_THRESHOLD")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(256 * 1024), // 256KB default
-        }
-    }
-}
-
-pub async fn upload_audio_if_needed(
-    client: Arc<Client>,
-    audio: AudioData,
-    user_principal: &str,
-) -> Result<AudioData, String> {
-    let config = GcsAudioConfig::default();
-    match &audio {
-        AudioData::Base64(input) => {
-            let size = input.data.len();
-
-            if size <= config.size_threshold_bytes {
-                info!(
-                    "Audio size ({} bytes) below threshold ({} bytes), keeping as base64",
-                    size, config.size_threshold_bytes
-                );
-                return Ok(AudioData::Base64(input.clone()));
-            }
-
-            info!(
-                "Audio size ({} bytes) exceeds threshold ({} bytes), uploading to GCS",
-                size, config.size_threshold_bytes
-            );
-
-            let url = upload_audio_to_gcs(client, input, user_principal).await?;
-            Ok(AudioData::Url(url))
-        }
-        AudioData::Url(url) => {
-            // Already a URL, nothing to do
-            Ok(AudioData::Url(url.clone()))
         }
     }
 }
@@ -158,56 +106,6 @@ pub async fn upload_image_to_gcs(
     );
 
     info!("Image uploaded successfully: {}", public_url);
-
-    Ok(public_url)
-}
-
-async fn upload_audio_to_gcs(
-    client: Arc<Client>,
-    audio: &AudioInput,
-    user_principal: &str,
-) -> Result<String, String> {
-    let config = GcsAudioConfig::default();
-
-    // Decode base64
-    let audio_bytes = BASE64
-        .decode(&audio.data)
-        .map_err(|e| format!("Failed to decode base64 audio: {e}"))?;
-
-    // Generate unique filename
-    let timestamp = chrono::Utc::now().timestamp_millis();
-    let mut hasher = Sha256::new();
-    hasher.update(&audio_bytes);
-    let hash = format!("{:x}", hasher.finalize());
-    let hash_short = &hash[..8];
-
-    // Extract file extension from mime type
-    let extension = match audio.mime_type.as_str() {
-        "audio/mpeg" | "audio/mp3" => "mp3",
-        "audio/wav" => "wav",
-        "audio/ogg" => "ogg",
-        _ => "bin",
-    };
-
-    let object_name =
-        format!("videogen-audio/{user_principal}/{timestamp}-{hash_short}.{extension}");
-
-    info!("Uploading audio to GCS: {}/{}", config.bucket, object_name);
-
-    // Upload to GCS
-    client
-        .object()
-        .create(&config.bucket, audio_bytes, &object_name, &audio.mime_type)
-        .await
-        .map_err(|e| format!("Failed to upload audio to GCS: {e}"))?;
-
-    // Generate public URL
-    let public_url = format!(
-        "https://storage.googleapis.com/{}/{}",
-        config.bucket, object_name
-    );
-
-    info!("Audio uploaded successfully: {}", public_url);
 
     Ok(public_url)
 }
