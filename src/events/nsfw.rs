@@ -249,6 +249,12 @@ async fn move2_nsfw_buckets_if_required(
     video_info: UploadVideoInfoV2,
     is_nsfw: bool,
 ) -> Result<(), AppError> {
+    log::info!(
+        "Processing NSFW bucket movement for video {}: is_nsfw={}",
+        video_info.video_id,
+        is_nsfw
+    );
+
     if is_nsfw {
         let move_args = storj_interface::move2nsfw::Args {
             publisher_user_id: video_info.publisher_user_id,
@@ -361,6 +367,13 @@ pub async fn nsfw_job_v2(
     push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
 
     move2_nsfw_buckets_if_required(payload.video_info, is_nsfw).await?;
+
+    log::info!(
+        "NSFW detection v2 completed for video {}: is_nsfw={}, probability={}",
+        video_id,
+        is_nsfw,
+        nsfw_prob
+    );
 
     Ok(Json(
         serde_json::json!({ "message": "NSFW v2 job completed" }),
