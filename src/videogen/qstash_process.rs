@@ -6,6 +6,7 @@ use videogen_common::{VideoGenError, VideoGenInput, VideoGenerator};
 use crate::{
     app_state::AppState,
     videogen::{
+        qstash_callback::handle_video_gen_callback_internal,
         qstash_types::{QstashVideoGenCallback, QstashVideoGenRequest, VideoGenCallbackResult},
         upload_ai_generated_video_to_canister_in_drafts::{
             upload_ai_generated_video_to_canister_impl, UploadAiVideoToCanisterRequest,
@@ -47,6 +48,8 @@ pub async fn process_video_generation(
         )),
     };
 
+    let supports_webhook = request.input.supports_webhook_callbacks();
+
     // Prepare callback data for non-webhook or error cases
     let callback_result = match result {
         Ok(response) => VideoGenCallbackResult::Success(response),
@@ -61,6 +64,10 @@ pub async fn process_video_generation(
         token_type: request.token_type,
         handle_video_upload: request.handle_video_upload,
     };
+
+    if let VideoGenCallbackResult::Failure(e) = &callback.result {
+        handle_video_gen_callback_internal(state, callback).await?;
+    }
 
     // Return the callback data as the response
     // Qstash will automatically send this to the callback URL
