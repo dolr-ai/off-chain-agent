@@ -64,7 +64,6 @@ pub async fn generate_prompt_from_speech(
         .map_err(|e| VideoGenError::NetworkError(format!("Failed to connect to stream: {e}")))?
         .bytes_stream();
 
-    println!("--- Transcription Stream Start ---");
     let mut prompt = String::new();
     while let Some(chunk) = stream.next().await {
         match chunk {
@@ -73,12 +72,11 @@ pub async fn generate_prompt_from_speech(
                 prompt += &text
             }
             Err(e) => {
-                eprintln!("Stream error: {e}");
+                log::error!("Stream error: {e}");
                 break;
             }
         }
     }
-    println!("\n--- Stream End ---");
 
     Ok(prompt)
 }
