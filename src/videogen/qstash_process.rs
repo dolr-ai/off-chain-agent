@@ -29,10 +29,12 @@ pub async fn process_video_generation(
     // Route to appropriate model handler based on the input type
     let result = match request.input {
         VideoGenInput::LumaLabs(_) => {
-            crate::videogen::models::lumalabs::generate(request.input, &state).await
+            let input = request.input.clone();
+            crate::videogen::models::lumalabs::generate(input, &state).await
         }
         VideoGenInput::IntTest(_) => {
-            crate::videogen::models::inttest::generate(request.input, &state).await
+            let input = request.input.clone();
+            crate::videogen::models::inttest::generate(input, &state).await
         }
         VideoGenInput::Wan25(_) => {
             let input = request.input.clone();
@@ -65,8 +67,12 @@ pub async fn process_video_generation(
         handle_video_upload: request.handle_video_upload,
     };
 
-    if let VideoGenCallbackResult::Failure(e) = &callback.result {
-        handle_video_gen_callback_internal(state, callback).await?;
+    if supports_webhook {
+        if let VideoGenCallbackResult::Failure(_e) = &callback.result {
+            handle_video_gen_callback_internal(state, callback.clone())
+                .await
+                .map_err(|e| (e.0, Json(VideoGenError::NetworkError(e.1))))?;
+        }
     }
 
     // Return the callback data as the response
