@@ -91,9 +91,18 @@ pub async fn generate_with_context(
     // Submit prediction
     let submit_url = format!("{REPLICATE_API_URL}/predictions");
 
+    let max_chars = 60;
+    let prompt = &model.prompt;
+
+    let truncated_prompt = prompt
+        .char_indices()
+        .nth(max_chars)
+        .map(|(idx, _)| &prompt[..idx])
+        .unwrap_or(prompt);
+
     info!(
         "Submitting Wan 2.5 generation prediction for prompt: {}",
-        &model.prompt[..model.prompt.len().min(60)]
+        &truncated_prompt
     );
 
     let response = client
