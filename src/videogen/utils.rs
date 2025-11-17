@@ -243,7 +243,6 @@ pub async fn process_video_generation(
         "VIDEOGEN"
     };
 
-    //TODO: check model cost for speech to video model
     // Get cost for the model
     let cost = super::token_operations::get_model_cost(model_id, &token_type);
 
