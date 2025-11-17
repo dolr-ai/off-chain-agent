@@ -245,26 +245,30 @@ pub async fn nsfw_job(
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
 
-#[instrument(skip(qstash))]
-async fn duplicate_to_storj(
-    qstash: &QStashClient,
+#[instrument]
+async fn move2_nsfw_buckets_if_required(
     video_info: UploadVideoInfoV2,
     is_nsfw: bool,
 ) -> Result<(), AppError> {
-    let duplicate_args = storj_interface::duplicate::Args {
-        publisher_user_id: video_info.publisher_user_id,
-        video_id: video_info.video_id,
-        is_nsfw,
-        metadata: [
-            ("post_id".into(), video_info.post_id.to_string()),
-            // TODO: confirm with Tushar about this
-            // ("canister_id".into(), video_info.canister_id),
-            ("timestamp".into(), video_info.timestamp),
-        ]
-        .into(),
-    };
+    if is_nsfw {
+        let move_args = storj_interface::move2nsfw::Args {
+            publisher_user_id: video_info.publisher_user_id,
+            video_id: video_info.video_id,
+        };
 
-    qstash.duplicate_to_storj(duplicate_args).await?;
+        let client = reqwest::Client::new();
+        client
+            .post(
+                crate::consts::STORJ_INTERFACE_URL
+                    .join("/move2nsfw")
+                    .expect("url to be valid"),
+            )
+            .json(&move_args)
+            .bearer_auth(crate::consts::STORJ_INTERFACE_TOKEN.as_str())
+            .send()
+            .await?
+            .error_for_status()?;
+    }
 
     Ok(())
 }
@@ -357,7 +361,7 @@ pub async fn nsfw_job_v2(
     let bigquery_client = state.bigquery_client.clone();
     push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
 
-    duplicate_to_storj(&state.qstash_client, payload.video_info, is_nsfw).await?;
+    move2_nsfw_buckets_if_required(payload.video_info, is_nsfw).await?;
 
     Ok(Json(
         serde_json::json!({ "message": "NSFW v2 job completed" }),
