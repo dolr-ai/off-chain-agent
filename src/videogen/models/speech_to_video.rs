@@ -52,9 +52,6 @@ pub async fn generate_prompt_from_speech(
         ))?
         .to_string();
 
-    println!("Stream URL: {}", stream_url);
-
-    // 2️⃣ Connect to the event stream (Server-Sent Events)
     let mut stream = client
         .get(&stream_url)
         .header("Accept", "text/event-stream")
