@@ -135,9 +135,17 @@ pub async fn generate_with_context(
     // Submit prediction
     let submit_url = format!("{REPLICATE_API_URL}/predictions");
 
+    let max_chars = 60;
+
+    let truncated_prompt = prompt
+        .char_indices()
+        .nth(max_chars)
+        .map(|(idx, _)| &prompt[..idx])
+        .unwrap_or(&prompt);
+
     info!(
-        "Submitting Wan 2.5 Fast generation prediction for prompt: {}",
-        &prompt[..prompt.len().min(60)]
+        "Submitting speech to video generation prediction",
+        &truncated_prompt
     );
 
     let response = client
