@@ -144,7 +144,7 @@ pub async fn generate_with_context(
         .unwrap_or(&prompt);
 
     info!(
-        "Submitting speech to video generation prediction",
+        "Submitting speech to video generation prediction for prompt: {}",
         &truncated_prompt
     );
 
