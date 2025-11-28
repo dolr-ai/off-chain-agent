@@ -268,10 +268,7 @@ impl VideoHashDuplication {
         canister_id: &str,
         user_id: &str,
     ) -> Result<(), anyhow::Error> {
-        log::info!(
-            "Checking UGC content approval for video_id: {}",
-            video_id
-        );
+        log::info!("Checking UGC content approval for video_id: {}", video_id);
 
         let country_query = format!(
             "SELECT JSON_EXTRACT_SCALAR(params, '$.country') AS country
@@ -298,7 +295,9 @@ impl VideoHashDuplication {
                     if let Some(row) = rows.first() {
                         if let Some(cell) = row.f.first() {
                             match &cell.v {
-                                google_cloud_bigquery::http::tabledata::list::Value::String(country) => {
+                                google_cloud_bigquery::http::tabledata::list::Value::String(
+                                    country,
+                                ) => {
                                     let is_bot = country.ends_with("-BOT");
                                     log::debug!(
                                         "Video {} has country '{}', is_bot: {}",
@@ -314,7 +313,10 @@ impl VideoHashDuplication {
                             false
                         }
                     } else {
-                        log::debug!("No video_upload_successful event found for video {}", video_id);
+                        log::debug!(
+                            "No video_upload_successful event found for video {}",
+                            video_id
+                        );
                         false
                     }
                 } else {
@@ -322,11 +324,7 @@ impl VideoHashDuplication {
                 }
             }
             Err(e) => {
-                log::warn!(
-                    "Failed to query country for video {}: {}",
-                    video_id,
-                    e
-                );
+                log::warn!("Failed to query country for video {}: {}", video_id, e);
                 false
             }
         };
@@ -370,12 +368,21 @@ impl VideoHashDuplication {
 
         if let Some(errors) = result.insert_errors {
             if !errors.is_empty() {
-                log::error!("BigQuery streaming insert errors for ugc_content_approval: {:?}", errors);
+                log::error!(
+                    "BigQuery streaming insert errors for ugc_content_approval: {:?}",
+                    errors
+                );
                 anyhow::bail!("Failed to insert ugc_content_approval row: {:?}", errors);
             }
         }
 
-        log::debug!("Successfully inserted ugc_content_approval for video_id: {}", video_id);
+        log::info!(
+            "Successfully inserted ugc_content_approval: video_id={}, post_id={}, canister_id={}, user_id={}, is_approved=false",
+            video_id,
+            post_id,
+            canister_id,
+            user_id
+        );
         Ok(())
     }
 

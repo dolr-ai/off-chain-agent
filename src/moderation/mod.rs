@@ -15,11 +15,8 @@ use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    app_state::AppState,
-    consts::MODERATOR_PRINCIPALS,
-    types::DelegatedIdentityWire,
-    utils::delegated_identity::get_user_info_from_delegated_identity_wire,
-    AppError,
+    app_state::AppState, consts::MODERATOR_PRINCIPALS, types::DelegatedIdentityWire,
+    utils::delegated_identity::get_user_info_from_delegated_identity_wire, AppError,
 };
 
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
@@ -87,11 +84,15 @@ pub async fn verify_moderator(
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
 
-    let delegated_identity_wire: DelegatedIdentityWire =
-        match serde_json::from_value(json_value.get("delegated_identity_wire").cloned().unwrap_or_default()) {
-            Ok(wire) => wire,
-            Err(_) => return Err(StatusCode::BAD_REQUEST),
-        };
+    let delegated_identity_wire: DelegatedIdentityWire = match serde_json::from_value(
+        json_value
+            .get("delegated_identity_wire")
+            .cloned()
+            .unwrap_or_default(),
+    ) {
+        Ok(wire) => wire,
+        Err(_) => return Err(StatusCode::BAD_REQUEST),
+    };
 
     // Verify the delegated identity and get user principal
     let user_info = get_user_info_from_delegated_identity_wire(&state, delegated_identity_wire)
@@ -125,7 +126,10 @@ pub fn moderation_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_pending_videos))
         .routes(routes!(approve_video))
         .routes(routes!(disapprove_video))
-        .layer(middleware::from_fn_with_state(state.clone(), verify_moderator))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            verify_moderator,
+        ))
         .with_state(state)
 }
 
