@@ -72,7 +72,6 @@ impl VideoHashDuplication {
             video_id,
             &publisher_data.post_id,
             &publisher_data.publisher_principal,
-            &publisher_data.publisher_principal,
         )
         .await?;
 
@@ -265,13 +264,14 @@ impl VideoHashDuplication {
         bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         post_id: &str,
-        canister_id: &str,
         user_id: &str,
     ) -> Result<(), anyhow::Error> {
         log::info!("Checking UGC content approval for video_id: {}", video_id);
 
-        let country_query = format!(
-            "SELECT JSON_EXTRACT_SCALAR(params, '$.country') AS country
+        // Query both country and canister_id from the video_upload_successful event
+        let event_query = format!(
+            "SELECT JSON_EXTRACT_SCALAR(params, '$.country') AS country,
+                    JSON_EXTRACT_SCALAR(params, '$.canister_id') AS canister_id
              FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
              WHERE event = 'video_upload_successful'
                AND JSON_EXTRACT_SCALAR(params, '$.video_id') = '{}'
@@ -279,53 +279,58 @@ impl VideoHashDuplication {
             video_id
         );
 
-        let country_request = QueryRequest {
-            query: country_query,
+        let event_request = QueryRequest {
+            query: event_query,
             ..Default::default()
         };
 
-        let country_result = bigquery_client
+        let event_result = bigquery_client
             .job()
-            .query("hot-or-not-feed-intelligence", &country_request)
+            .query("hot-or-not-feed-intelligence", &event_request)
             .await;
 
-        let is_bot = match country_result {
+        let (is_bot, canister_id) = match event_result {
             Ok(response) => {
                 if let Some(rows) = response.rows {
                     if let Some(row) = rows.first() {
-                        if let Some(cell) = row.f.first() {
-                            match &cell.v {
-                                google_cloud_bigquery::http::tabledata::list::Value::String(
+                        let is_bot = row.f.first().map_or(false, |cell| match &cell.v {
+                            google_cloud_bigquery::http::tabledata::list::Value::String(
+                                country,
+                            ) => {
+                                let is_bot = country.ends_with("-BOT");
+                                log::debug!(
+                                    "Video {} has country '{}', is_bot: {}",
+                                    video_id,
                                     country,
-                                ) => {
-                                    let is_bot = country.ends_with("-BOT");
-                                    log::debug!(
-                                        "Video {} has country '{}', is_bot: {}",
-                                        video_id,
-                                        country,
-                                        is_bot
-                                    );
                                     is_bot
-                                }
-                                _ => false,
+                                );
+                                is_bot
                             }
-                        } else {
-                            false
-                        }
+                            _ => false,
+                        });
+
+                        let canister_id = row.f.get(1).and_then(|cell| match &cell.v {
+                            google_cloud_bigquery::http::tabledata::list::Value::String(id) => {
+                                Some(id.clone())
+                            }
+                            _ => None,
+                        });
+
+                        (is_bot, canister_id)
                     } else {
                         log::debug!(
                             "No video_upload_successful event found for video {}",
                             video_id
                         );
-                        false
+                        (false, None)
                     }
                 } else {
-                    false
+                    (false, None)
                 }
             }
             Err(e) => {
-                log::warn!("Failed to query country for video {}: {}", video_id, e);
-                false
+                log::warn!("Failed to query event data for video {}: {}", video_id, e);
+                (false, None)
             }
         };
 
@@ -377,7 +382,7 @@ impl VideoHashDuplication {
         }
 
         log::info!(
-            "Successfully inserted ugc_content_approval: video_id={}, post_id={}, canister_id={}, user_id={}, is_approved=false",
+            "Successfully inserted ugc_content_approval: video_id={}, post_id={}, canister_id={:?}, user_id={}, is_approved=false",
             video_id,
             post_id,
             canister_id,
@@ -480,7 +485,6 @@ impl VideoHashDuplication {
                 video_id,
                 &publisher_data.post_id,
                 &publisher_data.publisher_principal,
-                &publisher_data.publisher_principal,
             )
             .await?;
 
@@ -552,7 +556,6 @@ impl VideoHashDuplication {
             bigquery_client,
             video_id,
             &publisher_data.post_id,
-            &publisher_data.publisher_principal,
             &publisher_data.publisher_principal,
         )
         .await?;
