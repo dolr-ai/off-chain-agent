@@ -71,35 +71,24 @@ pub async fn verify_moderator(
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Extract the JSON body
     let (parts, body) = request.into_parts();
     let bytes = match axum::body::to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
 
-    // Parse the JSON to extract delegated_identity_wire
-    let json_value: serde_json::Value = match serde_json::from_slice(&bytes) {
-        Ok(v) => v,
+    let moderation_request: ModerationRequest = match serde_json::from_slice(&bytes) {
+        Ok(req) => req,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
 
-    let delegated_identity_wire: DelegatedIdentityWire = match serde_json::from_value(
-        json_value
-            .get("delegated_identity_wire")
-            .cloned()
-            .unwrap_or_default(),
-    ) {
-        Ok(wire) => wire,
-        Err(_) => return Err(StatusCode::BAD_REQUEST),
-    };
+    let user_info = get_user_info_from_delegated_identity_wire(
+        &state,
+        moderation_request.delegated_identity_wire,
+    )
+    .await
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    // Verify the delegated identity and get user principal
-    let user_info = get_user_info_from_delegated_identity_wire(&state, delegated_identity_wire)
-        .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
-
-    // Check if user is a whitelisted moderator
     if !is_moderator(&user_info.user_principal) {
         log::warn!(
             "Unauthorized moderation attempt by principal: {}",
@@ -113,7 +102,6 @@ pub async fn verify_moderator(
         user_info.user_principal
     );
 
-    // Reconstruct the request and pass to next handler
     let request = Request::from_parts(parts, axum::body::Body::from(bytes));
     Ok(next.run(request).await)
 }
