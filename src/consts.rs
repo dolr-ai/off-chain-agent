@@ -107,3 +107,14 @@ pub const SPEECH_TO_VIDEO_AUDIO_BUCKET: &str = "videogen_tmp_image_store";
 pub const REPLICATE_API_URL: &str = "https://api.replicate.com/v1";
 pub const REPLICATE_WAN2_5_MODEL: &str = "wan-video/wan-2.5-t2v";
 pub const REPLICATE_WAN2_5_FAST_MODEL: &str = "wan-video/wan-2.5-t2v-fast";
+
+pub static MODERATOR_PRINCIPALS: Lazy<Vec<Principal>> = Lazy::new(|| {
+    vec![
+        "o7soq-c4ync-cfs3n-i5qbs-472zl-nbxlh-df7r4-2uqpz-svjpz-7ktda-dae"
+            .parse()
+            .unwrap(),
+        "ai5pa-6geuw-2fe7h-oi5vs-fd3rd-unvxq-44jhj-ze2dx-gxl6k-us473-qqe"
+            .parse()
+            .unwrap(),
+    ]
+});

@@ -44,6 +44,7 @@ pub mod metrics;
 mod middleware;
 #[cfg(not(feature = "local-bin"))]
 mod milvus;
+mod moderation;
 mod offchain_service;
 pub mod pipeline;
 mod posts;
@@ -108,6 +109,10 @@ async fn main_impl() -> Result<()> {
         .nest(
             "/api/v1/videos",
             duplicate_video::router::video_router(shared_state.clone()),
+        )
+        .nest(
+            "/api/v1/moderation",
+            moderation::moderation_router(shared_state.clone()),
         );
 
     #[cfg(not(feature = "local-bin"))]

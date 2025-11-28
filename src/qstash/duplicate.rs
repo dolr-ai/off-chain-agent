@@ -67,6 +67,13 @@ impl VideoHashDuplication {
             .await?;
         self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
             .await?;
+        self.store_ugc_content_approval(
+            bigquery_client,
+            video_id,
+            &publisher_data.post_id,
+            &publisher_data.publisher_principal,
+        )
+        .await?;
 
         if !is_duplicate {
             self.store_unique_video(video_id, &phash).await?;
@@ -252,6 +259,138 @@ impl VideoHashDuplication {
         Ok(())
     }
 
+    async fn store_ugc_content_approval(
+        &self,
+        bigquery_client: &google_cloud_bigquery::client::Client,
+        video_id: &str,
+        post_id: &str,
+        user_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        log::info!("Checking UGC content approval for video_id: {}", video_id);
+
+        // Query both country and canister_id from the video_upload_successful event
+        let event_query = format!(
+            "SELECT JSON_EXTRACT_SCALAR(params, '$.country') AS country,
+                    JSON_EXTRACT_SCALAR(params, '$.canister_id') AS canister_id
+             FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
+             WHERE event = 'video_upload_successful'
+               AND JSON_EXTRACT_SCALAR(params, '$.video_id') = '{}'
+             LIMIT 1",
+            video_id
+        );
+
+        let event_request = QueryRequest {
+            query: event_query,
+            ..Default::default()
+        };
+
+        let event_result = bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &event_request)
+            .await;
+
+        let (is_bot, canister_id) = match event_result {
+            Ok(response) => {
+                if let Some(rows) = response.rows {
+                    if let Some(row) = rows.first() {
+                        let is_bot = row.f.first().is_some_and(|cell| match &cell.v {
+                            google_cloud_bigquery::http::tabledata::list::Value::String(
+                                country,
+                            ) => {
+                                let is_bot = country.ends_with("-BOT");
+                                log::debug!(
+                                    "Video {} has country '{}', is_bot: {}",
+                                    video_id,
+                                    country,
+                                    is_bot
+                                );
+                                is_bot
+                            }
+                            _ => false,
+                        });
+
+                        let canister_id = row.f.get(1).and_then(|cell| match &cell.v {
+                            google_cloud_bigquery::http::tabledata::list::Value::String(id) => {
+                                Some(id.clone())
+                            }
+                            _ => None,
+                        });
+
+                        (is_bot, canister_id)
+                    } else {
+                        log::debug!(
+                            "No video_upload_successful event found for video {}",
+                            video_id
+                        );
+                        (false, None)
+                    }
+                } else {
+                    (false, None)
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to query event data for video {}: {}", video_id, e);
+                (false, None)
+            }
+        };
+
+        if is_bot {
+            log::info!(
+                "Skipping ugc_content_approval insertion for bot video: {}",
+                video_id
+            );
+            return Ok(());
+        }
+
+        let row_data = json!({
+            "video_id": video_id,
+            "post_id": post_id,
+            "canister_id": canister_id,
+            "user_id": user_id,
+            "is_approved": false,
+            "created_at": chrono::Utc::now().to_rfc3339(),
+        });
+
+        let request = InsertAllRequest {
+            rows: vec![Row {
+                insert_id: Some(video_id.to_string()),
+                json: row_data,
+            }],
+            ignore_unknown_values: Some(false),
+            skip_invalid_rows: Some(false),
+            ..Default::default()
+        };
+
+        let result = bigquery_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "ugc_content_approval",
+                &request,
+            )
+            .await?;
+
+        if let Some(errors) = result.insert_errors {
+            if !errors.is_empty() {
+                log::error!(
+                    "BigQuery streaming insert errors for ugc_content_approval: {:?}",
+                    errors
+                );
+                anyhow::bail!("Failed to insert ugc_content_approval row: {:?}", errors);
+            }
+        }
+
+        log::info!(
+            "Successfully inserted ugc_content_approval: video_id={}, post_id={}, canister_id={:?}, user_id={}, is_approved=false",
+            video_id,
+            post_id,
+            canister_id,
+            user_id
+        );
+        Ok(())
+    }
+
     /// Check Redis for exact phash match (tier-1 caching)
     async fn check_exact_duplicate_in_redis(
         redis_pool: &RedisPool,
@@ -341,6 +480,13 @@ impl VideoHashDuplication {
                 .await?;
             self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
                 .await?;
+            self.store_ugc_content_approval(
+                bigquery_client,
+                video_id,
+                &publisher_data.post_id,
+                &publisher_data.publisher_principal,
+            )
+            .await?;
 
             // Continue with video processing pipeline
             let timestamp = chrono::Utc::now().to_rfc3339();
@@ -406,6 +552,13 @@ impl VideoHashDuplication {
             .await?;
         self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
             .await?;
+        self.store_ugc_content_approval(
+            bigquery_client,
+            video_id,
+            &publisher_data.post_id,
+            &publisher_data.publisher_principal,
+        )
+        .await?;
 
         if !is_duplicate {
             log::info!("✨ UNIQUE: Video {} has a unique phash", video_id);
