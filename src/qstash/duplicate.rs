@@ -342,44 +342,32 @@ impl VideoHashDuplication {
             return Ok(());
         }
 
-        let row_data = json!({
-            "video_id": video_id,
-            "post_id": post_id,
-            "canister_id": canister_id,
-            "user_id": user_id,
-            "is_approved": false,
-            "created_at": chrono::Utc::now().to_rfc3339(),
-        });
+        // Use standard SQL INSERT instead of streaming insert
+        // This allows immediate UPDATE/DELETE operations (avoids streaming buffer limitation)
+        let canister_id_sql = canister_id
+            .as_ref()
+            .map(|id| format!("'{}'", id.replace('\'', "''")))
+            .unwrap_or_else(|| "NULL".to_string());
 
-        let request = InsertAllRequest {
-            rows: vec![Row {
-                insert_id: Some(video_id.to_string()),
-                json: row_data,
-            }],
-            ignore_unknown_values: Some(false),
-            skip_invalid_rows: Some(false),
+        let query = format!(
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+             (video_id, post_id, canister_id, user_id, is_approved, created_at)
+             VALUES ('{}', '{}', {}, '{}', FALSE, CURRENT_TIMESTAMP())",
+            video_id.replace('\'', "''"),
+            post_id.replace('\'', "''"),
+            canister_id_sql,
+            user_id.replace('\'', "''")
+        );
+
+        let request = QueryRequest {
+            query,
             ..Default::default()
         };
 
-        let result = bigquery_client
-            .tabledata()
-            .insert(
-                "hot-or-not-feed-intelligence",
-                "yral_ds",
-                "ugc_content_approval",
-                &request,
-            )
+        bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &request)
             .await?;
-
-        if let Some(errors) = result.insert_errors {
-            if !errors.is_empty() {
-                log::error!(
-                    "BigQuery streaming insert errors for ugc_content_approval: {:?}",
-                    errors
-                );
-                anyhow::bail!("Failed to insert ugc_content_approval row: {:?}", errors);
-            }
-        }
 
         log::info!(
             "Successfully inserted ugc_content_approval: video_id={}, post_id={}, canister_id={:?}, user_id={}, is_approved=false",
