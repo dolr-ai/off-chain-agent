@@ -293,7 +293,7 @@ impl VideoHashDuplication {
             Ok(response) => {
                 if let Some(rows) = response.rows {
                     if let Some(row) = rows.first() {
-                        let is_bot = row.f.first().map_or(false, |cell| match &cell.v {
+                        let is_bot = row.f.first().is_some_and(|cell| match &cell.v {
                             google_cloud_bigquery::http::tabledata::list::Value::String(
                                 country,
                             ) => {
