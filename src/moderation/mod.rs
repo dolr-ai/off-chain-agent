@@ -14,20 +14,12 @@ use serde_json::json;
 use tracing::instrument;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
-use yral_canisters_client::notification_store::{
-    NotificationStore, NotificationType, VideoApprovalPayload,
-};
-use yral_metadata_types::{
-    AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
-    SendNotificationReq, WebpushConfig, WebpushFcmOptions,
-};
 
 use crate::{
-    app_state::AppState, consts::MODERATOR_PRINCIPALS, types::DelegatedIdentityWire,
+    app_state::AppState, consts::MODERATOR_PRINCIPALS, events::push_notifications::dispatch_notif,
+    types::DelegatedIdentityWire,
     utils::delegated_identity::get_user_info_from_delegated_identity_wire, AppError,
 };
-
-const NOTIFICATION_STORE_CANISTER_ID: &str = "mlj75-eyaaa-aaaaa-qbn5q-cai";
 
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 pub struct ModerationRequest {
@@ -193,7 +185,7 @@ pub async fn approve_video(
     let updated = update_approval_status(&state.bigquery_client, &video_id).await?;
 
     if updated {
-        // Send notification to the video owner
+        // Send notification to the video owner via event pipeline
         if let Some(info) = video_info {
             send_approval_notification(&state, &info, true).await;
         }
@@ -245,7 +237,7 @@ pub async fn disapprove_video(
     let deleted = delete_video(&state.bigquery_client, &video_id).await?;
 
     if deleted {
-        // Send notification to the video owner
+        // Send notification to the video owner via event pipeline
         if let Some(info) = video_info {
             send_approval_notification(&state, &info, false).await;
         }
@@ -497,122 +489,32 @@ async fn send_approval_notification(state: &AppState, video_info: &VideoInfo, is
         }
     };
 
-    let post_id = video_info.post_id.clone().unwrap_or_default();
-
-    // Send canister notification
-    let notification_store = NotificationStore(
-        Principal::from_text(NOTIFICATION_STORE_CANISTER_ID).unwrap(),
-        &state.agent,
-    );
-
-    let payload = VideoApprovalPayload {
-        video_id: video_info.video_id.clone(),
-        post_id: post_id.clone(),
-    };
-
-    let notification_type = if is_approved {
-        NotificationType::VideoApproved(payload)
-    } else {
-        NotificationType::VideoDisapproved(payload)
-    };
-
-    if let Err(e) = notification_store
-        .add_notification(user_principal, notification_type)
-        .await
-    {
-        log::error!(
-            "Failed to add canister notification for video {}: {:?}",
-            video_info.video_id,
-            e
-        );
-    } else {
-        log::info!(
-            "Sent canister notification for video {} (approved: {})",
-            video_info.video_id,
-            is_approved
-        );
-    }
-
-    // Send HTTP push notification
-    let (title, body) = if is_approved {
-        (
-            "Video Approved",
-            "Your video has been approved and is now live!".to_string(),
-        )
-    } else {
-        (
-            "Video Not Approved",
-            "Your video was not approved for publication.".to_string(),
-        )
-    };
-
-    let notification_type_str = if is_approved {
+    let event_type = if is_approved {
         "video_approved"
     } else {
         "video_disapproved"
     };
 
-    let video_url = if let Some(canister_id) = &video_info.canister_id {
-        format!("https://yral.com/hot-or-not/{}/{}", canister_id, post_id)
+    let params = json!({
+        "video_id": video_info.video_id,
+        "post_id": video_info.post_id.clone().unwrap_or_default(),
+        "canister_id": video_info.canister_id,
+        "user_id": user_principal.to_text()
+    });
+
+    if let Err(e) = dispatch_notif(event_type, params, state).await {
+        log::error!(
+            "Failed to dispatch {} notification for video {}: {:?}",
+            event_type,
+            video_info.video_id,
+            e
+        );
     } else {
-        "https://yral.com".to_string()
-    };
-
-    let notif_payload = SendNotificationReq {
-        notification: Some(NotificationPayload {
-            title: Some(title.to_string()),
-            body: Some(body.clone()),
-            image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
-        }),
-        data: Some(json!({
-            "type": notification_type_str,
-            "video_id": video_info.video_id,
-            "post_id": post_id
-        })),
-        android: Some(AndroidConfig {
-            notification: Some(AndroidNotification {
-                icon: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
-                image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
-                ..Default::default()
-            }),
-            ..Default::default()
-        }),
-        webpush: Some(WebpushConfig {
-            fcm_options: Some(WebpushFcmOptions {
-                link: Some(video_url.clone()),
-                ..Default::default()
-            }),
-            ..Default::default()
-        }),
-        apns: Some(ApnsConfig {
-            fcm_options: Some(ApnsFcmOptions {
-                image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
-                ..Default::default()
-            }),
-            payload: Some(json!({
-                "aps": {
-                    "alert": {
-                        "title": title,
-                        "body": body,
-                    },
-                    "sound": "default",
-                },
-                "url": video_url
-            })),
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
-
-    state
-        .notification_client
-        .send_notification(notif_payload, user_principal)
-        .await;
-
-    log::info!(
-        "Sent HTTP push notification for video {} to user {} (approved: {})",
-        video_info.video_id,
-        user_principal,
-        is_approved
-    );
+        log::info!(
+            "Dispatched {} notification for video {} to user {}",
+            event_type,
+            video_info.video_id,
+            user_principal
+        );
+    }
 }
