@@ -1,7 +1,7 @@
 use candid::Principal;
 use serde_json::Value;
 use yral_canisters_client::notification_store::{
-    LikedPayload, NotificationStore, NotificationType, VideoUploadPayload,
+    LikedPayload, NotificationStore, NotificationType, VideoApprovalPayload, VideoUploadPayload,
 };
 use yral_metadata_types::SendNotificationReq;
 
@@ -74,6 +74,28 @@ pub async fn dispatch_notif(
                     NotificationType::Liked(LikedPayload {
                         post_id: payload.post_id,
                         by_user_principal: payload.user_id,
+                    }),
+                )
+                .await?;
+        }
+        EventPayload::VideoApproved(payload) => {
+            notification_store
+                .add_notification(
+                    payload.user_id,
+                    NotificationType::VideoApproved(VideoApprovalPayload {
+                        video_id: payload.video_id,
+                        post_id: payload.post_id,
+                    }),
+                )
+                .await?;
+        }
+        EventPayload::VideoDisapproved(payload) => {
+            notification_store
+                .add_notification(
+                    payload.user_id,
+                    NotificationType::VideoDisapproved(VideoApprovalPayload {
+                        video_id: payload.video_id,
+                        post_id: payload.post_id,
                     }),
                 )
                 .await?;

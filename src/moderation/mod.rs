@@ -10,12 +10,14 @@ use axum::{
 use candid::Principal;
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::instrument;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    app_state::AppState, consts::MODERATOR_PRINCIPALS, types::DelegatedIdentityWire,
+    app_state::AppState, consts::MODERATOR_PRINCIPALS, events::push_notifications::dispatch_notif,
+    types::DelegatedIdentityWire,
     utils::delegated_identity::get_user_info_from_delegated_identity_wire, AppError,
 };
 
@@ -177,9 +179,17 @@ pub async fn approve_video(
     State(state): State<Arc<AppState>>,
     Json(_request): Json<ModerationRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    // First fetch the video info before updating
+    let video_info = fetch_video_info(&state.bigquery_client, &video_id).await?;
+
     let updated = update_approval_status(&state.bigquery_client, &video_id).await?;
 
     if updated {
+        // Send notification to the video owner via event pipeline
+        if let Some(info) = video_info {
+            send_approval_notification(&state, &info, true).await;
+        }
+
         Ok((
             StatusCode::OK,
             Json(ModerationResponse {
@@ -221,9 +231,17 @@ pub async fn disapprove_video(
     State(state): State<Arc<AppState>>,
     Json(_request): Json<ModerationRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    // First fetch the video info before deleting
+    let video_info = fetch_video_info(&state.bigquery_client, &video_id).await?;
+
     let deleted = delete_video(&state.bigquery_client, &video_id).await?;
 
     if deleted {
+        // Send notification to the video owner via event pipeline
+        if let Some(info) = video_info {
+            send_approval_notification(&state, &info, false).await;
+        }
+
         Ok((
             StatusCode::OK,
             Json(ModerationResponse {
@@ -379,4 +397,124 @@ async fn delete_video(
     );
 
     Ok(deleted)
+}
+
+/// Video info needed for sending notifications
+#[derive(Debug, Clone)]
+struct VideoInfo {
+    video_id: String,
+    post_id: Option<String>,
+    canister_id: Option<String>,
+    user_id: Option<String>,
+}
+
+#[instrument(skip(bigquery_client))]
+async fn fetch_video_info(
+    bigquery_client: &google_cloud_bigquery::client::Client,
+    video_id: &str,
+) -> Result<Option<VideoInfo>, anyhow::Error> {
+    let escaped_video_id = video_id.replace('\'', "''");
+
+    let query = format!(
+        "SELECT video_id, post_id, canister_id, user_id
+         FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+         WHERE video_id = '{}'
+         LIMIT 1",
+        escaped_video_id
+    );
+
+    let request = QueryRequest {
+        query,
+        ..Default::default()
+    };
+
+    let result = bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await?;
+
+    if let Some(rows) = result.rows {
+        if let Some(row) = rows.first() {
+            let video_id = match &row.f[0].v {
+                google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+                _ => return Ok(None),
+            };
+
+            let post_id = match &row.f[1].v {
+                google_cloud_bigquery::http::tabledata::list::Value::String(s) => Some(s.clone()),
+                _ => None,
+            };
+
+            let canister_id = match &row.f[2].v {
+                google_cloud_bigquery::http::tabledata::list::Value::String(s) => Some(s.clone()),
+                _ => None,
+            };
+
+            let user_id = match &row.f[3].v {
+                google_cloud_bigquery::http::tabledata::list::Value::String(s) => Some(s.clone()),
+                _ => None,
+            };
+
+            return Ok(Some(VideoInfo {
+                video_id,
+                post_id,
+                canister_id,
+                user_id,
+            }));
+        }
+    }
+
+    Ok(None)
+}
+
+#[instrument(skip(state))]
+async fn send_approval_notification(state: &AppState, video_info: &VideoInfo, is_approved: bool) {
+    let Some(user_id_str) = &video_info.user_id else {
+        log::warn!(
+            "Cannot send notification for video {}: missing user_id",
+            video_info.video_id
+        );
+        return;
+    };
+
+    let user_principal = match Principal::from_text(user_id_str) {
+        Ok(p) => p,
+        Err(e) => {
+            log::error!(
+                "Failed to parse user_id {} as principal: {}",
+                user_id_str,
+                e
+            );
+            return;
+        }
+    };
+
+    let event_type = if is_approved {
+        "video_approved"
+    } else {
+        "video_disapproved"
+    };
+
+    let params = json!({
+        "video_id": video_info.video_id,
+        "post_id": video_info.post_id.clone().unwrap_or_default(),
+        "canister_id": video_info.canister_id,
+        "user_id": user_principal.to_text()
+    });
+
+    if let Err(e) = dispatch_notif(event_type, params, state).await {
+        log::error!(
+            "Failed to dispatch {} notification for video {}: {:?}",
+            event_type,
+            video_info.video_id,
+            e
+        );
+    } else {
+        log::info!(
+            "Dispatched {} notification for video {} to user {}",
+            event_type,
+            video_info.video_id,
+            user_principal
+        );
+    }
 }

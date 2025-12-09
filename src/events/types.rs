@@ -816,6 +816,14 @@ pub struct FollowUserPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoApprovalPayload {
+    pub video_id: String,
+    pub post_id: String,
+    pub canister_id: Option<String>,
+    pub user_id: Principal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum EventPayload {
     VideoDurationWatched(VideoDurationWatchedPayloadV2),
@@ -849,6 +857,8 @@ pub enum EventPayload {
     #[serde(serialize_with = "serialize_reward_earned")]
     RewardEarned(RewardEarnedPayload),
     FollowUser(FollowUserPayload),
+    VideoApproved(VideoApprovalPayload),
+    VideoDisapproved(VideoApprovalPayload),
 }
 
 fn serialize_reward_earned<S>(
@@ -1307,6 +1317,140 @@ impl EventPayload {
                     .await;
             }
 
+            EventPayload::VideoApproved(payload) => {
+                let title = "Video Approved";
+                let body = "Your video has been approved and is now live!";
+
+                let video_url = payload
+                    .canister_id
+                    .as_ref()
+                    .map(|cid| format!("https://yral.com/hot-or-not/{}/{}", cid, payload.post_id))
+                    .unwrap_or_else(|| "https://yral.com".to_string());
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "type": "video_approved",
+                        "video_id": payload.video_id,
+                        "post_id": payload.post_id
+                    })),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(video_url.clone()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body.to_string(),
+                                },
+                                "sound": "default",
+                            },
+                            "url": video_url
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, payload.user_id)
+                    .await;
+            }
+
+            EventPayload::VideoDisapproved(payload) => {
+                let title = "Video Not Approved";
+                let body = "Your video was not approved for publication.";
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "type": "video_disapproved",
+                        "video_id": payload.video_id,
+                        "post_id": payload.post_id
+                    })),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some("https://yral.com".to_string()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body.to_string(),
+                                },
+                                "sound": "default",
+                            },
+                            "url": "https://yral.com"
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, payload.user_id)
+                    .await;
+            }
+
             _ => {}
         }
     }
@@ -1376,6 +1520,10 @@ pub fn deserialize_event_payload(
         )),
         "reward_earned" => Ok(EventPayload::RewardEarned(serde_json::from_value(value)?)),
         "follow_user" => Ok(EventPayload::FollowUser(serde_json::from_value(value)?)),
+        "video_approved" => Ok(EventPayload::VideoApproved(serde_json::from_value(value)?)),
+        "video_disapproved" => Ok(EventPayload::VideoDisapproved(serde_json::from_value(
+            value,
+        )?)),
         _ => Err(serde_json::Error::unknown_field(event_name, &[])),
     }
 }
