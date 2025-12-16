@@ -11,7 +11,9 @@ use http::HeaderMap;
 use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
-use yral_canisters_client::individual_user_template::PostStatus;
+use yral_canisters_client::{
+    ic::USER_POST_SERVICE_ID, user_post_service::PostStatus, user_post_service::UserPostService,
+};
 use yup_oauth2::ServiceAccountAuthenticator;
 
 use crate::offchain_service::off_chain::{Empty, ReportPostRequest};
@@ -215,12 +217,12 @@ pub async fn report_approved_handler(
     // view_type format : "canister_id post_id(int)"
     let view_type: Vec<&str> = view_type.split(" ").collect();
     let canister_id = view_type[0];
-    let canister_principal = Principal::from_text(canister_id)?;
-    let post_id = view_type[1].parse::<u64>()?;
+    let post_id = view_type[1];
 
-    let user = state.individual_user(canister_principal);
+    let user_post_service = UserPostService(USER_POST_SERVICE_ID, &state.agent);
 
-    user.update_post_status(post_id, PostStatus::BannedDueToUserReporting)
+    user_post_service
+        .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
         .await?;
 
     // send confirmation to Google Chat
