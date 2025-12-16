@@ -12,8 +12,7 @@ use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
 use yral_canisters_client::{
-    ic::USER_POST_SERVICE_ID, individual_user_template::PostStatus,
-    user_post_service::UserPostService,
+    ic::USER_POST_SERVICE_ID, user_post_service::PostStatus, user_post_service::UserPostService,
 };
 use yup_oauth2::ServiceAccountAuthenticator;
 
@@ -218,13 +217,12 @@ pub async fn report_approved_handler(
     // view_type format : "canister_id post_id(int)"
     let view_type: Vec<&str> = view_type.split(" ").collect();
     let canister_id = view_type[0];
-    let canister_principal = Principal::from_text(canister_id)?;
     let post_id = view_type[1];
 
-    let post_details_canister = UserPostService(USER_POST_SERVICE_ID, state.agent.as_ref());
+    let post_details_canister = UserPostService(USER_POST_SERVICE_ID, &state.agent);
 
     post_details_canister
-        .update_post_status(post_id, PostStatus::BannedDueToUserReporting)
+        .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
         .await?;
 
     // send confirmation to Google Chat
