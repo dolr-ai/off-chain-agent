@@ -1,0 +1,124 @@
+services:
+  fly-redis-proxy:
+    image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy-offchain}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      - FLY_API_TOKEN=${FLY_API_TOKEN}
+    networks:
+      - offchain-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "16379"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  offchain-agent:
+    image: ${APP_IMAGE:-ghcr.io/dolr-ai/icp-off-chain-agent}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      # === Server Configuration ===
+      PORT: "8080"
+      SENTRY_ENVIRONMENT: "production"
+
+      # === Database Configuration ===
+      ALLOYDB_DB_NAME: "postgres"
+      ALLOYDB_DB_USER: "postgres"
+      ALLOYDB_SERVICE_ACCOUNT_JSON: ${ALLOYDB_SERVICE_ACCOUNT_JSON}
+      ALLOYDB_INSTANCE: ${ALLOYDB_INSTANCE}
+      ALLOYDB_DB_PASSWORD: ${ALLOYDB_DB_PASSWORD}
+
+      # === Redis Configuration ===
+      # ML Feed Cache - uses Fly Redis proxy
+      ML_FEED_CACHE_REDIS_URL: redis://default:${FLY_REDIS_PASSWORD}@fly-redis-proxy:16379
+      # Other Redis instances (direct connection)
+      YRAL_AUTH_REDIS_URL: ${YRAL_AUTH_REDIS_URL}
+      CANISTER_BACKUP_CACHE_REDIS_URL: ${CANISTER_BACKUP_CACHE_REDIS_URL}
+      LEADERBOARD_REDIS_URL: ${LEADERBOARD_REDIS_URL}
+      SERVICE_CANISTER_MIGRATION_REDIS_URL: ${SERVICE_CANISTER_MIGRATION_REDIS_URL}
+      ML_FEED_CACHE_MEMORYSTORE_URL: ${ML_FEED_CACHE_MEMORYSTORE_URL}
+
+      # === Cloudflare Configuration ===
+      CF_R2_ACCESS_KEY_TEMP: ${CF_R2_ACCESS_KEY_TEMP}
+      CF_R2_SECRET_ACCESS_KEY_TEMP: ${CF_R2_SECRET_ACCESS_KEY_TEMP}
+      CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY: ${CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY}
+      HOTORNOT_CF_ACCOUNT_ID: "a209c523d2d9646cc56227dbe6ce3ede"
+      CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN: ${CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN}
+      CF_IMAGES_API_TOKEN: ${CF_IMAGES_API_TOKEN}
+
+      # === Auth & Identity ===
+      BACKEND_ADMIN_IDENTITY: ${BACKEND_ADMIN_IDENTITY}
+      GOOGLE_SA_KEY: ${GOOGLE_SA_KEY}
+      YRAL_METADATA_TOKEN: ${YRAL_METADATA_TOKEN}
+      YRAL_METADATA_NOTIFICATION_API_KEY: ${YRAL_METADATA_NOTIFICATION_API_KEY}
+
+      # === gRPC Configuration ===
+      GRPC_AUTH_TOKEN: ${GRPC_AUTH_TOKEN}
+      YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN: ${YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN}
+      NSFW_GRPC_TOKEN: ${NSFW_GRPC_TOKEN}
+
+      # === JWT & Tokens ===
+      MLFEED_JWT_PUBLIC_KEY: "MCowBQYDK2VwAyEA1Lpv21H9dsqetmqzeNunPvCNLZM4XpsZPSquHSO7OYw="
+      ML_SERVER_JWT_TOKEN: ${ML_SERVER_JWT_TOKEN}
+      YRAL_HON_WORKER_JWT: ${YRAL_HON_WORKER_JWT}
+      ANALYTICS_SERVER_TOKEN: ${ANALYTICS_SERVER_TOKEN}
+
+      # === QStash Configuration ===
+      QSTASH_CURRENT_SIGNING_KEY: ${QSTASH_CURRENT_SIGNING_KEY}
+      QSTASH_AUTH_TOKEN: ${QSTASH_AUTH_TOKEN}
+
+      # === Upstash & Vector ===
+      UPSTASH_VECTOR_READ_WRITE_TOKEN: ${UPSTASH_VECTOR_READ_WRITE_TOKEN}
+      MILVUS_URL: ${MILVUS_URL}
+
+      # === Storage ===
+      STORJ_INTERFACE_TOKEN: ${STORJ_INTERFACE_TOKEN}
+      STORJ_BACKUP_CANISTER_ACCESS_GRANT: ${STORJ_BACKUP_CANISTER_ACCESS_GRANT}
+      HETZNER_S3_ACCESS_KEY: ${HETZNER_S3_ACCESS_KEY}
+      HETZNER_S3_SECRET_KEY: ${HETZNER_S3_SECRET_KEY}
+
+      # === External Services ===
+      LUMALABS_API_KEY: ${LUMALABS_API_KEY}
+      REPLICATE_API_TOKEN: ${REPLICATE_API_TOKEN}
+      REPLICATE_WEBHOOK_SIGNING_SECRET: ${REPLICATE_WEBHOOK_SIGNING_SECRET}
+
+      # === Webhooks ===
+      CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL: ${CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL}
+      BTC_REWARDS_GCHAT_WEBHOOK_URL: ${BTC_REWARDS_GCHAT_WEBHOOK_URL}
+
+      # === Migration & Backfill ===
+      VIDEOHASH_BACKFILL_TOKEN: ${VIDEOHASH_BACKFILL_TOKEN}
+      YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY: ${YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY}
+    networks:
+      - offchain-net
+    depends_on:
+      fly-redis-proxy:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3 QUIC support
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - offchain-net
+    depends_on:
+      - offchain-agent
+
+networks:
+  offchain-net:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "fd00:dead:beef::/48"
+
+volumes:
+  caddy_data:
+  caddy_config:

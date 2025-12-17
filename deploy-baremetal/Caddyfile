@@ -1,0 +1,57 @@
+{
+    # Global options
+    email joel@gobazzinga.io
+
+    # Enable HTTP/2 and HTTP/3
+    servers {
+        protocols h1 h2 h2c
+    }
+}
+
+# gRPC service - needs HTTP/2
+# Replace YOUR_DOMAIN with actual domain (e.g., offchain.yral.com)
+offchain.yral.com {
+    # gRPC reverse proxy with HTTP/2 support
+    reverse_proxy offchain-agent:50051 {
+        # Enable HTTP/2 to backend for gRPC
+        transport http {
+            versions h2c
+        }
+
+        # Health checking
+        health_uri /
+        health_interval 30s
+        health_timeout 10s
+
+        # Headers for gRPC
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+
+        # Flush immediately for streaming
+        flush_interval -1
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Logging
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}
+
+# Health check endpoint on HTTP (for load balancer health checks)
+:80 {
+    respond /health "OK" 200
+    respond "Service available at https://offchain.yral.com" 200
+}
