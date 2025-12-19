@@ -1,0 +1,122 @@
+name: Deploy to Fly on push to main
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_check:
+    uses: ./.github/workflows/build-check.yml
+    with:
+      publish-artifact: true
+
+  deploy:
+    name: Deploy
+    needs: build_check
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-glibc
+      - name: Setup dfx
+        uses: dfinity/setup-dfx@main
+      - run: chmod +x target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        env:
+          # Pin flyctl to a concrete version so install.sh doesn't ask for the
+          # (currently broken) "latest" build and the image build can finish.
+          # Any released flyctl tag works – v0.3.144 is the most recent as of
+          # June 2025.
+          FLYCTL_VERSION: v0.3.144
+      - name: Set cloudflare token
+        run: |
+          flyctl secrets set "CF_R2_ACCESS_KEY_TEMP=$CF_R2_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "CF_R2_SECRET_ACCESS_KEY_TEMP=$CF_R2_SECRET_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY=$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "BACKEND_ADMIN_IDENTITY=$BACKEND_ADMIN_IDENTITY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "GOOGLE_SA_KEY=$GOOGLE_SA_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN=$YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "GRPC_AUTH_TOKEN=$GRPC_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_METADATA_TOKEN=$YRAL_METADATA_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "UPSTASH_VECTOR_READ_WRITE_TOKEN=$UPSTASH_VECTOR_READ_WRITE_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "ML_SERVER_JWT_TOKEN=$ML_SERVER_JWT_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN=$CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set HOTORNOT_CF_ACCOUNT_ID="a209c523d2d9646cc56227dbe6ce3ede" --app "icp-off-chain-agent" --stage
+          flyctl secrets set MLFEED_JWT_PUBLIC_KEY="MCowBQYDK2VwAyEA1Lpv21H9dsqetmqzeNunPvCNLZM4XpsZPSquHSO7OYw=" --app "icp-off-chain-agent" --stage
+          flyctl secrets set QSTASH_CURRENT_SIGNING_KEY="$QSTASH_CURRENT_SIGNING_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set CF_IMAGES_API_TOKEN="$CF_IMAGES_API_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set NSFW_GRPC_TOKEN="$NSFW_GRPC_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set QSTASH_AUTH_TOKEN="$QSTASH_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set ML_FEED_CACHE_REDIS_URL="$ML_FEED_CACHE_REDIS_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "VIDEOHASH_BACKFILL_TOKEN=$VIDEOHASH_BACKFILL_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set STORJ_BACKUP_CANISTER_ACCESS_GRANT="$STORJ_BACKUP_CANISTER_ACCESS_GRANT" --app "icp-off-chain-agent" --stage
+          flyctl secrets set CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL="$CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "ALLOYDB_SERVICE_ACCOUNT_JSON=$ALLOYDB_SERVICE_ACCOUNT_JSON" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "ALLOYDB_INSTANCE=$ALLOYDB_INSTANCE" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "ALLOYDB_DB_PASSWORD=$ALLOYDB_DB_PASSWORD" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "CANISTER_BACKUP_CACHE_REDIS_URL=$CANISTER_BACKUP_CACHE_REDIS_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_METADATA_NOTIFICATION_API_KEY=$YRAL_METADATA_NOTIFICATION_API_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_AUTH_REDIS_URL=$YRAL_AUTH_REDIS_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "ML_FEED_CACHE_MEMORYSTORE_URL=$ML_FEED_CACHE_MEMORYSTORE_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "LUMALABS_API_KEY=$LUMALABS_API_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_HON_WORKER_JWT=$YRAL_HON_WORKER_JWT" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "LEADERBOARD_REDIS_URL=$LEADERBOARD_REDIS_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "HETZNER_S3_ACCESS_KEY=$HETZNER_S3_ACCESS_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "HETZNER_S3_SECRET_KEY=$HETZNER_S3_SECRET_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "REPLICATE_API_TOKEN=$REPLICATE_API_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "BTC_REWARDS_GCHAT_WEBHOOK_URL=$BTC_REWARDS_GCHAT_WEBHOOK_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY=$YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "SERVICE_CANISTER_MIGRATION_REDIS_URL=$SERVICE_CANISTER_MIGRATION_REDIS_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "ANALYTICS_SERVER_TOKEN=$ANALYTICS_SERVER_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "MILVUS_URL=$MILVUS_URL" --app "icp-off-chain-agent" --stage
+          flyctl secrets set REPLICATE_WEBHOOK_SIGNING_SECRET="$REPLICATE_WEBHOOK_SIGNING_SECRET" --app "icp-off-chain-agent" --stage
+        env:
+          FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
+          CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          CF_R2_SECRET_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY: ${{ secrets.CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY }}
+          BACKEND_ADMIN_IDENTITY: ${{ secrets.YRAL_DAPP_BACKEND_APP_ADMIN_AND_PROPOSAL_SUBMITTER_IDENTITY_PRIVATE_KEY }}
+          GOOGLE_SA_KEY: ${{ secrets.YRAL_OFF_CHAIN_AGENT_GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON_KEY }}
+          YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN: ${{ secrets.YRAL_CLOUDFLARE_WORKERS_TO_OFFCHAIN_AGENT_GRPC_AUTH_TOKEN }}
+          GRPC_AUTH_TOKEN: ${{ secrets.OFF_CHAIN_AGENT_GRPC_AUTH_TOKEN }}
+          YRAL_METADATA_TOKEN: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_JWT_TOKEN_FOR_OFFCHAIN_AGENT }}
+          UPSTASH_VECTOR_READ_WRITE_TOKEN: ${{ secrets.UPSTASH_VECTOR_READ_WRITE_TOKEN }}
+          ML_SERVER_JWT_TOKEN: ${{ secrets.ML_SERVER_JWT_TOKEN }}
+          CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN: ${{ secrets.CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN }}
+          QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
+          CF_IMAGES_API_TOKEN: ${{ secrets.CLOUDFLARE_IMAGES_READ_AND_WRITE_API_TOKEN }}
+          NSFW_GRPC_TOKEN: ${{ secrets.TOKEN_TO_SIGN_OUTGOING_CALLS_TO_NSFW_DETECT_SERVICE }}
+          QSTASH_AUTH_TOKEN: ${{ secrets.QSTASH_TOKEN }}
+          ML_FEED_CACHE_REDIS_URL: ${{ secrets.YRAL_ML_FEED_CACHE_REDIS_URL }}
+          STORJ_INTERFACE_TOKEN: ${{ secrets.STORJ_INTERFACE_TOKEN }}
+          VIDEOHASH_BACKFILL_TOKEN: ${{ secrets.VIDEOHASH_BACKFILL_TOKEN }}
+          STORJ_BACKUP_CANISTER_ACCESS_GRANT: ${{ secrets.STORJ_BACKUP_CANISTER_ACCESS_GRANT }}
+          CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL }}
+          ALLOYDB_SERVICE_ACCOUNT_JSON: ${{ secrets.ALLOYDB_SERVICE_ACCOUNT_JSON_PROD }}
+          ALLOYDB_INSTANCE: ${{ secrets.ALLOYDB_INSTANCE_PROD }}
+          ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}
+          CANISTER_BACKUP_CACHE_REDIS_URL: ${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}
+          YRAL_METADATA_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_NOTIFICATION_API_KEY }}
+          YRAL_AUTH_REDIS_URL: ${{ secrets.YRAL_AUTH_REDIS_URL }}
+          ML_FEED_CACHE_MEMORYSTORE_URL: ${{ secrets.ML_FEED_CACHE_MEMORYSTORE_URL }}
+          LUMALABS_API_KEY: ${{ secrets.VIDEOGEN_PROVIDER_LUMALABS_API_KEY }}
+          YRAL_HON_WORKER_JWT: ${{ secrets.YRAL_HON_WORKER_JWT }}
+          LEADERBOARD_REDIS_URL: ${{ secrets.LEADERBOARD_REDIS_URL }}
+          HETZNER_S3_ACCESS_KEY: ${{ secrets.HETZNER_S3_ACCESS_KEY }}
+          HETZNER_S3_SECRET_KEY: ${{ secrets.HETZNER_S3_SECRET_KEY }}
+          SERVICE_CANISTER_MIGRATION_REDIS_URL: ${{ secrets.SERVICE_CANISTER_MIGRATION_REDIS_URL }}
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+          BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}
+          YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY: ${{ secrets.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}
+          ANALYTICS_SERVER_TOKEN: ${{ secrets.ANALYTICS_SERVER_TOKEN }}
+          MILVUS_URL: ${{ secrets.MILVUS_URL }}
+          REPLICATE_WEBHOOK_SIGNING_SECRET: ${{ secrets.REPLICATE_WEBHOOK_SIGNING_SECRET }}
+      - name: Deploy a docker container to fly.io
+        run: flyctl deploy --remote-only -c fly-prod.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
