@@ -140,16 +140,27 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
         .filter(|s| !s.is_empty())
         .collect();
     if hosts.is_empty() {
-        anyhow::bail!("KVROCKS_HOSTS must contain at least one host, got: '{}'", hosts_str);
+        anyhow::bail!(
+            "KVROCKS_HOSTS must contain at least one host, got: '{}'",
+            hosts_str
+        );
     }
 
     let encoded_password = urlencoding::encode(&password);
     let node_urls: Vec<String> = hosts
         .iter()
-        .map(|host| format!("rediss://:{}@{}:{}", encoded_password, host, KVROCKS_TLS_PORT))
+        .map(|host| {
+            format!(
+                "rediss://:{}@{}:{}",
+                encoded_password, host, KVROCKS_TLS_PORT
+            )
+        })
         .collect();
 
-    log::info!("Connecting to kvrocks cluster with {} nodes", node_urls.len());
+    log::info!(
+        "Connecting to kvrocks cluster with {} nodes",
+        node_urls.len()
+    );
 
     let tls_certs = redis::TlsCertificates {
         client_tls: Some(redis::ClientTlsConfig {
