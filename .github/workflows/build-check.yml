@@ -7,6 +7,9 @@ on:
         default: false
         required: false
         type: boolean
+      KVROCKS_HOSTS:
+        required: false
+        type: string
     secrets:
       KVROCKS_PASSWORD:
         required: false
@@ -82,6 +85,7 @@ jobs:
       - name: Run kvrocks connection test
         env:
           KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
+          KVROCKS_HOSTS: ${{ inputs.KVROCKS_HOSTS }}
           KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
           KVROCKS_CLIENT_CERT: ${{ secrets.KVROCKS_CLIENT_CERT }}
           KVROCKS_CLIENT_KEY: ${{ secrets.KVROCKS_CLIENT_KEY }}
