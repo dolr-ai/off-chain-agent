@@ -23,6 +23,7 @@ use yral_canisters_client::{
     user_post_service::UserPostService,
 };
 
+use crate::kvrocks::KvrocksClient;
 use crate::{
     app_state::AppState,
     consts::{
@@ -458,6 +459,7 @@ pub async fn insert_video_delete_row_to_bigquery(
 ) -> Result<(), anyhow::Error> {
     bulk_insert_video_delete_rows(
         &state.bigquery_client,
+        &state.kvrocks_client,
         vec![UserPost {
             canister_id,
             post_id,
@@ -477,6 +479,7 @@ pub async fn insert_video_delete_row_to_bigquery_v2(
 ) -> Result<(), anyhow::Error> {
     bulk_insert_video_delete_rows_v2(
         &state.bigquery_client,
+        &state.kvrocks_client,
         vec![UserPostV2 {
             canister_id,
             post_id,
@@ -490,6 +493,7 @@ pub async fn insert_video_delete_row_to_bigquery_v2(
 
 pub async fn bulk_insert_video_delete_rows(
     bq_client: &Client,
+    kvrocks_client: &Option<KvrocksClient>,
     posts: Vec<UserPost>,
 ) -> Result<(), anyhow::Error> {
     // Process posts in batches of 500
@@ -533,6 +537,22 @@ pub async fn bulk_insert_video_delete_rows(
                 ));
             }
         }
+
+        // Also push to kvrocks
+        if let Some(ref kvrocks) = kvrocks_client {
+            for post in chunk {
+                let delete_data = serde_json::json!({
+                    "canister_id": post.canister_id,
+                    "post_id": post.post_id,
+                    "video_id": post.video_id,
+                    "gcs_video_id": format!("gs://yral-videos/{}.mp4", post.video_id),
+                    "deleted_at": chrono::Utc::now().to_rfc3339(),
+                });
+                if let Err(e) = kvrocks.store_video_deleted(&post.video_id, &delete_data).await {
+                    log::error!("Error pushing video delete data to kvrocks for {}: {}", post.video_id, e);
+                }
+            }
+        }
     }
 
     Ok(())
@@ -540,6 +560,7 @@ pub async fn bulk_insert_video_delete_rows(
 
 pub async fn bulk_insert_video_delete_rows_v2(
     bq_client: &Client,
+    kvrocks_client: &Option<KvrocksClient>,
     posts: Vec<UserPostV2>,
 ) -> Result<(), anyhow::Error> {
     // Process posts in batches of 500
@@ -581,6 +602,22 @@ pub async fn bulk_insert_video_delete_rows_v2(
                 return Err(anyhow::anyhow!(
                     "Failed to bulk insert video deleted rows to bigquery"
                 ));
+            }
+        }
+
+        // Also push to kvrocks
+        if let Some(ref kvrocks) = kvrocks_client {
+            for post in chunk {
+                let delete_data = serde_json::json!({
+                    "canister_id": post.canister_id,
+                    "post_id": post.post_id,
+                    "video_id": post.video_id,
+                    "gcs_video_id": format!("gs://yral-videos/{}.mp4", post.video_id),
+                    "deleted_at": chrono::Utc::now().to_rfc3339(),
+                });
+                if let Err(e) = kvrocks.store_video_deleted(&post.video_id, &delete_data).await {
+                    log::error!("Error pushing video delete data to kvrocks for {}: {}", post.video_id, e);
+                }
             }
         }
     }

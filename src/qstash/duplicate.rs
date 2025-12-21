@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::events::types::string_or_number;
+use crate::kvrocks::KvrocksClient;
 use crate::{
     app_state,
     consts::DEDUP_INDEX_CANISTER_ID,
@@ -31,6 +32,7 @@ impl VideoHashDuplication {
         &self,
         agent: &ic_agent::Agent,
         bigquery_client: &google_cloud_bigquery::client::Client,
+        kvrocks_client: &Option<KvrocksClient>,
         video_id: &str,
         _video_url: &str,
         publisher_data: VideoPublisherDataV2,
@@ -63,12 +65,13 @@ impl VideoHashDuplication {
         // Store the phash regardless of duplication status
         self.store_videohash_to_dedup_index(agent, video_id, &phash)
             .await?;
-        self.store_videohash_original(bigquery_client, video_id, &phash)
+        self.store_videohash_original(bigquery_client, kvrocks_client, video_id, &phash)
             .await?;
-        self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
+        self.store_phash_to_bigquery(bigquery_client, kvrocks_client, video_id, &phash, &metadata)
             .await?;
         self.store_ugc_content_approval(
             bigquery_client,
+            kvrocks_client,
             video_id,
             &publisher_data.post_id,
             &publisher_data.publisher_principal,
@@ -76,8 +79,8 @@ impl VideoHashDuplication {
         .await?;
 
         if !is_duplicate {
-            self.store_unique_video(video_id, &phash).await?;
-            self.store_unique_video_v2(video_id, &phash).await?;
+            self.store_unique_video(kvrocks_client, video_id, &phash).await?;
+            self.store_unique_video_v2(kvrocks_client, video_id, &phash).await?;
             log::info!("Unique video recorded: video_id [{video_id}]");
         }
 
@@ -100,6 +103,7 @@ impl VideoHashDuplication {
     async fn store_videohash_original(
         &self,
         bigquery_client: &google_cloud_bigquery::client::Client,
+        kvrocks_client: &Option<KvrocksClient>,
         video_id: &str,
         hash: &str,
     ) -> Result<(), anyhow::Error> {
@@ -121,12 +125,25 @@ impl VideoHashDuplication {
             .query("hot-or-not-feed-intelligence", &request)
             .await?;
 
+        // Also push to kvrocks
+        if let Some(ref kvrocks) = kvrocks_client {
+            let hash_data = serde_json::json!({
+                "video_id": video_id,
+                "videohash": hash,
+                "created_at": chrono::Utc::now().to_rfc3339(),
+            });
+            if let Err(e) = kvrocks.store_videohash_original(video_id, &hash_data).await {
+                log::error!("Error pushing videohash_original to kvrocks: {}", e);
+            }
+        }
+
         Ok(())
     }
 
     async fn store_phash_to_bigquery(
         &self,
         bigquery_client: &google_cloud_bigquery::client::Client,
+        kvrocks_client: &Option<KvrocksClient>,
         video_id: &str,
         phash: &str,
         metadata: &VideoMetadata,
@@ -156,7 +173,7 @@ impl VideoHashDuplication {
                     video_id,
                     chrono::Utc::now().timestamp_millis()
                 )),
-                json: row_data,
+                json: row_data.clone(),
             }],
             ignore_unknown_values: Some(false),
             skip_invalid_rows: Some(false),
@@ -182,6 +199,14 @@ impl VideoHashDuplication {
         }
 
         log::debug!("Successfully inserted phash for video_id: {}", video_id);
+
+        // Also push to kvrocks
+        if let Some(ref kvrocks) = kvrocks_client {
+            if let Err(e) = kvrocks.store_videohash_phash(video_id, &row_data).await {
+                log::error!("Error pushing phash to kvrocks: {}", e);
+            }
+        }
+
         Ok(())
     }
 
@@ -211,35 +236,11 @@ impl VideoHashDuplication {
         Ok(())
     }
 
-    async fn store_unique_video(&self, video_id: &str, hash: &str) -> Result<(), anyhow::Error> {
+    async fn store_unique_video(&self, kvrocks_client: &Option<KvrocksClient>, video_id: &str, hash: &str) -> Result<(), anyhow::Error> {
         let bigquery_client = app_state::init_bigquery_client().await;
 
         let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique` 
-             (video_id, videohash, created_at) 
-             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
-        );
-
-        let request = QueryRequest {
-            query,
-            ..Default::default()
-        };
-
-        log::info!("Storing unique video in video_unique for video_id [{video_id}]");
-
-        bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
-            .await?;
-
-        Ok(())
-    }
-
-    async fn store_unique_video_v2(&self, video_id: &str, hash: &str) -> Result<(), anyhow::Error> {
-        let bigquery_client = app_state::init_bigquery_client().await;
-
-        let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique_v2`
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique`
              (video_id, videohash, created_at)
              VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
         );
@@ -256,12 +257,61 @@ impl VideoHashDuplication {
             .query("hot-or-not-feed-intelligence", &request)
             .await?;
 
+        // Also push to kvrocks
+        if let Some(ref kvrocks) = kvrocks_client {
+            let unique_data = serde_json::json!({
+                "video_id": video_id,
+                "videohash": hash,
+                "created_at": chrono::Utc::now().to_rfc3339(),
+            });
+            if let Err(e) = kvrocks.store_video_unique(video_id, &unique_data).await {
+                log::error!("Error pushing video_unique to kvrocks: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn store_unique_video_v2(&self, kvrocks_client: &Option<KvrocksClient>, video_id: &str, hash: &str) -> Result<(), anyhow::Error> {
+        let bigquery_client = app_state::init_bigquery_client().await;
+
+        let query = format!(
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique_v2`
+             (video_id, videohash, created_at)
+             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
+        );
+
+        let request = QueryRequest {
+            query,
+            ..Default::default()
+        };
+
+        log::info!("Storing unique video in video_unique_v2 for video_id [{video_id}]");
+
+        bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &request)
+            .await?;
+
+        // Also push to kvrocks
+        if let Some(ref kvrocks) = kvrocks_client {
+            let unique_data = serde_json::json!({
+                "video_id": video_id,
+                "videohash": hash,
+                "created_at": chrono::Utc::now().to_rfc3339(),
+            });
+            if let Err(e) = kvrocks.store_video_unique_v2(video_id, &unique_data).await {
+                log::error!("Error pushing video_unique_v2 to kvrocks: {}", e);
+            }
+        }
+
         Ok(())
     }
 
     async fn store_ugc_content_approval(
         &self,
         bigquery_client: &google_cloud_bigquery::client::Client,
+        kvrocks_client: &Option<KvrocksClient>,
         video_id: &str,
         post_id: &str,
         user_id: &str,
@@ -375,6 +425,22 @@ impl VideoHashDuplication {
             canister_id,
             user_id
         );
+
+        // Also push to kvrocks
+        if let Some(ref kvrocks) = kvrocks_client {
+            let approval_data = serde_json::json!({
+                "video_id": video_id,
+                "post_id": post_id,
+                "canister_id": canister_id,
+                "user_id": user_id,
+                "is_approved": false,
+                "created_at": chrono::Utc::now().to_rfc3339(),
+            });
+            if let Err(e) = kvrocks.store_ugc_content_approval(video_id, &approval_data).await {
+                log::error!("Error pushing ugc_content_approval to kvrocks: {}", e);
+            }
+        }
+
         Ok(())
     }
 
@@ -430,6 +496,7 @@ impl VideoHashDuplication {
         bigquery_client: &google_cloud_bigquery::client::Client,
         milvus_client: &Option<crate::milvus::Client>,
         redis_pool: &RedisPool,
+        kvrocks_client: &Option<KvrocksClient>,
         video_id: &str,
         _video_url: &str,
         publisher_data: VideoPublisherDataV2,
@@ -462,13 +529,14 @@ impl VideoHashDuplication {
                 existing_video_id
             );
 
-            // Store metadata
-            self.store_videohash_original(bigquery_client, video_id, &phash)
+            // Store metadata (kvrocks push is inside the functions)
+            self.store_videohash_original(bigquery_client, kvrocks_client, video_id, &phash)
                 .await?;
-            self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
+            self.store_phash_to_bigquery(bigquery_client, kvrocks_client, video_id, &phash, &metadata)
                 .await?;
             self.store_ugc_content_approval(
                 bigquery_client,
+                kvrocks_client,
                 video_id,
                 &publisher_data.post_id,
                 &publisher_data.publisher_principal,
@@ -534,13 +602,14 @@ impl VideoHashDuplication {
                 .context("Couldn't check if the video is duplicate")?
         };
 
-        // Store the phash regardless of duplication status
-        self.store_videohash_original(bigquery_client, video_id, &phash)
+        // Store the phash regardless of duplication status (kvrocks push is inside the functions)
+        self.store_videohash_original(bigquery_client, kvrocks_client, video_id, &phash)
             .await?;
-        self.store_phash_to_bigquery(bigquery_client, video_id, &phash, &metadata)
+        self.store_phash_to_bigquery(bigquery_client, kvrocks_client, video_id, &phash, &metadata)
             .await?;
         self.store_ugc_content_approval(
             bigquery_client,
+            kvrocks_client,
             video_id,
             &publisher_data.post_id,
             &publisher_data.publisher_principal,
@@ -570,8 +639,8 @@ impl VideoHashDuplication {
                 }
             }
 
-            self.store_unique_video(video_id, &phash).await?;
-            self.store_unique_video_v2(video_id, &phash).await?;
+            self.store_unique_video(kvrocks_client, video_id, &phash).await?;
+            self.store_unique_video_v2(kvrocks_client, video_id, &phash).await?;
             log::info!("Unique video recorded in BigQuery: video_id [{video_id}]");
         } else {
             log::debug!(

@@ -53,6 +53,7 @@ impl Event {
 
         tokio::spawn(async move {
             let timestamp = chrono::Utc::now().to_rfc3339();
+            let event_id = format!("{}_{}", event_str, chrono::Utc::now().timestamp_millis());
 
             let data = serde_json::json!({
                 "kind": "bigquery#tableDataInsertAllRequest",
@@ -67,9 +68,21 @@ impl Event {
                 ]
             });
 
+            // Push to BigQuery
             let res = stream_to_bigquery(&app_state, data).await;
             if res.is_err() {
                 error!("Error sending data to BigQuery: {}", res.err().unwrap());
+            }
+
+            if let Some(ref kvrocks) = app_state.kvrocks_client {
+                let kvrocks_data = serde_json::json!({
+                    "event": event_str,
+                    "params": params_str,
+                    "timestamp": timestamp,
+                });
+                if let Err(e) = kvrocks.store_event(&event_id, &kvrocks_data).await {
+                    error!("Error sending data to kvrocks: {}", e);
+                }
             }
         });
     }

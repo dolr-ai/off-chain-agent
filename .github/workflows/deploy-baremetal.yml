@@ -250,6 +250,10 @@ jobs:
             ANALYTICS_SERVER_TOKEN='${{ secrets.ANALYTICS_SERVER_TOKEN }}' \
             MILVUS_URL='${{ secrets.MILVUS_URL }}' \
             REPLICATE_WEBHOOK_SIGNING_SECRET='${{ secrets.REPLICATE_WEBHOOK_SIGNING_SECRET }}' \
+            KVROCKS_PASSWORD='${{ secrets.KVROCKS_PASSWORD }}' \
+            KVROCKS_CA_CERT='${{ secrets.KVROCKS_CA_CERT }}' \
+            KVROCKS_CLIENT_CERT='${{ secrets.KVROCKS_CLIENT_CERT }}' \
+            KVROCKS_CLIENT_KEY='${{ secrets.KVROCKS_CLIENT_KEY }}' \
             docker compose up -d
 
             echo 'Waiting for services to start...'
