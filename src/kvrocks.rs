@@ -2,10 +2,8 @@ use anyhow::{Context, Result};
 use redis::cluster::ClusterClient;
 use redis::cluster_async::ClusterConnection;
 use redis::AsyncCommands;
-use rustls_pemfile;
 use serde::Serialize;
 use std::env;
-use std::io::BufReader;
 
 const KVROCKS_TLS_PORT: u16 = 6666;
 
@@ -123,6 +121,10 @@ impl KvrocksClient {
 }
 
 pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok();
+
     let password =
         env::var("KVROCKS_PASSWORD").context("KVROCKS_PASSWORD environment variable not set")?;
     let hosts_str =
@@ -145,30 +147,10 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
 
     let tls_certs = redis::TlsCertificates {
         client_tls: Some(redis::ClientTlsConfig {
-            client_cert: rustls_pemfile::certs(&mut BufReader::new(&get_client_cert_pem()?[..]))
-                .collect::<Result<Vec<_>, _>>()
-                .context("Failed to parse client cert")?
-                .into_iter()
-                .next()
-                .context("No client certificate found")?
-                .to_vec(),
-            client_key: rustls_pemfile::private_key(&mut BufReader::new(
-                &get_client_key_pem()?[..],
-            ))
-            .context("Failed to parse client key")?
-            .context("No private key found")?
-            .secret_der()
-            .to_vec(),
+            client_cert: get_client_cert_pem()?,
+            client_key: get_client_key_pem()?,
         }),
-        root_cert: Some(
-            rustls_pemfile::certs(&mut BufReader::new(&get_ca_cert_pem()?[..]))
-                .collect::<Result<Vec<_>, _>>()
-                .context("Failed to parse CA cert")?
-                .into_iter()
-                .next()
-                .context("No CA certificate found")?
-                .to_vec(),
-        ),
+        root_cert: Some(get_ca_cert_pem()?),
     };
 
     let client = ClusterClient::builder(node_urls)
@@ -200,7 +182,10 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
 }
 
 fn normalize_pem(pem: String) -> Vec<u8> {
-    pem.replace("\\n", "\n").into_bytes()
+    pem.replace("\\n", "\n")
+        .replace("\\r", "")
+        .replace("\r", "")
+        .into_bytes()
 }
 
 fn get_ca_cert_pem() -> Result<Vec<u8>> {

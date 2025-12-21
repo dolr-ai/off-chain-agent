@@ -2078,6 +2078,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc16"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "338089f42c427b86394a5ee60ff321da23a5c89c9d89514c829687b26359fcff"
+
+[[package]]
 name = "crc32fast"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6647,6 +6653,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.23",
  "rustls 0.23.32",
+ "rustls-pemfile 2.2.0",
  "sentry",
  "sentry-anyhow 0.42.0",
  "sentry-tower",
@@ -7788,11 +7795,15 @@ dependencies = [
  "arc-swap",
  "bytes",
  "combine",
+ "crc16",
+ "futures-sink",
  "futures-util",
  "itoa",
+ "log",
  "num-bigint 0.4.6",
  "percent-encoding",
  "pin-project-lite",
+ "rand 0.9.2",
  "rustls 0.23.32",
  "rustls-native-certs 0.8.1",
  "ryu",
