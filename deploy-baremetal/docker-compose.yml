@@ -89,6 +89,12 @@ services:
       # === Migration & Backfill ===
       VIDEOHASH_BACKFILL_TOKEN: ${VIDEOHASH_BACKFILL_TOKEN}
       YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY: ${YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY}
+
+      # === Kvrocks Configuration ===
+      KVROCKS_PASSWORD: ${KVROCKS_PASSWORD}
+      KVROCKS_CA_CERT: ${KVROCKS_CA_CERT}
+      KVROCKS_CLIENT_CERT: ${KVROCKS_CLIENT_CERT}
+      KVROCKS_CLIENT_KEY: ${KVROCKS_CLIENT_KEY}
     networks:
       - offchain-net
     depends_on:

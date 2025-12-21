@@ -315,6 +315,24 @@ async fn store_phash_to_bigquery(
         }
 
         log::debug!("Successfully inserted phash for video_id: {}", video_id);
+
+        // Also push to kvrocks
+        if let Some(ref kvrocks) = state.kvrocks_client {
+            let phash_data = serde_json::json!({
+                "video_id": video_id,
+                "phash": phash,
+                "num_frames": 10,
+                "hash_size": 8,
+                "duration": metadata.duration,
+                "width": metadata.width as i64,
+                "height": metadata.height as i64,
+                "fps": metadata.fps,
+                "created_at": chrono::Utc::now().to_rfc3339(),
+            });
+            if let Err(e) = kvrocks.store_videohash_phash(video_id, &phash_data).await {
+                log::error!("Error pushing phash to kvrocks: {}", e);
+            }
+        }
     }
 
     #[cfg(feature = "local-bin")]

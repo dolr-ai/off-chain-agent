@@ -25,7 +25,7 @@ use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::{metadata::MetadataValue, Request};
 use tracing::instrument;
 
-use crate::{app_state::AppState, AppError};
+use crate::{app_state::AppState, kvrocks::KvrocksClient, AppError};
 
 pub mod nsfw_detector {
     tonic::include_proto!("nsfw_detector");
@@ -230,10 +230,9 @@ pub async fn nsfw_job(
             capture_anyhow(e);
         })?;
 
-    // push nsfw info to bigquery table using google-cloud-bigquery
+    // push nsfw info to bigquery table and kvrocks
     let bigquery_client = state.bigquery_client.clone();
-
-    push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
+    push_nsfw_data_bigquery(bigquery_client, &state.kvrocks_client, nsfw_info.clone(), video_id.clone()).await?;
 
     // enqueue qstash job to detect nsfw v2
     let qstash_client = state.qstash_client.clone();
@@ -278,9 +277,10 @@ async fn move2_nsfw_buckets_if_required(
     Ok(())
 }
 
-#[instrument(skip(bigquery_client))]
+#[instrument(skip(bigquery_client, kvrocks_client))]
 pub async fn push_nsfw_data_bigquery(
     bigquery_client: google_cloud_bigquery::client::Client,
+    kvrocks_client: &Option<KvrocksClient>,
     nsfw_info: NSFWInfo,
     video_id: String,
 ) -> Result<(), Error> {
@@ -288,8 +288,8 @@ pub async fn push_nsfw_data_bigquery(
         video_id: video_id.clone(),
         gcs_video_id: format!("gs://yral-videos/{video_id}.mp4"),
         is_nsfw: nsfw_info.is_nsfw,
-        nsfw_ec: nsfw_info.nsfw_ec,
-        nsfw_gore: nsfw_info.nsfw_gore,
+        nsfw_ec: nsfw_info.nsfw_ec.clone(),
+        nsfw_gore: nsfw_info.nsfw_gore.clone(),
     };
 
     let row = Row {
@@ -311,6 +311,20 @@ pub async fn push_nsfw_data_bigquery(
             &request,
         )
         .await?;
+
+    // Also push to kvrocks
+    if let Some(ref kvrocks) = kvrocks_client {
+        let nsfw_data = serde_json::json!({
+            "video_id": video_id,
+            "gcs_video_id": format!("gs://yral-videos/{}.mp4", video_id),
+            "is_nsfw": nsfw_info.is_nsfw,
+            "nsfw_ec": nsfw_info.nsfw_ec,
+            "nsfw_gore": nsfw_info.nsfw_gore,
+        });
+        if let Err(e) = kvrocks.store_video_nsfw(&video_id, &nsfw_data).await {
+            log::error!("Error pushing NSFW data to kvrocks: {}", e);
+        }
+    }
 
     Ok(())
 }
@@ -362,9 +376,9 @@ pub async fn nsfw_job_v2(
         })?;
     let is_nsfw = nsfw_prob >= NSFW_THRESHOLD;
 
-    // push nsfw info to bigquery table using google-cloud-bigquery
+    // push nsfw info to bigquery table and kvrocks
     let bigquery_client = state.bigquery_client.clone();
-    push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
+    push_nsfw_data_bigquery_v2(bigquery_client, &state.kvrocks_client, nsfw_prob, is_nsfw, video_id.clone()).await?;
 
     move2_nsfw_buckets_if_required(payload.video_info, is_nsfw).await?;
 
@@ -447,15 +461,17 @@ struct VideoEmbeddingAgg {
     video_id: Option<String>,
 }
 
-#[instrument(skip(bigquery_client))]
+#[instrument(skip(bigquery_client, kvrocks_client))]
 pub async fn push_nsfw_data_bigquery_v2(
     bigquery_client: google_cloud_bigquery::client::Client,
+    kvrocks_client: &Option<KvrocksClient>,
     nsfw_prob: f32,
+    is_nsfw_from_threshold: bool,
     video_id: String,
 ) -> Result<(), Error> {
     // First query to get existing NSFW data
     let query = format!(
-        "SELECT video_id, gcs_video_id, is_nsfw, nsfw_ec, nsfw_gore 
+        "SELECT video_id, gcs_video_id, is_nsfw, nsfw_ec, nsfw_gore
          FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw`
          WHERE video_id = '{video_id}'"
     );
@@ -527,6 +543,18 @@ pub async fn push_nsfw_data_bigquery_v2(
             &request,
         )
         .await?;
+
+    // Also push aggregated NSFW data to kvrocks
+    if let Some(ref kvrocks) = kvrocks_client {
+        let nsfw_agg_data = serde_json::json!({
+            "video_id": video_id,
+            "probability": nsfw_prob,
+            "is_nsfw": is_nsfw_from_threshold,
+        });
+        if let Err(e) = kvrocks.store_video_nsfw_agg(&video_id, &nsfw_agg_data).await {
+            log::error!("Error pushing NSFW agg data to kvrocks: {}", e);
+        }
+    }
 
     // Insert into video_embeddings_agg table
     // read embedding from bigquery hot-or-not-feed-intelligence.yral_ds.video_embeddings table

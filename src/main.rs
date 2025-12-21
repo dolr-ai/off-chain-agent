@@ -39,6 +39,7 @@ mod consts;
 mod duplicate_video;
 mod error;
 mod events;
+pub mod kvrocks;
 pub mod leaderboard;
 pub mod metrics;
 mod middleware;

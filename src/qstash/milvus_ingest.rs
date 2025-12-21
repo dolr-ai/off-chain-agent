@@ -950,7 +950,7 @@ async fn store_dedup_status(
                 video_id,
                 chrono::Utc::now().timestamp_millis()
             )),
-            json: row_data,
+            json: row_data.clone(),
         }],
         ignore_unknown_values: Some(false),
         skip_invalid_rows: Some(false),
@@ -972,6 +972,13 @@ async fn store_dedup_status(
     if let Some(errors) = result.insert_errors {
         if !errors.is_empty() {
             anyhow::bail!("BigQuery insert errors: {:?}", errors);
+        }
+    }
+
+    // Also push to kvrocks
+    if let Some(ref kvrocks) = state.kvrocks_client {
+        if let Err(e) = kvrocks.store_video_dedup_status(video_id, &row_data).await {
+            log::error!("Error pushing dedup_status to kvrocks: {}", e);
         }
     }
 
@@ -1686,7 +1693,7 @@ async fn store_dedup_status_with_table(
                 video_id,
                 chrono::Utc::now().timestamp_millis()
             )),
-            json: row_data,
+            json: row_data.clone(),
         }],
         ignore_unknown_values: Some(false),
         skip_invalid_rows: Some(false),
@@ -1711,6 +1718,14 @@ async fn store_dedup_status_with_table(
     if let Some(errors) = result.insert_errors {
         if !errors.is_empty() {
             anyhow::bail!("BigQuery insert errors: {:?}", errors);
+        }
+    }
+
+    // Also push to kvrocks with table suffix
+    if let Some(ref kvrocks) = state.kvrocks_client {
+        let table_suffix = format!("HAM{}", hamming_distance_threshold);
+        if let Err(e) = kvrocks.store_video_dedup_status_with_table(&table_suffix, video_id, &row_data).await {
+            log::error!("Error pushing dedup_status to kvrocks ({}): {}", table_suffix, e);
         }
     }
 
