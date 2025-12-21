@@ -199,22 +199,26 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
     Ok(KvrocksClient { client })
 }
 
+fn normalize_pem(pem: String) -> Vec<u8> {
+    pem.replace("\\n", "\n").into_bytes()
+}
+
 fn get_ca_cert_pem() -> Result<Vec<u8>> {
-    Ok(env::var("KVROCKS_CA_CERT")
-        .context("KVROCKS_CA_CERT env var not set")?
-        .into_bytes())
+    Ok(normalize_pem(
+        env::var("KVROCKS_CA_CERT").context("KVROCKS_CA_CERT env var not set")?,
+    ))
 }
 
 fn get_client_cert_pem() -> Result<Vec<u8>> {
-    Ok(env::var("KVROCKS_CLIENT_CERT")
-        .context("KVROCKS_CLIENT_CERT env var not set")?
-        .into_bytes())
+    Ok(normalize_pem(
+        env::var("KVROCKS_CLIENT_CERT").context("KVROCKS_CLIENT_CERT env var not set")?,
+    ))
 }
 
 fn get_client_key_pem() -> Result<Vec<u8>> {
-    Ok(env::var("KVROCKS_CLIENT_KEY")
-        .context("KVROCKS_CLIENT_KEY env var not set")?
-        .into_bytes())
+    Ok(normalize_pem(
+        env::var("KVROCKS_CLIENT_KEY").context("KVROCKS_CLIENT_KEY env var not set")?,
+    ))
 }
 
 impl KvrocksClient {
