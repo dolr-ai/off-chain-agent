@@ -1,17 +1,14 @@
 use anyhow::{Context, Result};
-use redis::aio::MultiplexedConnection;
-use redis::{AsyncCommands, Client};
+use redis::cluster::ClusterClient;
+use redis::cluster_async::ClusterConnection;
+use redis::AsyncCommands;
 use rustls_pemfile;
 use serde::Serialize;
 use std::env;
 use std::io::BufReader;
 
-/// Kvrocks cluster configuration
-const KVROCKS_MASTER_1: &str = "136.243.150.223";
-const KVROCKS_MASTER_2: &str = "138.201.128.44";
 const KVROCKS_TLS_PORT: u16 = 6666;
 
-/// Key prefixes for different data types (matching BigQuery tables)
 pub mod keys {
     pub const TEST_EVENTS_ANALYTICS: &str = "test_events_analytics";
     pub const VIDEO_NSFW: &str = "video_nsfw";
@@ -26,22 +23,19 @@ pub mod keys {
     pub const UGC_CONTENT_APPROVAL: &str = "ugc_content_approval";
 }
 
-/// Kvrocks client wrapper for the cluster
 #[derive(Clone)]
 pub struct KvrocksClient {
-    client: Client,
+    client: ClusterClient,
 }
 
 impl KvrocksClient {
-    /// Get a multiplexed connection for async operations
-    pub async fn get_connection(&self) -> Result<MultiplexedConnection> {
+    pub async fn get_connection(&self) -> Result<ClusterConnection> {
         self.client
-            .get_multiplexed_async_connection()
+            .get_async_connection()
             .await
-            .context("Failed to get kvrocks connection")
+            .context("Failed to get kvrocks cluster connection")
     }
 
-    /// Store a JSON value with a key
     pub async fn set_json<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
         let mut conn = self.get_connection().await?;
         let json_str = serde_json::to_string(value)?;
@@ -49,7 +43,6 @@ impl KvrocksClient {
         Ok(())
     }
 
-    /// Store a JSON value with a key and expiration (in seconds)
     pub async fn set_json_ex<T: Serialize>(
         &self,
         key: &str,
@@ -62,7 +55,6 @@ impl KvrocksClient {
         Ok(())
     }
 
-    /// Store data in a hash
     pub async fn hset<T: Serialize>(&self, key: &str, field: &str, value: &T) -> Result<()> {
         let mut conn = self.get_connection().await?;
         let json_str = serde_json::to_string(value)?;
@@ -70,7 +62,6 @@ impl KvrocksClient {
         Ok(())
     }
 
-    /// Store multiple fields in a hash
     pub async fn hset_multiple<T: Serialize>(
         &self,
         key: &str,
@@ -92,7 +83,6 @@ impl KvrocksClient {
         Ok(())
     }
 
-    /// Add to a sorted set (for time-series data)
     pub async fn zadd<T: Serialize>(&self, key: &str, score: f64, value: &T) -> Result<()> {
         let mut conn = self.get_connection().await?;
         let json_str = serde_json::to_string(value)?;
@@ -100,7 +90,6 @@ impl KvrocksClient {
         Ok(())
     }
 
-    /// Push to a list (for event streams)
     pub async fn lpush<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
         let mut conn = self.get_connection().await?;
         let json_str = serde_json::to_string(value)?;
@@ -108,21 +97,18 @@ impl KvrocksClient {
         Ok(())
     }
 
-    /// Delete a key
     pub async fn del(&self, key: &str) -> Result<()> {
         let mut conn = self.get_connection().await?;
         conn.del::<_, ()>(key).await?;
         Ok(())
     }
 
-    /// Check if a key exists
     pub async fn exists(&self, key: &str) -> Result<bool> {
         let mut conn = self.get_connection().await?;
         let exists: bool = conn.exists(key).await?;
         Ok(exists)
     }
 
-    /// Get a JSON value
     pub async fn get_json<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
         let mut conn = self.get_connection().await?;
         let value: Option<String> = conn.get(key).await?;
@@ -136,107 +122,108 @@ impl KvrocksClient {
     }
 }
 
-/// Initialize the kvrocks client with TLS
 pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
     let password =
         env::var("KVROCKS_PASSWORD").context("KVROCKS_PASSWORD environment variable not set")?;
+    let hosts_str =
+        env::var("KVROCKS_HOSTS").context("KVROCKS_HOSTS environment variable not set")?;
 
-    // Build Redis URL with TLS
-    let redis_url = format!(
-        "rediss://default:{}@{}:{}",
-        password, KVROCKS_MASTER_1, KVROCKS_TLS_PORT
-    );
+    let hosts: Vec<&str> = hosts_str.split(',').map(|s| s.trim()).collect();
+    if hosts.is_empty() {
+        anyhow::bail!("KVROCKS_HOSTS must contain at least one host");
+    }
 
-    // Create client with custom TLS config
-    let client = Client::build_with_tls(
-        redis_url,
-        redis::TlsCertificates {
-            client_tls: Some(redis::ClientTlsConfig {
-                client_cert: rustls_pemfile::certs(&mut BufReader::new(
-                    &get_client_cert_pem()?[..],
-                ))
+    let node_urls: Vec<String> = hosts
+        .iter()
+        .map(|host| {
+            format!(
+                "rediss://default:{}@{}:{}",
+                password, host, KVROCKS_TLS_PORT
+            )
+        })
+        .collect();
+
+    let tls_certs = redis::TlsCertificates {
+        client_tls: Some(redis::ClientTlsConfig {
+            client_cert: rustls_pemfile::certs(&mut BufReader::new(
+                &get_client_cert_pem()?[..],
+            ))
+            .collect::<Result<Vec<_>, _>>()
+            .context("Failed to parse client cert")?
+            .into_iter()
+            .next()
+            .context("No client certificate found")?
+            .to_vec(),
+            client_key: rustls_pemfile::private_key(&mut BufReader::new(
+                &get_client_key_pem()?[..],
+            ))
+            .context("Failed to parse client key")?
+            .context("No private key found")?
+            .secret_der()
+            .to_vec(),
+        }),
+        root_cert: Some(
+            rustls_pemfile::certs(&mut BufReader::new(&get_ca_cert_pem()?[..]))
                 .collect::<Result<Vec<_>, _>>()
-                .context("Failed to parse client cert")?
+                .context("Failed to parse CA cert")?
                 .into_iter()
                 .next()
-                .context("No client certificate found")?
+                .context("No CA certificate found")?
                 .to_vec(),
-                client_key: rustls_pemfile::private_key(&mut BufReader::new(
-                    &get_client_key_pem()?[..],
-                ))
-                .context("Failed to parse client key")?
-                .context("No private key found")?
-                .secret_der()
-                .to_vec(),
-            }),
-            root_cert: Some(
-                rustls_pemfile::certs(&mut BufReader::new(&get_ca_cert_pem()?[..]))
-                    .collect::<Result<Vec<_>, _>>()
-                    .context("Failed to parse CA cert")?
-                    .into_iter()
-                    .next()
-                    .context("No CA certificate found")?
-                    .to_vec(),
-            ),
-        },
-    )
-    .context("Failed to build kvrocks client with TLS")?;
+        ),
+    };
 
-    // Test connection
+    let client = ClusterClient::builder(node_urls)
+        .tls(tls_certs)
+        .build()
+        .context("Failed to build kvrocks cluster client")?;
+
     let mut conn = client
-        .get_multiplexed_async_connection()
+        .get_async_connection()
         .await
-        .context("Failed to connect to kvrocks")?;
+        .context("Failed to connect to kvrocks cluster")?;
 
-    // Ping to verify connection
     let pong: String = redis::cmd("PING")
         .query_async(&mut conn)
         .await
-        .context("Failed to ping kvrocks")?;
+        .context("Failed to ping kvrocks cluster")?;
 
     if pong != "PONG" {
         anyhow::bail!("Unexpected ping response from kvrocks: {}", pong);
     }
 
     log::info!(
-        "Successfully connected to kvrocks at {}:{}",
-        KVROCKS_MASTER_1,
-        KVROCKS_TLS_PORT
+        "Successfully connected to kvrocks cluster with {} seed nodes",
+        hosts.len()
     );
 
     Ok(KvrocksClient { client })
 }
 
-/// Helper to get CA cert PEM bytes
 fn get_ca_cert_pem() -> Result<Vec<u8>> {
     Ok(env::var("KVROCKS_CA_CERT")
         .context("KVROCKS_CA_CERT env var not set")?
         .into_bytes())
 }
 
-/// Helper to get client cert PEM bytes
 fn get_client_cert_pem() -> Result<Vec<u8>> {
     Ok(env::var("KVROCKS_CLIENT_CERT")
         .context("KVROCKS_CLIENT_CERT env var not set")?
         .into_bytes())
 }
 
-/// Helper to get client key PEM bytes
 fn get_client_key_pem() -> Result<Vec<u8>> {
     Ok(env::var("KVROCKS_CLIENT_KEY")
         .context("KVROCKS_CLIENT_KEY env var not set")?
         .into_bytes())
 }
 
-/// Helper functions for storing data to kvrocks (matching BigQuery tables)
 impl KvrocksClient {
-    /// Store event analytics data
     pub async fn store_event(&self, event_id: &str, event_data: &serde_json::Value) -> Result<()> {
         let key = format!("{}:{}", keys::TEST_EVENTS_ANALYTICS, event_id);
         self.set_json(&key, event_data).await
     }
 
-    /// Store NSFW data for a video
     pub async fn store_video_nsfw(
         &self,
         video_id: &str,
@@ -246,7 +233,6 @@ impl KvrocksClient {
         self.set_json(&key, nsfw_data).await
     }
 
-    /// Store aggregated NSFW data
     pub async fn store_video_nsfw_agg(
         &self,
         video_id: &str,
@@ -256,7 +242,6 @@ impl KvrocksClient {
         self.set_json(&key, data).await
     }
 
-    /// Store video embeddings aggregated data
     pub async fn store_video_embeddings_agg(
         &self,
         video_id: &str,
@@ -266,7 +251,6 @@ impl KvrocksClient {
         self.set_json(&key, data).await
     }
 
-    /// Store phash data for a video
     pub async fn store_videohash_phash(
         &self,
         video_id: &str,
@@ -276,7 +260,6 @@ impl KvrocksClient {
         self.set_json(&key, phash_data).await
     }
 
-    /// Store original videohash
     pub async fn store_videohash_original(
         &self,
         video_id: &str,
@@ -286,13 +269,11 @@ impl KvrocksClient {
         self.set_json(&key, hash_data).await
     }
 
-    /// Store unique video record
     pub async fn store_video_unique(&self, video_id: &str, data: &serde_json::Value) -> Result<()> {
         let key = format!("{}:{}", keys::VIDEO_UNIQUE, video_id);
         self.set_json(&key, data).await
     }
 
-    /// Store unique video record v2
     pub async fn store_video_unique_v2(
         &self,
         video_id: &str,
@@ -302,7 +283,6 @@ impl KvrocksClient {
         self.set_json(&key, data).await
     }
 
-    /// Store deleted video record
     pub async fn store_video_deleted(
         &self,
         video_id: &str,
@@ -312,7 +292,6 @@ impl KvrocksClient {
         self.set_json(&key, delete_data).await
     }
 
-    /// Store dedup status for a video
     pub async fn store_video_dedup_status(
         &self,
         video_id: &str,
@@ -322,7 +301,6 @@ impl KvrocksClient {
         self.set_json(&key, status_data).await
     }
 
-    /// Store dedup status with custom table suffix (for HAM thresholds)
     pub async fn store_video_dedup_status_with_table(
         &self,
         table_suffix: &str,
@@ -333,7 +311,6 @@ impl KvrocksClient {
         self.set_json(&key, status_data).await
     }
 
-    /// Store UGC content approval record
     pub async fn store_ugc_content_approval(
         &self,
         video_id: &str,
@@ -343,15 +320,12 @@ impl KvrocksClient {
         self.set_json(&key, approval_data).await
     }
 
-    /// Update UGC content approval status
     pub async fn update_ugc_approval_status(
         &self,
         video_id: &str,
         is_approved: bool,
     ) -> Result<()> {
         let key = format!("{}:{}", keys::UGC_CONTENT_APPROVAL, video_id);
-
-        // Get existing data, update is_approved field
         if let Some(mut data) = self.get_json::<serde_json::Value>(&key).await? {
             if let Some(obj) = data.as_object_mut() {
                 obj.insert(
@@ -364,19 +338,16 @@ impl KvrocksClient {
         Ok(())
     }
 
-    /// Delete UGC content approval record
     pub async fn delete_ugc_content_approval(&self, video_id: &str) -> Result<()> {
         let key = format!("{}:{}", keys::UGC_CONTENT_APPROVAL, video_id);
         self.del(&key).await
     }
 
-    /// Delete video unique record
     pub async fn delete_video_unique(&self, video_id: &str) -> Result<()> {
         let key = format!("{}:{}", keys::VIDEO_UNIQUE, video_id);
         self.del(&key).await
     }
 
-    /// Delete video unique v2 record
     pub async fn delete_video_unique_v2(&self, video_id: &str) -> Result<()> {
         let key = format!("{}:{}", keys::VIDEO_UNIQUE_V2, video_id);
         self.del(&key).await
@@ -389,7 +360,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_kvrocks_connection() {
-        // Skip if env vars not set
         if env::var("KVROCKS_PASSWORD").is_err() {
             println!("Skipping test: KVROCKS_PASSWORD not set");
             return;
@@ -399,7 +369,6 @@ mod tests {
             .await
             .expect("Failed to init kvrocks client");
 
-        // Test set and get
         let test_key = "test:connection_check";
         let test_data =
             serde_json::json!({"test": "value", "timestamp": chrono::Utc::now().to_rfc3339()});
@@ -415,12 +384,11 @@ mod tests {
             .expect("Failed to get test key");
         assert!(result.is_some(), "Test key should exist");
 
-        // Cleanup
         client
             .del(test_key)
             .await
             .expect("Failed to delete test key");
 
-        println!("Kvrocks connection test passed!");
+        println!("Kvrocks cluster connection test passed!");
     }
 }

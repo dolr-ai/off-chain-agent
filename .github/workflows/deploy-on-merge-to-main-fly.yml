@@ -10,6 +10,7 @@ jobs:
     uses: ./.github/workflows/build-check.yml
     with:
       publish-artifact: true
+      KVROCKS_HOSTS: ${{ vars.KVROCKS_HOSTS }}
     secrets:
       KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
       KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
@@ -81,6 +82,7 @@ jobs:
           flyctl secrets set "MILVUS_URL=$MILVUS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set REPLICATE_WEBHOOK_SIGNING_SECRET="$REPLICATE_WEBHOOK_SIGNING_SECRET" --app "icp-off-chain-agent" --stage
           flyctl secrets set KVROCKS_PASSWORD="$KVROCKS_PASSWORD" --app "icp-off-chain-agent" --stage
+          flyctl secrets set KVROCKS_HOSTS="$KVROCKS_HOSTS" --app "icp-off-chain-agent" --stage
           printf '%s' "$KVROCKS_CA_CERT" | flyctl secrets set KVROCKS_CA_CERT=- --app "icp-off-chain-agent" --stage
           printf '%s' "$KVROCKS_CLIENT_CERT" | flyctl secrets set KVROCKS_CLIENT_CERT=- --app "icp-off-chain-agent" --stage
           printf '%s' "$KVROCKS_CLIENT_KEY" | flyctl secrets set KVROCKS_CLIENT_KEY=- --app "icp-off-chain-agent" --stage
@@ -126,6 +128,7 @@ jobs:
           MILVUS_URL: ${{ secrets.MILVUS_URL }}
           REPLICATE_WEBHOOK_SIGNING_SECRET: ${{ secrets.REPLICATE_WEBHOOK_SIGNING_SECRET }}
           KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
+          KVROCKS_HOSTS: ${{ vars.KVROCKS_HOSTS }}
           KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
           KVROCKS_CLIENT_CERT: ${{ secrets.KVROCKS_CLIENT_CERT }}
           KVROCKS_CLIENT_KEY: ${{ secrets.KVROCKS_CLIENT_KEY }}

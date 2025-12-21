@@ -28,6 +28,7 @@ pub struct VideoHashDuplication;
 
 impl VideoHashDuplication {
     #[allow(dead_code)]
+    #[allow(clippy::too_many_arguments)]
     pub async fn process_video_deduplication<'a>(
         &self,
         agent: &ic_agent::Agent,
