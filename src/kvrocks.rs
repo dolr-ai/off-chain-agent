@@ -137,12 +137,7 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
 
     let node_urls: Vec<String> = hosts
         .iter()
-        .map(|host| {
-            format!(
-                "rediss://default:{}@{}:{}",
-                password, host, KVROCKS_TLS_PORT
-            )
-        })
+        .map(|host| format!("rediss://:{}@{}:{}", password, host, KVROCKS_TLS_PORT))
         .collect();
 
     let tls_certs = redis::TlsCertificates {
