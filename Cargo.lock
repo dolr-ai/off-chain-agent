@@ -6679,6 +6679,7 @@ dependencies = [
  "tracing-futures",
  "tracing-log",
  "tracing-subscriber",
+ "urlencoding",
  "utoipa",
  "utoipa-axum",
  "utoipa-swagger-ui",
