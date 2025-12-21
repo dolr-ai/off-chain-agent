@@ -159,12 +159,15 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
                 .context("Failed to parse client cert")?
                 .into_iter()
                 .next()
-                .context("No client certificate found")?,
+                .context("No client certificate found")?
+                .to_vec(),
                 client_key: rustls_pemfile::private_key(&mut BufReader::new(
                     &get_client_key_pem()?[..],
                 ))
                 .context("Failed to parse client key")?
-                .context("No private key found")?,
+                .context("No private key found")?
+                .secret_der()
+                .to_vec(),
             }),
             root_cert: Some(
                 rustls_pemfile::certs(&mut BufReader::new(&get_ca_cert_pem()?[..]))
@@ -172,7 +175,8 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
                     .context("Failed to parse CA cert")?
                     .into_iter()
                     .next()
-                    .context("No CA certificate found")?,
+                    .context("No CA certificate found")?
+                    .to_vec(),
             ),
         },
     )
