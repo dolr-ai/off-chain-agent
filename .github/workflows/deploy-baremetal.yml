@@ -20,6 +20,11 @@ jobs:
     uses: ./.github/workflows/build-check.yml
     with:
       publish-artifact: true
+    secrets:
+      KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
+      KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
+      KVROCKS_CLIENT_CERT: ${{ secrets.KVROCKS_CLIENT_CERT }}
+      KVROCKS_CLIENT_KEY: ${{ secrets.KVROCKS_CLIENT_KEY }}
 
   build-and-push:
     name: Build and Push Docker Images

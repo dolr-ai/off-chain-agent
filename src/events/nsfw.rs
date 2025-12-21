@@ -232,7 +232,13 @@ pub async fn nsfw_job(
 
     // push nsfw info to bigquery table and kvrocks
     let bigquery_client = state.bigquery_client.clone();
-    push_nsfw_data_bigquery(bigquery_client, &state.kvrocks_client, nsfw_info.clone(), video_id.clone()).await?;
+    push_nsfw_data_bigquery(
+        bigquery_client,
+        &state.kvrocks_client,
+        nsfw_info.clone(),
+        video_id.clone(),
+    )
+    .await?;
 
     // enqueue qstash job to detect nsfw v2
     let qstash_client = state.qstash_client.clone();
@@ -378,7 +384,14 @@ pub async fn nsfw_job_v2(
 
     // push nsfw info to bigquery table and kvrocks
     let bigquery_client = state.bigquery_client.clone();
-    push_nsfw_data_bigquery_v2(bigquery_client, &state.kvrocks_client, nsfw_prob, is_nsfw, video_id.clone()).await?;
+    push_nsfw_data_bigquery_v2(
+        bigquery_client,
+        &state.kvrocks_client,
+        nsfw_prob,
+        is_nsfw,
+        video_id.clone(),
+    )
+    .await?;
 
     move2_nsfw_buckets_if_required(payload.video_info, is_nsfw).await?;
 
@@ -551,7 +564,10 @@ pub async fn push_nsfw_data_bigquery_v2(
             "probability": nsfw_prob,
             "is_nsfw": is_nsfw_from_threshold,
         });
-        if let Err(e) = kvrocks.store_video_nsfw_agg(&video_id, &nsfw_agg_data).await {
+        if let Err(e) = kvrocks
+            .store_video_nsfw_agg(&video_id, &nsfw_agg_data)
+            .await
+        {
             log::error!("Error pushing NSFW agg data to kvrocks: {}", e);
         }
     }

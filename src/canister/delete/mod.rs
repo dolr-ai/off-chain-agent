@@ -84,7 +84,12 @@ pub async fn delete_canister_data(
     // Step 3: Bulk insert into video_deleted table if posts exist
     //       : Handle duplicate posts cleanup (spawn as background task)
     if !posts.is_empty() {
-        bulk_insert_video_delete_rows_v2(&state.bigquery_client, &state.kvrocks_client, posts.clone()).await?;
+        bulk_insert_video_delete_rows_v2(
+            &state.bigquery_client,
+            &state.kvrocks_client,
+            posts.clone(),
+        )
+        .await?;
         let bigquery_client = state.bigquery_client.clone();
         let video_ids: Vec<String> = posts.iter().map(|p| p.video_id.clone()).collect();
         let agent = agent.clone();

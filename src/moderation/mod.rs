@@ -183,7 +183,8 @@ pub async fn approve_video(
     // First fetch the video info before updating
     let video_info = fetch_video_info(&state.bigquery_client, &video_id).await?;
 
-    let updated = update_approval_status(&state.bigquery_client, &state.kvrocks_client, &video_id).await?;
+    let updated =
+        update_approval_status(&state.bigquery_client, &state.kvrocks_client, &video_id).await?;
     if updated {
         // Send notification to the video owner via event pipeline
         if let Some(info) = video_info {
