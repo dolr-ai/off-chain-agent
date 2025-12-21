@@ -125,20 +125,31 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
         .install_default()
         .ok();
 
-    let password =
-        env::var("KVROCKS_PASSWORD").context("KVROCKS_PASSWORD environment variable not set")?;
-    let hosts_str =
-        env::var("KVROCKS_HOSTS").context("KVROCKS_HOSTS environment variable not set")?;
+    let password = env::var("KVROCKS_PASSWORD")
+        .context("KVROCKS_PASSWORD environment variable not set")?
+        .trim()
+        .to_string();
+    let hosts_str = env::var("KVROCKS_HOSTS")
+        .context("KVROCKS_HOSTS environment variable not set")?
+        .trim()
+        .to_string();
 
-    let hosts: Vec<&str> = hosts_str.split(',').map(|s| s.trim()).collect();
+    let hosts: Vec<&str> = hosts_str
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     if hosts.is_empty() {
-        anyhow::bail!("KVROCKS_HOSTS must contain at least one host");
+        anyhow::bail!("KVROCKS_HOSTS must contain at least one host, got: '{}'", hosts_str);
     }
 
+    let encoded_password = urlencoding::encode(&password);
     let node_urls: Vec<String> = hosts
         .iter()
-        .map(|host| format!("rediss://:{}@{}:{}", password, host, KVROCKS_TLS_PORT))
+        .map(|host| format!("rediss://:{}@{}:{}", encoded_password, host, KVROCKS_TLS_PORT))
         .collect();
+
+    log::info!("Connecting to kvrocks cluster with {} nodes", node_urls.len());
 
     let tls_certs = redis::TlsCertificates {
         client_tls: Some(redis::ClientTlsConfig {
