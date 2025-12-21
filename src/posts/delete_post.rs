@@ -548,8 +548,15 @@ pub async fn bulk_insert_video_delete_rows(
                     "gcs_video_id": format!("gs://yral-videos/{}.mp4", post.video_id),
                     "deleted_at": chrono::Utc::now().to_rfc3339(),
                 });
-                if let Err(e) = kvrocks.store_video_deleted(&post.video_id, &delete_data).await {
-                    log::error!("Error pushing video delete data to kvrocks for {}: {}", post.video_id, e);
+                if let Err(e) = kvrocks
+                    .store_video_deleted(&post.video_id, &delete_data)
+                    .await
+                {
+                    log::error!(
+                        "Error pushing video delete data to kvrocks for {}: {}",
+                        post.video_id,
+                        e
+                    );
                 }
             }
         }
@@ -615,8 +622,15 @@ pub async fn bulk_insert_video_delete_rows_v2(
                     "gcs_video_id": format!("gs://yral-videos/{}.mp4", post.video_id),
                     "deleted_at": chrono::Utc::now().to_rfc3339(),
                 });
-                if let Err(e) = kvrocks.store_video_deleted(&post.video_id, &delete_data).await {
-                    log::error!("Error pushing video delete data to kvrocks for {}: {}", post.video_id, e);
+                if let Err(e) = kvrocks
+                    .store_video_deleted(&post.video_id, &delete_data)
+                    .await
+                {
+                    log::error!(
+                        "Error pushing video delete data to kvrocks for {}: {}",
+                        post.video_id,
+                        e
+                    );
                 }
             }
         }
