@@ -95,6 +95,8 @@ redis = { version = "0.29.1", features = [
     "tokio-rustls-comp",
     "tls-rustls-webpki-roots",
     "json",
+    "cluster",
+    "cluster-async",
 ] }
 bb8 = "0.9.0"
 bb8-redis = "0.21.0"
