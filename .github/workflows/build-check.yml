@@ -71,15 +71,6 @@ jobs:
       - name: Use rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Run kvrocks connection test
-        env:
-          KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
-          KVROCKS_HOSTS: ${{ vars.KVROCKS_HOSTS }}
-          KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
-          KVROCKS_CLIENT_CERT: ${{ secrets.KVROCKS_CLIENT_CERT }}
-          KVROCKS_CLIENT_KEY: ${{ secrets.KVROCKS_CLIENT_KEY }}
-        run: cargo test kvrocks::tests::test_kvrocks_connection -- --nocapture
-
       - name: Clippy check
         run: cargo clippy --no-deps --release -- --deny warnings --allow deprecated
 

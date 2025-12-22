@@ -199,7 +199,7 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
 }
 
 fn normalize_pem(pem: String) -> Vec<u8> {
-    let mut normalized = pem
+    let normalized = pem
         .replace("\\n", "\n")
         .replace("\\r\\n", "\n")
         .replace("\\r", "")
@@ -207,23 +207,11 @@ fn normalize_pem(pem: String) -> Vec<u8> {
         .replace("\r", "")
         .trim()
         .to_string();
-
-    // Handle case where PEM is all on one line (newlines were stripped)
-    if !normalized.contains('\n') && normalized.contains("-----") {
-        // Split at the markers and reconstruct with newlines
-        normalized = normalized
-            .replace("-----BEGIN ", "\n-----BEGIN ")
-            .replace("----- ", "-----\n")
-            .replace(" -----END", "\n-----END")
-            .replace("-----END ", "-----END ")
-            .trim()
-            .to_string();
+    if normalized.ends_with('\n') {
+        normalized.into_bytes()
+    } else {
+        format!("{}\n", normalized).into_bytes()
     }
-
-    if !normalized.ends_with('\n') {
-        normalized.push('\n');
-    }
-    normalized.into_bytes()
 }
 
 fn get_ca_cert_pem() -> Result<Vec<u8>> {
