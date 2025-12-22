@@ -199,10 +199,18 @@ pub async fn init_kvrocks_client() -> Result<KvrocksClient> {
 }
 
 fn normalize_pem(pem: String) -> Vec<u8> {
-    pem.replace("\\n", "\n")
+    let mut normalized = pem
+        .replace("\\n", "\n")
+        .replace("\\r\\n", "\n")
         .replace("\\r", "")
+        .replace("\r\n", "\n")
         .replace("\r", "")
-        .into_bytes()
+        .trim()
+        .to_string();
+    if !normalized.ends_with('\n') {
+        normalized.push('\n');
+    }
+    normalized.into_bytes()
 }
 
 fn get_ca_cert_pem() -> Result<Vec<u8>> {
