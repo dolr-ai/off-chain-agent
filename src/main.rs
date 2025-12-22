@@ -133,6 +133,7 @@ async fn main_impl() -> Result<()> {
 
     let http = Router::new()
         .route("/healthz", get(health_handler))
+        .route("/healthz/kvrocks", get(kvrocks_health_handler))
         .route("/report-approved", post(report_approved_handler))
         .route(
             "/enqueue_storj_backfill_item",
@@ -248,4 +249,33 @@ fn main() {
 #[instrument]
 async fn health_handler() -> (StatusCode, &'static str) {
     (StatusCode::OK, "OK")
+}
+
+async fn kvrocks_health_handler(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> (StatusCode, String) {
+    match &state.kvrocks_client {
+        Some(client) => {
+            let test_key = "health:check";
+            let test_value = serde_json::json!({"timestamp": chrono::Utc::now().to_rfc3339()});
+
+            match client.set_json(test_key, &test_value).await {
+                Ok(_) => match client.del(test_key).await {
+                    Ok(_) => (StatusCode::OK, "kvrocks: OK".to_string()),
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("kvrocks delete failed: {}", e),
+                    ),
+                },
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("kvrocks set failed: {}", e),
+                ),
+            }
+        }
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "kvrocks client not initialized".to_string(),
+        ),
+    }
 }
