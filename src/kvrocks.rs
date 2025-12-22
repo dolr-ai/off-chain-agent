@@ -207,6 +207,19 @@ fn normalize_pem(pem: String) -> Vec<u8> {
         .replace("\r", "")
         .trim()
         .to_string();
+
+    // Handle case where PEM is all on one line (newlines were stripped)
+    if !normalized.contains('\n') && normalized.contains("-----") {
+        // Split at the markers and reconstruct with newlines
+        normalized = normalized
+            .replace("-----BEGIN ", "\n-----BEGIN ")
+            .replace("----- ", "-----\n")
+            .replace(" -----END", "\n-----END")
+            .replace("-----END ", "-----END ")
+            .trim()
+            .to_string();
+    }
+
     if !normalized.ends_with('\n') {
         normalized.push('\n');
     }
