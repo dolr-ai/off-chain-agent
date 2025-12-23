@@ -68,21 +68,9 @@ impl Event {
                 ]
             });
 
-            // Push to BigQuery
+            // Push to BigQuery (events stay in analytical DB only, not kvrocks)
             if let Err(e) = stream_to_bigquery(&app_state, data).await {
                 error!("Error sending data to BigQuery: {}", e);
-            }
-
-            #[cfg(not(feature = "local-bin"))]
-            if let Some(ref kvrocks) = app_state.kvrocks_client {
-                let kvrocks_data = serde_json::json!({
-                    "event": event_str,
-                    "params": params_str,
-                    "timestamp": timestamp,
-                });
-                if let Err(e) = kvrocks.store_event(&event_id, &kvrocks_data).await {
-                    error!("Error sending data to kvrocks: {}", e);
-                }
             }
         });
     }

@@ -8,17 +8,16 @@ use std::env;
 const KVROCKS_TLS_PORT: u16 = 6666;
 
 pub mod keys {
-    pub const TEST_EVENTS_ANALYTICS: &str = "test_events_analytics";
-    pub const VIDEO_NSFW: &str = "video_nsfw";
-    pub const VIDEO_NSFW_AGG: &str = "video_nsfw_agg";
-    pub const VIDEO_EMBEDDINGS_AGG: &str = "video_embeddings_agg";
-    pub const VIDEOHASH_PHASH: &str = "videohash_phash";
-    pub const VIDEOHASH_ORIGINAL: &str = "videohash_original";
-    pub const VIDEO_UNIQUE: &str = "video_unique";
-    pub const VIDEO_UNIQUE_V2: &str = "video_unique_v2";
-    pub const VIDEO_DELETED: &str = "video_deleted";
-    pub const VIDEO_DEDUP_STATUS: &str = "video_dedup_status";
-    pub const UGC_CONTENT_APPROVAL: &str = "ugc_content_approval";
+    pub const VIDEO_NSFW: &str = "offchain:video_nsfw";
+    pub const VIDEO_DELETED: &str = "offchain:video_deleted";
+    pub const VIDEO_UNIQUE_V2: &str = "offchain:video_unique_v2";
+    pub const USER_UPLOADED_CONTENT_APPROVAL: &str = "offchain:user_uploaded_content_approval";
+    pub const BOT_UPLOADED_AI_CONTENT: &str = "offchain:bot_uploaded_ai_content";
+    pub const VIDEO_DEDUP_STATUS: &str = "offchain:video_dedup_status";
+    pub const VIDEOHASH_PHASH: &str = "offchain:videohash_phash";
+    pub const VIDEOHASH_ORIGINAL: &str = "offchain:videohash_original";
+    pub const VIDEO_EMBEDDINGS: &str = "offchain:video_embeddings";
+    pub const VIDEO_METADATA: &str = "offchain:metadata:video_details";
 }
 
 #[derive(Clone)]
@@ -233,11 +232,6 @@ fn get_client_key_pem() -> Result<Vec<u8>> {
 }
 
 impl KvrocksClient {
-    pub async fn store_event(&self, event_id: &str, event_data: &serde_json::Value) -> Result<()> {
-        let key = format!("{}:{}", keys::TEST_EVENTS_ANALYTICS, event_id);
-        self.set_json(&key, event_data).await
-    }
-
     pub async fn store_video_nsfw(
         &self,
         video_id: &str,
@@ -245,24 +239,6 @@ impl KvrocksClient {
     ) -> Result<()> {
         let key = format!("{}:{}", keys::VIDEO_NSFW, video_id);
         self.set_json(&key, nsfw_data).await
-    }
-
-    pub async fn store_video_nsfw_agg(
-        &self,
-        video_id: &str,
-        data: &serde_json::Value,
-    ) -> Result<()> {
-        let key = format!("{}:{}", keys::VIDEO_NSFW_AGG, video_id);
-        self.set_json(&key, data).await
-    }
-
-    pub async fn store_video_embeddings_agg(
-        &self,
-        video_id: &str,
-        data: &serde_json::Value,
-    ) -> Result<()> {
-        let key = format!("{}:{}", keys::VIDEO_EMBEDDINGS_AGG, video_id);
-        self.set_json(&key, data).await
     }
 
     pub async fn store_videohash_phash(
@@ -281,11 +257,6 @@ impl KvrocksClient {
     ) -> Result<()> {
         let key = format!("{}:{}", keys::VIDEOHASH_ORIGINAL, video_id);
         self.set_json(&key, hash_data).await
-    }
-
-    pub async fn store_video_unique(&self, video_id: &str, data: &serde_json::Value) -> Result<()> {
-        let key = format!("{}:{}", keys::VIDEO_UNIQUE, video_id);
-        self.set_json(&key, data).await
     }
 
     pub async fn store_video_unique_v2(
@@ -325,21 +296,30 @@ impl KvrocksClient {
         self.set_json(&key, status_data).await
     }
 
-    pub async fn store_ugc_content_approval(
+    pub async fn store_video_embeddings(
+        &self,
+        video_id: &str,
+        embeddings_data: &serde_json::Value,
+    ) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEO_EMBEDDINGS, video_id);
+        self.set_json(&key, embeddings_data).await
+    }
+
+    pub async fn store_user_uploaded_content_approval(
         &self,
         video_id: &str,
         approval_data: &serde_json::Value,
     ) -> Result<()> {
-        let key = format!("{}:{}", keys::UGC_CONTENT_APPROVAL, video_id);
+        let key = format!("{}:{}", keys::USER_UPLOADED_CONTENT_APPROVAL, video_id);
         self.set_json(&key, approval_data).await
     }
 
-    pub async fn update_ugc_approval_status(
+    pub async fn update_user_uploaded_content_approval_status(
         &self,
         video_id: &str,
         is_approved: bool,
     ) -> Result<()> {
-        let key = format!("{}:{}", keys::UGC_CONTENT_APPROVAL, video_id);
+        let key = format!("{}:{}", keys::USER_UPLOADED_CONTENT_APPROVAL, video_id);
         if let Some(mut data) = self.get_json::<serde_json::Value>(&key).await? {
             if let Some(obj) = data.as_object_mut() {
                 obj.insert(
@@ -352,14 +332,38 @@ impl KvrocksClient {
         Ok(())
     }
 
-    pub async fn delete_ugc_content_approval(&self, video_id: &str) -> Result<()> {
-        let key = format!("{}:{}", keys::UGC_CONTENT_APPROVAL, video_id);
+    pub async fn delete_user_uploaded_content_approval(&self, video_id: &str) -> Result<()> {
+        let key = format!("{}:{}", keys::USER_UPLOADED_CONTENT_APPROVAL, video_id);
         self.del(&key).await
     }
 
-    pub async fn delete_video_unique(&self, video_id: &str) -> Result<()> {
-        let key = format!("{}:{}", keys::VIDEO_UNIQUE, video_id);
-        self.del(&key).await
+    pub async fn store_bot_uploaded_ai_content(
+        &self,
+        video_id: &str,
+        data: &serde_json::Value,
+    ) -> Result<()> {
+        let key = format!("{}:{}", keys::BOT_UPLOADED_AI_CONTENT, video_id);
+        self.set_json(&key, data).await
+    }
+
+    pub async fn store_video_metadata(
+        &self,
+        video_id: &str,
+        post_id: &str,
+        publisher_user_id: &str,
+    ) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEO_METADATA, video_id);
+        let metadata = serde_json::json!({
+            "video_id": video_id,
+            "post_id": post_id,
+            "publisher_user_id": publisher_user_id,
+        });
+        self.set_json(&key, &metadata).await
+    }
+
+    pub async fn get_video_metadata(&self, video_id: &str) -> Result<Option<serde_json::Value>> {
+        let key = format!("{}:{}", keys::VIDEO_METADATA, video_id);
+        self.get_json(&key).await
     }
 
     pub async fn delete_video_unique_v2(&self, video_id: &str) -> Result<()> {
