@@ -53,7 +53,6 @@ impl Event {
 
         tokio::spawn(async move {
             let timestamp = chrono::Utc::now().to_rfc3339();
-            let event_id = format!("{}_{}", event_str, chrono::Utc::now().timestamp_millis());
 
             let data = serde_json::json!({
                 "kind": "bigquery#tableDataInsertAllRequest",
