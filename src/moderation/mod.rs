@@ -364,7 +364,10 @@ async fn update_approval_status(
     // Also update in kvrocks
     if affected {
         if let Some(ref kvrocks) = kvrocks_client {
-            if let Err(e) = kvrocks.update_ugc_approval_status(video_id, true).await {
+            if let Err(e) = kvrocks
+                .update_user_uploaded_content_approval_status(video_id, true)
+                .await
+            {
                 log::error!("Error updating approval status in kvrocks: {}", e);
             }
         }
@@ -410,7 +413,10 @@ async fn delete_video(
     // Also delete from kvrocks
     if deleted {
         if let Some(ref kvrocks) = kvrocks_client {
-            if let Err(e) = kvrocks.delete_ugc_content_approval(video_id).await {
+            if let Err(e) = kvrocks
+                .delete_user_uploaded_content_approval(video_id)
+                .await
+            {
                 log::error!("Error deleting approval from kvrocks: {}", e);
             }
         }

@@ -230,15 +230,9 @@ pub async fn nsfw_job(
             capture_anyhow(e);
         })?;
 
-    // push nsfw info to bigquery table and kvrocks
+    // push nsfw info to bigquery table
     let bigquery_client = state.bigquery_client.clone();
-    push_nsfw_data_bigquery(
-        bigquery_client,
-        &state.kvrocks_client,
-        nsfw_info.clone(),
-        video_id.clone(),
-    )
-    .await?;
+    push_nsfw_data_bigquery(bigquery_client, nsfw_info.clone(), video_id.clone()).await?;
 
     // enqueue qstash job to detect nsfw v2
     let qstash_client = state.qstash_client.clone();
@@ -283,10 +277,9 @@ async fn move2_nsfw_buckets_if_required(
     Ok(())
 }
 
-#[instrument(skip(bigquery_client, kvrocks_client))]
+#[instrument(skip(bigquery_client))]
 pub async fn push_nsfw_data_bigquery(
     bigquery_client: google_cloud_bigquery::client::Client,
-    kvrocks_client: &Option<KvrocksClient>,
     nsfw_info: NSFWInfo,
     video_id: String,
 ) -> Result<(), Error> {
@@ -318,19 +311,7 @@ pub async fn push_nsfw_data_bigquery(
         )
         .await?;
 
-    // Also push to kvrocks
-    if let Some(ref kvrocks) = kvrocks_client {
-        let nsfw_data = serde_json::json!({
-            "video_id": video_id,
-            "gcs_video_id": format!("gs://yral-videos/{}.mp4", video_id),
-            "is_nsfw": nsfw_info.is_nsfw,
-            "nsfw_ec": nsfw_info.nsfw_ec,
-            "nsfw_gore": nsfw_info.nsfw_gore,
-        });
-        if let Err(e) = kvrocks.store_video_nsfw(&video_id, &nsfw_data).await {
-            log::error!("Error pushing NSFW data to kvrocks: {}", e);
-        }
-    }
+    // Note: kvrocks push happens in push_nsfw_data_bigquery_v2 with full data including probability
 
     Ok(())
 }
@@ -557,18 +538,18 @@ pub async fn push_nsfw_data_bigquery_v2(
         )
         .await?;
 
-    // Also push aggregated NSFW data to kvrocks
+    // Push merged NSFW data to kvrocks (all fields including probability)
     if let Some(ref kvrocks) = kvrocks_client {
-        let nsfw_agg_data = serde_json::json!({
+        let nsfw_data = serde_json::json!({
             "video_id": video_id,
+            "gcs_video_id": gcs_video_id,
+            "is_nsfw": is_nsfw,
+            "nsfw_ec": nsfw_ec,
+            "nsfw_gore": nsfw_gore,
             "probability": nsfw_prob,
-            "is_nsfw": is_nsfw_from_threshold,
         });
-        if let Err(e) = kvrocks
-            .store_video_nsfw_agg(&video_id, &nsfw_agg_data)
-            .await
-        {
-            log::error!("Error pushing NSFW agg data to kvrocks: {}", e);
+        if let Err(e) = kvrocks.store_video_nsfw(&video_id, &nsfw_data).await {
+            log::error!("Error pushing NSFW data to kvrocks: {}", e);
         }
     }
 

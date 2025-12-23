@@ -70,7 +70,7 @@ impl VideoHashDuplication {
             .await?;
         self.store_phash_to_bigquery(bigquery_client, kvrocks_client, video_id, &phash, &metadata)
             .await?;
-        self.store_ugc_content_approval(
+        self.store_user_uploaded_content_approval(
             bigquery_client,
             kvrocks_client,
             video_id,
@@ -80,8 +80,6 @@ impl VideoHashDuplication {
         .await?;
 
         if !is_duplicate {
-            self.store_unique_video(kvrocks_client, video_id, &phash)
-                .await?;
             self.store_unique_video_v2(kvrocks_client, video_id, &phash)
                 .await?;
             log::info!("Unique video recorded: video_id [{video_id}]");
@@ -239,47 +237,6 @@ impl VideoHashDuplication {
         Ok(())
     }
 
-    async fn store_unique_video(
-        &self,
-        kvrocks_client: &Option<KvrocksClient>,
-        video_id: &str,
-        hash: &str,
-    ) -> Result<(), anyhow::Error> {
-        let bigquery_client = app_state::init_bigquery_client().await;
-
-        let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique`
-             (video_id, videohash, created_at)
-             VALUES ('{video_id}', '{hash}', CURRENT_TIMESTAMP())"
-        );
-
-        let request = QueryRequest {
-            query,
-            ..Default::default()
-        };
-
-        log::info!("Storing unique video in video_unique for video_id [{video_id}]");
-
-        bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
-            .await?;
-
-        // Also push to kvrocks
-        if let Some(ref kvrocks) = kvrocks_client {
-            let unique_data = serde_json::json!({
-                "video_id": video_id,
-                "videohash": hash,
-                "created_at": chrono::Utc::now().to_rfc3339(),
-            });
-            if let Err(e) = kvrocks.store_video_unique(video_id, &unique_data).await {
-                log::error!("Error pushing video_unique to kvrocks: {}", e);
-            }
-        }
-
-        Ok(())
-    }
-
     async fn store_unique_video_v2(
         &self,
         kvrocks_client: &Option<KvrocksClient>,
@@ -321,7 +278,7 @@ impl VideoHashDuplication {
         Ok(())
     }
 
-    async fn store_ugc_content_approval(
+    async fn store_user_uploaded_content_approval(
         &self,
         bigquery_client: &google_cloud_bigquery::client::Client,
         kvrocks_client: &Option<KvrocksClient>,
@@ -329,7 +286,7 @@ impl VideoHashDuplication {
         post_id: &str,
         user_id: &str,
     ) -> Result<(), anyhow::Error> {
-        log::info!("Checking UGC content approval for video_id: {}", video_id);
+        log::info!("Processing content approval for video_id: {}", video_id);
 
         // Query both country and canister_id from the video_upload_successful event
         let event_query = format!(
@@ -397,11 +354,34 @@ impl VideoHashDuplication {
             }
         };
 
+        // Store video metadata for all videos
+        if let Some(ref kvrocks) = kvrocks_client {
+            if let Err(e) = kvrocks
+                .store_video_metadata(video_id, post_id, user_id)
+                .await
+            {
+                log::error!("Error storing video metadata to kvrocks: {}", e);
+            }
+        }
+
         if is_bot {
             log::info!(
-                "Skipping ugc_content_approval insertion for bot video: {}",
+                "Bot video detected, storing bot marker for video: {}",
                 video_id
             );
+            // Store bot marker in kvrocks
+            if let Some(ref kvrocks) = kvrocks_client {
+                let bot_data = serde_json::json!({
+                    "video_id": video_id,
+                    "created_at": chrono::Utc::now().to_rfc3339(),
+                });
+                if let Err(e) = kvrocks
+                    .store_bot_uploaded_ai_content(video_id, &bot_data)
+                    .await
+                {
+                    log::error!("Error storing bot marker to kvrocks: {}", e);
+                }
+            }
             return Ok(());
         }
 
@@ -450,10 +430,13 @@ impl VideoHashDuplication {
                 "created_at": chrono::Utc::now().to_rfc3339(),
             });
             if let Err(e) = kvrocks
-                .store_ugc_content_approval(video_id, &approval_data)
+                .store_user_uploaded_content_approval(video_id, &approval_data)
                 .await
             {
-                log::error!("Error pushing ugc_content_approval to kvrocks: {}", e);
+                log::error!(
+                    "Error pushing user_uploaded_content_approval to kvrocks: {}",
+                    e
+                );
             }
         }
 
@@ -556,7 +539,7 @@ impl VideoHashDuplication {
                 &metadata,
             )
             .await?;
-            self.store_ugc_content_approval(
+            self.store_user_uploaded_content_approval(
                 bigquery_client,
                 kvrocks_client,
                 video_id,
@@ -629,7 +612,7 @@ impl VideoHashDuplication {
             .await?;
         self.store_phash_to_bigquery(bigquery_client, kvrocks_client, video_id, &phash, &metadata)
             .await?;
-        self.store_ugc_content_approval(
+        self.store_user_uploaded_content_approval(
             bigquery_client,
             kvrocks_client,
             video_id,
@@ -661,8 +644,6 @@ impl VideoHashDuplication {
                 }
             }
 
-            self.store_unique_video(kvrocks_client, video_id, &phash)
-                .await?;
             self.store_unique_video_v2(kvrocks_client, video_id, &phash)
                 .await?;
             log::info!("Unique video recorded in BigQuery: video_id [{video_id}]");
