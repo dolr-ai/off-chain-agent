@@ -2,6 +2,7 @@ use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
+use crate::kvrocks::KvrocksClient;
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
@@ -62,6 +63,7 @@ pub struct AppState {
     pub user_migration_api_key: String,
     #[cfg(not(feature = "local-bin"))]
     pub milvus_client: Option<MilvusClient>,
+    pub kvrocks_client: Option<KvrocksClient>,
 }
 
 impl AppState {
@@ -78,6 +80,8 @@ impl AppState {
 
         #[cfg(not(feature = "local-bin"))]
         let milvus_client = init_milvus_client(&app_config).await;
+
+        let kvrocks_client = init_kvrocks_client().await;
 
         AppState {
             admin_identity: init_identity(),
@@ -117,6 +121,7 @@ impl AppState {
                 .expect("YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY is not set"),
             #[cfg(not(feature = "local-bin"))]
             milvus_client,
+            kvrocks_client,
         }
     }
 
@@ -372,6 +377,19 @@ async fn init_milvus_client(app_config: &AppConfig) -> Option<MilvusClient> {
         }
         Err(e) => {
             log::error!("Failed to connect to Milvus: {}", e);
+            None
+        }
+    }
+}
+
+async fn init_kvrocks_client() -> Option<KvrocksClient> {
+    match crate::kvrocks::init_kvrocks_client().await {
+        Ok(client) => {
+            log::info!("Kvrocks client connected successfully");
+            Some(client)
+        }
+        Err(e) => {
+            log::error!("Failed to connect to kvrocks: {}. BigQuery writes will not be replicated to kvrocks.", e);
             None
         }
     }
