@@ -8,6 +8,7 @@ use std::{
 use crate::{
     consts::{NSFW_SERVER_URL, NSFW_THRESHOLD},
     events::event::UploadVideoInfoV2,
+    kvrocks::{PendingNsfwV2Item, VideoNsfw},
     pipeline::Step,
     setup_context,
 };
@@ -455,12 +456,354 @@ struct VideoEmbeddingAgg {
     video_id: Option<String>,
 }
 
+/// Batch size threshold for NSFW v2 processing
+pub const NSFW_V2_BATCH_THRESHOLD: usize = 50;
+
 #[instrument(skip(bigquery_client, kvrocks_client))]
 pub async fn push_nsfw_data_bigquery_v2(
     bigquery_client: google_cloud_bigquery::client::Client,
     kvrocks_client: &Option<KvrocksClient>,
     nsfw_prob: f32,
     is_nsfw_from_threshold: bool,
+    video_id: String,
+) -> Result<(), Error> {
+    use std::collections::HashMap;
+
+    let Some(ref kvrocks) = kvrocks_client else {
+        // No KVRocks configured, fall back to single-item processing
+        return push_nsfw_data_bigquery_v2_single(
+            bigquery_client,
+            kvrocks_client,
+            nsfw_prob,
+            is_nsfw_from_threshold,
+            video_id,
+        )
+        .await;
+    };
+
+    // Add item to pending batch
+    let pending_item = PendingNsfwV2Item {
+        video_id: video_id.clone(),
+        nsfw_prob,
+        is_nsfw: is_nsfw_from_threshold,
+    };
+
+    let batch_size = kvrocks.add_to_nsfw_v2_batch(&pending_item).await?;
+    log::info!(
+        "Added video {} to NSFW v2 batch, current size: {}",
+        video_id,
+        batch_size
+    );
+
+    // Check if threshold reached
+    if batch_size < NSFW_V2_BATCH_THRESHOLD {
+        log::info!(
+            "Batch size {} below threshold {}, item queued",
+            batch_size,
+            NSFW_V2_BATCH_THRESHOLD
+        );
+        return Ok(());
+    }
+
+    // Threshold reached, process the entire batch
+    log::info!(
+        "Batch threshold {} reached, processing {} items",
+        NSFW_V2_BATCH_THRESHOLD,
+        batch_size
+    );
+
+    // Take all items from batch atomically
+    let items = kvrocks.take_nsfw_v2_batch().await?;
+    if items.is_empty() {
+        return Ok(());
+    }
+
+    let items_count = items.len();
+
+    // Build a map for quick lookup
+    let items_map: HashMap<String, &PendingNsfwV2Item> = items
+        .iter()
+        .map(|item| (item.video_id.clone(), item))
+        .collect();
+
+    // Build IN clause for batch query
+    let video_ids: Vec<String> = items.iter().map(|i| format!("'{}'", i.video_id)).collect();
+    let video_ids_in = video_ids.join(", ");
+
+    // Batch query to get existing NSFW data for all videos
+    let query = format!(
+        "SELECT video_id, gcs_video_id, is_nsfw, nsfw_ec, nsfw_gore
+         FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw`
+         WHERE video_id IN ({video_ids_in})"
+    );
+
+    let request = QueryRequest {
+        query,
+        ..Default::default()
+    };
+
+    let result = bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await?;
+
+    // Process each row and build insert rows
+    let mut nsfw_agg_rows: Vec<Row<VideoNSFWDataV2>> = Vec::new();
+    let mut gcs_video_id_map: HashMap<String, (String, bool, String, String)> = HashMap::new();
+
+    for row in result.rows.unwrap_or_default() {
+        let vid = match &row.f[0].v {
+            Value::String(s) => s.clone(),
+            _ => continue,
+        };
+
+        let gcs_video_id = match &row.f[1].v {
+            Value::String(s) => s.clone(),
+            _ => continue,
+        };
+
+        let is_nsfw = match &row.f[2].v {
+            Value::String(b) => b == "true",
+            _ => continue,
+        };
+
+        let nsfw_ec = match &row.f[3].v {
+            Value::String(s) => s.clone(),
+            _ => continue,
+        };
+
+        let nsfw_gore = match &row.f[4].v {
+            Value::String(s) => s.clone(),
+            _ => continue,
+        };
+
+        // Get the probability from our pending items
+        let Some(pending_item) = items_map.get(&vid) else {
+            continue;
+        };
+
+        // Store for embeddings query
+        gcs_video_id_map.insert(
+            vid.clone(),
+            (
+                gcs_video_id.clone(),
+                is_nsfw,
+                nsfw_ec.clone(),
+                nsfw_gore.clone(),
+            ),
+        );
+
+        // Build row for video_nsfw_agg
+        nsfw_agg_rows.push(Row {
+            insert_id: None,
+            json: VideoNSFWDataV2 {
+                video_id: vid.clone(),
+                gcs_video_id: gcs_video_id.clone(),
+                is_nsfw,
+                nsfw_ec: nsfw_ec.clone(),
+                nsfw_gore: nsfw_gore.clone(),
+                probability: pending_item.nsfw_prob,
+            },
+        });
+
+        // Push to KVRocks
+        let nsfw_data = VideoNsfw {
+            video_id: vid.clone(),
+            gcs_video_id: gcs_video_id.clone(),
+            is_nsfw,
+            nsfw_ec,
+            nsfw_gore,
+            probability: Some(pending_item.nsfw_prob),
+        };
+        if let Err(e) = kvrocks.store_video_nsfw(&nsfw_data).await {
+            log::error!("Error pushing NSFW data to kvrocks for {}: {}", vid, e);
+        }
+    }
+
+    // Batch insert into video_nsfw_agg
+    if !nsfw_agg_rows.is_empty() {
+        let insert_request = InsertAllRequest {
+            rows: nsfw_agg_rows,
+            ..Default::default()
+        };
+
+        bigquery_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "video_nsfw_agg",
+                &insert_request,
+            )
+            .await?;
+
+        log::info!("Batch inserted {} rows into video_nsfw_agg", items_count);
+    }
+
+    // Now batch query embeddings
+    if !gcs_video_id_map.is_empty() {
+        let gcs_ids: Vec<String> = gcs_video_id_map
+            .values()
+            .map(|(gcs_id, _, _, _)| format!("'{}'", gcs_id))
+            .collect();
+        let gcs_ids_in = gcs_ids.join(", ");
+
+        let embedding_query = format!(
+            "SELECT * FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE uri IN ({gcs_ids_in})"
+        );
+
+        let embedding_request = QueryRequest {
+            query: embedding_query,
+            ..Default::default()
+        };
+
+        let embedding_result = bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &embedding_request)
+            .await?;
+
+        // Build embedding agg rows
+        let mut embedding_rows: Vec<Row<VideoEmbeddingAgg>> = Vec::new();
+
+        for row in embedding_result.rows.unwrap_or_default() {
+            let uri = match &row.f[4].v {
+                Value::String(s) => s.clone(),
+                _ => continue,
+            };
+
+            // Find the corresponding video_id from gcs_video_id
+            let Some((vid, (_, is_nsfw, nsfw_ec, nsfw_gore))) = gcs_video_id_map
+                .iter()
+                .find(|(_, (gcs_id, _, _, _))| gcs_id == &uri)
+            else {
+                continue;
+            };
+
+            let Some(pending_item) = items_map.get(vid) else {
+                continue;
+            };
+
+            let embedding = VideoEmbeddingAgg {
+                ml_generate_embedding_result: match &row.f[0].v {
+                    Value::Array(arr) => arr
+                        .iter()
+                        .filter_map(|cell| match &cell.v {
+                            Value::String(s) => s.parse::<f64>().ok(),
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                },
+                ml_generate_embedding_status: match &row.f[1].v {
+                    Value::String(s) => Some(s.clone()),
+                    _ => None,
+                },
+                ml_generate_embedding_start_sec: match &row.f[2].v {
+                    Value::String(s) => s.parse::<i64>().ok(),
+                    _ => None,
+                },
+                ml_generate_embedding_end_sec: match &row.f[3].v {
+                    Value::String(s) => s.parse::<i64>().ok(),
+                    _ => None,
+                },
+                uri: Some(uri),
+                generation: match &row.f[5].v {
+                    Value::String(s) => s.parse::<i64>().ok(),
+                    _ => None,
+                },
+                content_type: match &row.f[6].v {
+                    Value::String(s) => Some(s.clone()),
+                    _ => None,
+                },
+                size: match &row.f[7].v {
+                    Value::String(s) => s.parse::<i64>().ok(),
+                    _ => None,
+                },
+                md5_hash: match &row.f[8].v {
+                    Value::String(s) => Some(s.clone()),
+                    _ => None,
+                },
+                updated: match &row.f[9].v {
+                    Value::String(s) => Some(s.clone()),
+                    _ => None,
+                },
+                metadata: match &row.f[10].v {
+                    Value::Array(arr) => arr
+                        .iter()
+                        .filter_map(|cell| match &cell.v {
+                            Value::Struct(tuple) => {
+                                if tuple.f.len() >= 2 {
+                                    match (&tuple.f[0].v, &tuple.f[1].v) {
+                                        (Value::String(key), Value::String(value)) => {
+                                            Some(VideoEmbeddingMetadata {
+                                                name: key.clone(),
+                                                value: value.clone(),
+                                            })
+                                        }
+                                        _ => None,
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                },
+                is_nsfw: Some(*is_nsfw),
+                nsfw_ec: Some(nsfw_ec.clone()),
+                nsfw_gore: Some(nsfw_gore.clone()),
+                probability: Some(pending_item.nsfw_prob),
+                video_id: Some(vid.clone()),
+            };
+            embedding_rows.push(Row {
+                insert_id: None,
+                json: embedding,
+            });
+        }
+
+        // Batch insert into video_embeddings_agg
+        if !embedding_rows.is_empty() {
+            let embed_count = embedding_rows.len();
+            let insert_request = InsertAllRequest {
+                rows: embedding_rows,
+                ..Default::default()
+            };
+
+            let res = bigquery_client
+                .tabledata()
+                .insert(
+                    "hot-or-not-feed-intelligence",
+                    "yral_ds",
+                    "video_embeddings_agg",
+                    &insert_request,
+                )
+                .await?;
+
+            log::info!(
+                "Batch inserted {} rows into video_embeddings_agg: {:?}",
+                embed_count,
+                res
+            );
+        }
+    }
+
+    log::info!(
+        "NSFW v2 batch processing completed for {} items",
+        items_count
+    );
+
+    Ok(())
+}
+
+/// Single-item processing fallback when KVRocks is not available
+#[instrument(skip(bigquery_client, _kvrocks_client))]
+async fn push_nsfw_data_bigquery_v2_single(
+    bigquery_client: google_cloud_bigquery::client::Client,
+    _kvrocks_client: &Option<KvrocksClient>,
+    nsfw_prob: f32,
+    _is_nsfw_from_threshold: bool,
     video_id: String,
 ) -> Result<(), Error> {
     // First query to get existing NSFW data
@@ -488,22 +831,22 @@ pub async fn push_nsfw_data_bigquery_v2(
 
     // Extract values from row
     let gcs_video_id = match &row.f[1].v {
-        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        Value::String(s) => s.clone(),
         _ => return Err(anyhow::anyhow!("Invalid gcs_video_id")),
     };
 
     let is_nsfw = match &row.f[2].v {
-        google_cloud_bigquery::http::tabledata::list::Value::String(b) => b == "true",
+        Value::String(b) => b == "true",
         _ => return Err(anyhow::anyhow!("Invalid is_nsfw")),
     };
 
     let nsfw_ec = match &row.f[3].v {
-        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        Value::String(s) => s.clone(),
         _ => return Err(anyhow::anyhow!("Invalid nsfw_ec")),
     };
 
     let nsfw_gore = match &row.f[4].v {
-        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        Value::String(s) => s.clone(),
         _ => return Err(anyhow::anyhow!("Invalid nsfw_gore")),
     };
 
@@ -538,25 +881,7 @@ pub async fn push_nsfw_data_bigquery_v2(
         )
         .await?;
 
-    // Push merged NSFW data to kvrocks (all fields including probability)
-    if let Some(ref kvrocks) = kvrocks_client {
-        let nsfw_data = serde_json::json!({
-            "video_id": video_id,
-            "gcs_video_id": gcs_video_id,
-            "is_nsfw": is_nsfw,
-            "nsfw_ec": nsfw_ec,
-            "nsfw_gore": nsfw_gore,
-            "probability": nsfw_prob,
-        });
-        if let Err(e) = kvrocks.store_video_nsfw(&video_id, &nsfw_data).await {
-            log::error!("Error pushing NSFW data to kvrocks: {}", e);
-        }
-    }
-
     // Insert into video_embeddings_agg table
-    // read embedding from bigquery hot-or-not-feed-intelligence.yral_ds.video_embeddings table
-    // and push to bigquery hot-or-not-feed-intelligence.yral_ds.video_embeddings_agg table
-
     let embedding_query = format!(
         "SELECT * FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE uri = '{gcs_video_id}'"
     );
@@ -570,8 +895,6 @@ pub async fn push_nsfw_data_bigquery_v2(
         .job()
         .query("hot-or-not-feed-intelligence", &embedding_request)
         .await?;
-
-    // in a loop convert each row to VideoEmbeddingAgg
 
     let mut video_embeddings = Vec::new();
     for row in embedding_result.rows.unwrap_or_default() {
@@ -663,7 +986,6 @@ pub async fn push_nsfw_data_bigquery_v2(
         })
         .collect();
 
-    // insert into bigquery
     let insert_request = InsertAllRequest {
         rows,
         ..Default::default()

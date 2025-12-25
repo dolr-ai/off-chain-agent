@@ -1,7 +1,10 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::events::types::string_or_number;
-use crate::kvrocks::KvrocksClient;
+use crate::kvrocks::{
+    BotUploadedAiContent, KvrocksClient, UserUploadedContentApproval,
+    VideoMetadata as KvrocksVideoMetadata, VideoUniqueV2, VideohashOriginal, VideohashPhash,
+};
 use crate::{
     app_state,
     consts::DEDUP_INDEX_CANISTER_ID,
@@ -128,12 +131,12 @@ impl VideoHashDuplication {
 
         // Also push to kvrocks
         if let Some(ref kvrocks) = kvrocks_client {
-            let hash_data = serde_json::json!({
-                "video_id": video_id,
-                "videohash": hash,
-                "created_at": chrono::Utc::now().to_rfc3339(),
-            });
-            if let Err(e) = kvrocks.store_videohash_original(video_id, &hash_data).await {
+            let hash_data = VideohashOriginal {
+                video_id: video_id.to_string(),
+                videohash: hash.to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+            };
+            if let Err(e) = kvrocks.store_videohash_original(&hash_data).await {
                 log::error!("Error pushing videohash_original to kvrocks: {}", e);
             }
         }
@@ -203,7 +206,18 @@ impl VideoHashDuplication {
 
         // Also push to kvrocks
         if let Some(ref kvrocks) = kvrocks_client {
-            if let Err(e) = kvrocks.store_videohash_phash(video_id, &row_data).await {
+            let phash_data = VideohashPhash {
+                video_id: video_id.to_string(),
+                phash: phash.to_string(),
+                num_frames: 10,
+                hash_size: 8,
+                duration: metadata.duration,
+                width: metadata.width as i64,
+                height: metadata.height as i64,
+                fps: metadata.fps,
+                created_at: chrono::Utc::now().to_rfc3339(),
+            };
+            if let Err(e) = kvrocks.store_videohash_phash(&phash_data).await {
                 log::error!("Error pushing phash to kvrocks: {}", e);
             }
         }
@@ -265,12 +279,12 @@ impl VideoHashDuplication {
 
         // Also push to kvrocks
         if let Some(ref kvrocks) = kvrocks_client {
-            let unique_data = serde_json::json!({
-                "video_id": video_id,
-                "videohash": hash,
-                "created_at": chrono::Utc::now().to_rfc3339(),
-            });
-            if let Err(e) = kvrocks.store_video_unique_v2(video_id, &unique_data).await {
+            let unique_data = VideoUniqueV2 {
+                video_id: video_id.to_string(),
+                videohash: hash.to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+            };
+            if let Err(e) = kvrocks.store_video_unique_v2(&unique_data).await {
                 log::error!("Error pushing video_unique_v2 to kvrocks: {}", e);
             }
         }
@@ -356,10 +370,12 @@ impl VideoHashDuplication {
 
         // Store video metadata for all videos
         if let Some(ref kvrocks) = kvrocks_client {
-            if let Err(e) = kvrocks
-                .store_video_metadata(video_id, post_id, user_id)
-                .await
-            {
+            let metadata = KvrocksVideoMetadata {
+                video_id: video_id.to_string(),
+                post_id: post_id.to_string(),
+                publisher_user_id: user_id.to_string(),
+            };
+            if let Err(e) = kvrocks.store_video_metadata(&metadata).await {
                 log::error!("Error storing video metadata to kvrocks: {}", e);
             }
         }
@@ -371,14 +387,11 @@ impl VideoHashDuplication {
             );
             // Store bot marker in kvrocks
             if let Some(ref kvrocks) = kvrocks_client {
-                let bot_data = serde_json::json!({
-                    "video_id": video_id,
-                    "created_at": chrono::Utc::now().to_rfc3339(),
-                });
-                if let Err(e) = kvrocks
-                    .store_bot_uploaded_ai_content(video_id, &bot_data)
-                    .await
-                {
+                let bot_data = BotUploadedAiContent {
+                    video_id: video_id.to_string(),
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                };
+                if let Err(e) = kvrocks.store_bot_uploaded_ai_content(&bot_data).await {
                     log::error!("Error storing bot marker to kvrocks: {}", e);
                 }
             }
@@ -421,16 +434,16 @@ impl VideoHashDuplication {
 
         // Also push to kvrocks
         if let Some(ref kvrocks) = kvrocks_client {
-            let approval_data = serde_json::json!({
-                "video_id": video_id,
-                "post_id": post_id,
-                "canister_id": canister_id,
-                "user_id": user_id,
-                "is_approved": false,
-                "created_at": chrono::Utc::now().to_rfc3339(),
-            });
+            let approval_data = UserUploadedContentApproval {
+                video_id: video_id.to_string(),
+                post_id: post_id.to_string(),
+                canister_id: canister_id.unwrap_or_default(),
+                user_id: user_id.to_string(),
+                is_approved: false,
+                created_at: chrono::Utc::now().to_rfc3339(),
+            };
             if let Err(e) = kvrocks
-                .store_user_uploaded_content_approval(video_id, &approval_data)
+                .store_user_uploaded_content_approval(&approval_data)
                 .await
             {
                 log::error!(

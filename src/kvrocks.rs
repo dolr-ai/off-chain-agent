@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use redis::cluster::ClusterClient;
 use redis::cluster_async::ClusterConnection;
 use redis::AsyncCommands;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::env;
 
 const KVROCKS_TLS_PORT: u16 = 6666;
@@ -18,6 +18,118 @@ pub mod keys {
     pub const VIDEOHASH_ORIGINAL: &str = "offchain:videohash_original";
     pub const VIDEO_EMBEDDINGS: &str = "offchain:video_embeddings";
     pub const VIDEO_METADATA: &str = "offchain:metadata:video_details";
+}
+
+pub mod internal_keys {
+    pub const NSFW_V2_PENDING_BATCH: &str = "offchain_internal_video_processing:temp:nsfw_v2_batch";
+}
+
+/// NSFW classification data for a video
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoNsfw {
+    pub video_id: String,
+    pub gcs_video_id: String,
+    pub is_nsfw: bool,
+    pub nsfw_ec: String,
+    pub nsfw_gore: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub probability: Option<f32>,
+}
+
+/// Perceptual hash data for a video
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideohashPhash {
+    pub video_id: String,
+    pub phash: String,
+    pub num_frames: i32,
+    pub hash_size: i32,
+    pub duration: f64,
+    pub width: i64,
+    pub height: i64,
+    pub fps: f64,
+    pub created_at: String,
+}
+
+/// Original video hash data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideohashOriginal {
+    pub video_id: String,
+    pub videohash: String,
+    pub created_at: String,
+}
+
+/// Unique video marker (v2)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoUniqueV2 {
+    pub video_id: String,
+    pub videohash: String,
+    pub created_at: String,
+}
+
+/// Deleted video record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoDeleted {
+    pub canister_id: String,
+    pub post_id: String,
+    pub video_id: String,
+    pub gcs_video_id: String,
+    pub deleted_at: String,
+}
+
+/// Video deduplication status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoDedupStatus {
+    pub video_id: String,
+    pub phash: String,
+    pub is_duplicate: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duplicate_of: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hamming_distance: Option<u32>,
+    pub ingested_at: String,
+}
+
+/// Video embeddings data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoEmbeddings {
+    pub video_id: String,
+    pub embedding_vectors: Vec<Vec<f32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// User uploaded content approval data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserUploadedContentApproval {
+    pub video_id: String,
+    pub post_id: String,
+    pub canister_id: String,
+    pub user_id: String,
+    pub is_approved: bool,
+    pub created_at: String,
+}
+
+/// Bot uploaded AI content marker
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BotUploadedAiContent {
+    pub video_id: String,
+    pub created_at: String,
+}
+
+/// Video metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoMetadata {
+    pub video_id: String,
+    pub post_id: String,
+    pub publisher_user_id: String,
+}
+
+/// Pending NSFW v2 batch item for batched BigQuery processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingNsfwV2Item {
+    pub video_id: String,
+    pub nsfw_prob: f32,
+    pub is_nsfw: bool,
 }
 
 #[derive(Clone)]
@@ -116,6 +228,55 @@ impl KvrocksClient {
             }
             None => Ok(None),
         }
+    }
+
+    /// Store a struct as a Redis HASH (each field becomes a hash field)
+    pub async fn set_hash<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
+        let mut conn = self.get_connection().await?;
+        // Serialize to JSON Value to get field names
+        let json_value = serde_json::to_value(value)?;
+        let obj = json_value
+            .as_object()
+            .context("Value must serialize to a JSON object")?;
+
+        let fields: Vec<(&str, String)> = obj
+            .iter()
+            .map(|(k, v)| {
+                // Store primitives directly, objects as JSON strings
+                let value_str = match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Null => String::new(),
+                    other => other.to_string(),
+                };
+                (k.as_str(), value_str)
+            })
+            .collect();
+
+        if !fields.is_empty() {
+            conn.hset_multiple::<_, _, _, ()>(key, &fields).await?;
+        }
+        Ok(())
+    }
+
+    /// Get a struct from a Redis HASH
+    pub async fn get_hash<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
+        let mut conn = self.get_connection().await?;
+        let hash: std::collections::HashMap<String, String> = conn.hgetall(key).await?;
+
+        if hash.is_empty() {
+            return Ok(None);
+        }
+
+        // Convert HashMap to JSON Value for deserialization
+        let mut json_obj = serde_json::Map::new();
+        for (k, v) in hash {
+            // Try to parse as JSON value, fall back to string
+            let json_val = serde_json::from_str(&v).unwrap_or(serde_json::Value::String(v));
+            json_obj.insert(k, json_val);
+        }
+
+        let parsed = serde_json::from_value(serde_json::Value::Object(json_obj))?;
+        Ok(Some(parsed))
     }
 }
 
@@ -232,86 +393,127 @@ fn get_client_key_pem() -> Result<Vec<u8>> {
 }
 
 impl KvrocksClient {
-    pub async fn store_video_nsfw(
-        &self,
-        video_id: &str,
-        nsfw_data: &serde_json::Value,
-    ) -> Result<()> {
+    pub async fn store_video_nsfw(&self, data: &VideoNsfw) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEO_NSFW, data.video_id);
+        self.set_hash(&key, data).await
+    }
+
+    pub async fn get_video_nsfw(&self, video_id: &str) -> Result<Option<VideoNsfw>> {
         let key = format!("{}:{}", keys::VIDEO_NSFW, video_id);
-        self.set_json(&key, nsfw_data).await
+        self.get_hash(&key).await
     }
 
-    pub async fn store_videohash_phash(
-        &self,
-        video_id: &str,
-        phash_data: &serde_json::Value,
-    ) -> Result<()> {
+    pub async fn store_videohash_phash(&self, data: &VideohashPhash) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEOHASH_PHASH, data.video_id);
+        self.set_hash(&key, data).await
+    }
+
+    pub async fn get_videohash_phash(&self, video_id: &str) -> Result<Option<VideohashPhash>> {
         let key = format!("{}:{}", keys::VIDEOHASH_PHASH, video_id);
-        self.set_json(&key, phash_data).await
+        self.get_hash(&key).await
     }
 
-    pub async fn store_videohash_original(
+    pub async fn store_videohash_original(&self, data: &VideohashOriginal) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEOHASH_ORIGINAL, data.video_id);
+        self.set_hash(&key, data).await
+    }
+
+    pub async fn get_videohash_original(
         &self,
         video_id: &str,
-        hash_data: &serde_json::Value,
-    ) -> Result<()> {
+    ) -> Result<Option<VideohashOriginal>> {
         let key = format!("{}:{}", keys::VIDEOHASH_ORIGINAL, video_id);
-        self.set_json(&key, hash_data).await
+        self.get_hash(&key).await
     }
 
-    pub async fn store_video_unique_v2(
-        &self,
-        video_id: &str,
-        data: &serde_json::Value,
-    ) -> Result<()> {
+    pub async fn store_video_unique_v2(&self, data: &VideoUniqueV2) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEO_UNIQUE_V2, data.video_id);
+        self.set_hash(&key, data).await
+    }
+
+    pub async fn get_video_unique_v2(&self, video_id: &str) -> Result<Option<VideoUniqueV2>> {
         let key = format!("{}:{}", keys::VIDEO_UNIQUE_V2, video_id);
-        self.set_json(&key, data).await
+        self.get_hash(&key).await
     }
 
-    pub async fn store_video_deleted(
-        &self,
-        video_id: &str,
-        delete_data: &serde_json::Value,
-    ) -> Result<()> {
+    pub async fn store_video_deleted(&self, data: &VideoDeleted) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEO_DELETED, data.video_id);
+        self.set_hash(&key, data).await
+    }
+
+    pub async fn get_video_deleted(&self, video_id: &str) -> Result<Option<VideoDeleted>> {
         let key = format!("{}:{}", keys::VIDEO_DELETED, video_id);
-        self.set_json(&key, delete_data).await
+        self.get_hash(&key).await
     }
 
-    pub async fn store_video_dedup_status(
-        &self,
-        video_id: &str,
-        status_data: &serde_json::Value,
-    ) -> Result<()> {
+    pub async fn store_video_dedup_status(&self, data: &VideoDedupStatus) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEO_DEDUP_STATUS, data.video_id);
+        self.set_hash(&key, data).await
+    }
+
+    pub async fn get_video_dedup_status(&self, video_id: &str) -> Result<Option<VideoDedupStatus>> {
         let key = format!("{}:{}", keys::VIDEO_DEDUP_STATUS, video_id);
-        self.set_json(&key, status_data).await
+        self.get_hash(&key).await
     }
 
     pub async fn store_video_dedup_status_with_table(
         &self,
         table_suffix: &str,
-        video_id: &str,
-        status_data: &serde_json::Value,
+        data: &VideoDedupStatus,
     ) -> Result<()> {
-        let key = format!("{}:{}:{}", keys::VIDEO_DEDUP_STATUS, table_suffix, video_id);
-        self.set_json(&key, status_data).await
+        let key = format!(
+            "{}:{}:{}",
+            keys::VIDEO_DEDUP_STATUS,
+            table_suffix,
+            data.video_id
+        );
+        self.set_hash(&key, data).await
     }
 
-    pub async fn store_video_embeddings(
+    pub async fn push_video_embedding(
         &self,
         video_id: &str,
-        embeddings_data: &serde_json::Value,
+        embedding_vector: Vec<f32>,
+        metadata: Option<serde_json::Value>,
     ) -> Result<()> {
         let key = format!("{}:{}", keys::VIDEO_EMBEDDINGS, video_id);
-        self.set_json(&key, embeddings_data).await
+
+        let data = if let Some(mut existing) = self.get_video_embeddings(video_id).await? {
+            existing.embedding_vectors.push(embedding_vector);
+            if let Some(new_metadata) = metadata {
+                existing.metadata = Some(new_metadata);
+            }
+            existing
+        } else {
+            VideoEmbeddings {
+                video_id: video_id.to_string(),
+                embedding_vectors: vec![embedding_vector],
+                metadata,
+            }
+        };
+
+        self.set_hash(&key, &data).await
+    }
+
+    pub async fn get_video_embeddings(&self, video_id: &str) -> Result<Option<VideoEmbeddings>> {
+        let key = format!("{}:{}", keys::VIDEO_EMBEDDINGS, video_id);
+        self.get_hash(&key).await
     }
 
     pub async fn store_user_uploaded_content_approval(
         &self,
-        video_id: &str,
-        approval_data: &serde_json::Value,
+        data: &UserUploadedContentApproval,
     ) -> Result<()> {
+        let key = format!("{}:{}", keys::USER_UPLOADED_CONTENT_APPROVAL, data.video_id);
+        self.set_hash(&key, data).await
+    }
+
+    pub async fn get_user_uploaded_content_approval(
+        &self,
+        video_id: &str,
+    ) -> Result<Option<UserUploadedContentApproval>> {
         let key = format!("{}:{}", keys::USER_UPLOADED_CONTENT_APPROVAL, video_id);
-        self.set_json(&key, approval_data).await
+        self.get_hash(&key).await
     }
 
     pub async fn update_user_uploaded_content_approval_status(
@@ -320,14 +522,9 @@ impl KvrocksClient {
         is_approved: bool,
     ) -> Result<()> {
         let key = format!("{}:{}", keys::USER_UPLOADED_CONTENT_APPROVAL, video_id);
-        if let Some(mut data) = self.get_json::<serde_json::Value>(&key).await? {
-            if let Some(obj) = data.as_object_mut() {
-                obj.insert(
-                    "is_approved".to_string(),
-                    serde_json::Value::Bool(is_approved),
-                );
-                self.set_json(&key, &data).await?;
-            }
+        if let Some(mut data) = self.get_user_uploaded_content_approval(video_id).await? {
+            data.is_approved = is_approved;
+            self.set_hash(&key, &data).await?;
         }
         Ok(())
     }
@@ -337,38 +534,213 @@ impl KvrocksClient {
         self.del(&key).await
     }
 
-    pub async fn store_bot_uploaded_ai_content(
-        &self,
-        video_id: &str,
-        data: &serde_json::Value,
-    ) -> Result<()> {
-        let key = format!("{}:{}", keys::BOT_UPLOADED_AI_CONTENT, video_id);
-        self.set_json(&key, data).await
+    pub async fn store_bot_uploaded_ai_content(&self, data: &BotUploadedAiContent) -> Result<()> {
+        let key = format!("{}:{}", keys::BOT_UPLOADED_AI_CONTENT, data.video_id);
+        self.set_hash(&key, data).await
     }
 
-    pub async fn store_video_metadata(
-        &self,
-        video_id: &str,
-        post_id: &str,
-        publisher_user_id: &str,
-    ) -> Result<()> {
-        let key = format!("{}:{}", keys::VIDEO_METADATA, video_id);
-        let metadata = serde_json::json!({
-            "video_id": video_id,
-            "post_id": post_id,
-            "publisher_user_id": publisher_user_id,
-        });
-        self.set_json(&key, &metadata).await
+    pub async fn store_video_metadata(&self, data: &VideoMetadata) -> Result<()> {
+        let key = format!("{}:{}", keys::VIDEO_METADATA, data.video_id);
+        self.set_hash(&key, data).await
     }
 
-    pub async fn get_video_metadata(&self, video_id: &str) -> Result<Option<serde_json::Value>> {
+    pub async fn get_video_metadata(&self, video_id: &str) -> Result<Option<VideoMetadata>> {
         let key = format!("{}:{}", keys::VIDEO_METADATA, video_id);
-        self.get_json(&key).await
+        self.get_hash(&key).await
     }
 
     pub async fn delete_video_unique_v2(&self, video_id: &str) -> Result<()> {
         let key = format!("{}:{}", keys::VIDEO_UNIQUE_V2, video_id);
         self.del(&key).await
+    }
+
+    pub async fn fetch_unprocessed_video_phashes(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>> {
+        let mut conn = self.get_connection().await?;
+        let pattern = format!("{}:*", keys::VIDEOHASH_PHASH);
+        let mut cursor = 0u64;
+        let mut unprocessed = Vec::new();
+
+        loop {
+            let (new_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(&pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut conn)
+                .await
+                .context("Failed to scan videohash_phash keys")?;
+
+            for key in keys {
+                if unprocessed.len() >= limit {
+                    break;
+                }
+
+                let video_id = key
+                    .strip_prefix(&format!("{}:", keys::VIDEOHASH_PHASH))
+                    .unwrap_or("")
+                    .to_string();
+
+                if video_id.is_empty() {
+                    continue;
+                }
+
+                let dedup_key = format!("{}:{}", keys::VIDEO_DEDUP_STATUS, video_id);
+                let exists: bool = conn.exists(&dedup_key).await.unwrap_or(false);
+
+                if !exists {
+                    if let Some(phash_data) = self.get_videohash_phash(&video_id).await? {
+                        unprocessed.push((video_id, phash_data.phash));
+                    }
+                }
+            }
+
+            cursor = new_cursor;
+            if cursor == 0 || unprocessed.len() >= limit {
+                break;
+            }
+        }
+
+        log::info!(
+            "Found {} unprocessed videos from kvrocks scan",
+            unprocessed.len()
+        );
+        Ok(unprocessed)
+    }
+
+    pub async fn has_any_processed_videos(&self) -> Result<bool> {
+        let mut conn = self.get_connection().await?;
+        let pattern = format!("{}:*", keys::VIDEO_DEDUP_STATUS);
+
+        // Just try to find one key
+        let (_, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+            .arg(0)
+            .arg("MATCH")
+            .arg(&pattern)
+            .arg("COUNT")
+            .arg(1)
+            .query_async(&mut conn)
+            .await
+            .context("Failed to scan video_dedup_status keys")?;
+
+        Ok(!keys.is_empty())
+    }
+
+    pub async fn fetch_unique_videos_for_backfill(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>> {
+        let mut conn = self.get_connection().await?;
+        let pattern = format!("{}:*", keys::VIDEO_UNIQUE_V2);
+        let mut cursor = 0u64;
+        let mut unique_videos = Vec::new();
+
+        loop {
+            let (new_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(&pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut conn)
+                .await
+                .context("Failed to scan video_unique_v2 keys")?;
+
+            for key in keys {
+                if unique_videos.len() >= limit {
+                    break;
+                }
+
+                let video_id = key
+                    .strip_prefix(&format!("{}:", keys::VIDEO_UNIQUE_V2))
+                    .unwrap_or("")
+                    .to_string();
+
+                if video_id.is_empty() {
+                    continue;
+                }
+
+                let dedup_key = format!("{}:{}", keys::VIDEO_DEDUP_STATUS, video_id);
+                let exists: bool = conn.exists(&dedup_key).await.unwrap_or(false);
+
+                if exists {
+                    continue; // Already processed
+                }
+
+                if let Some(phash_data) = self.get_videohash_phash(&video_id).await? {
+                    unique_videos.push((video_id, phash_data.phash));
+                }
+            }
+
+            cursor = new_cursor;
+            if cursor == 0 || unique_videos.len() >= limit {
+                break;
+            }
+        }
+
+        log::info!(
+            "Found {} unique videos for backfill from kvrocks scan",
+            unique_videos.len()
+        );
+        Ok(unique_videos)
+    }
+
+    // ============ NSFW V2 Batch Methods ============
+
+    /// Add an item to the NSFW v2 pending batch. Returns the new batch size.
+    pub async fn add_to_nsfw_v2_batch(&self, item: &PendingNsfwV2Item) -> Result<usize> {
+        let mut conn = self.get_connection().await?;
+        let json_str = serde_json::to_string(item)?;
+        conn.hset::<_, _, _, ()>(
+            internal_keys::NSFW_V2_PENDING_BATCH,
+            &item.video_id,
+            json_str,
+        )
+        .await?;
+        let count: usize = conn.hlen(internal_keys::NSFW_V2_PENDING_BATCH).await?;
+        Ok(count)
+    }
+
+    /// Get the current batch size
+    pub async fn get_nsfw_v2_batch_size(&self) -> Result<usize> {
+        let mut conn = self.get_connection().await?;
+        let count: usize = conn.hlen(internal_keys::NSFW_V2_PENDING_BATCH).await?;
+        Ok(count)
+    }
+
+    /// Get all items in the pending batch
+    pub async fn get_nsfw_v2_batch_items(&self) -> Result<Vec<PendingNsfwV2Item>> {
+        let mut conn = self.get_connection().await?;
+        let items: std::collections::HashMap<String, String> =
+            conn.hgetall(internal_keys::NSFW_V2_PENDING_BATCH).await?;
+
+        let mut result = Vec::with_capacity(items.len());
+        for (_video_id, json_str) in items {
+            if let Ok(item) = serde_json::from_str::<PendingNsfwV2Item>(&json_str) {
+                result.push(item);
+            }
+        }
+        Ok(result)
+    }
+
+    /// Clear the pending batch
+    pub async fn clear_nsfw_v2_batch(&self) -> Result<()> {
+        let mut conn = self.get_connection().await?;
+        conn.del::<_, ()>(internal_keys::NSFW_V2_PENDING_BATCH)
+            .await?;
+        Ok(())
+    }
+
+    /// Atomically get all items and clear the batch
+    pub async fn take_nsfw_v2_batch(&self) -> Result<Vec<PendingNsfwV2Item>> {
+        let items = self.get_nsfw_v2_batch_items().await?;
+        if !items.is_empty() {
+            self.clear_nsfw_v2_batch().await?;
+        }
+        Ok(items)
     }
 }
 

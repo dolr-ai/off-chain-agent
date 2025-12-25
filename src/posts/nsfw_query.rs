@@ -7,12 +7,11 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use google_cloud_bigquery::http::job::query::QueryRequest;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
 
-use crate::{app_state::AppState, AppError};
+use crate::{app_state::AppState, kvrocks::KvrocksClient, AppError};
 
 #[derive(Serialize, Deserialize, ToSchema, Debug)]
 pub struct NsfwQueryResponse {
@@ -37,7 +36,7 @@ pub async fn get_nsfw_data(
     Path(video_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let nsfw_probability = query_nsfw_from_bigquery(&state.bigquery_client, &video_id).await?;
+    let nsfw_probability = query_nsfw(&state.kvrocks_client, &video_id).await?;
 
     match nsfw_probability {
         Some(probability) => Ok((
@@ -55,38 +54,18 @@ pub async fn get_nsfw_data(
     }
 }
 
-#[instrument(skip(bigquery_client))]
-async fn query_nsfw_from_bigquery(
-    bigquery_client: &google_cloud_bigquery::client::Client,
+#[instrument(skip(kvrocks_client))]
+async fn query_nsfw(
+    kvrocks_client: &Option<KvrocksClient>,
     video_id: &str,
 ) -> Result<Option<f32>, Error> {
-    let query = format!(
-        "SELECT probability FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw_agg` WHERE video_id = '{}'",
-        video_id
-    );
-
-    let request = QueryRequest {
-        query,
-        ..Default::default()
-    };
-
-    let result = bigquery_client
-        .job()
-        .query("hot-or-not-feed-intelligence", &request)
-        .await?;
-
-    // Check if we have any rows
-    let rows = result.rows.unwrap_or_default();
-    if rows.is_empty() {
+    let Some(kvrocks) = kvrocks_client else {
         return Ok(None);
-    }
-
-    // Get the first row and extract probability
-    let row = &rows[0];
-    let probability = match &row.f[0].v {
-        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.parse::<f32>().ok(),
-        _ => None,
     };
+
+    let nsfw_data = kvrocks.get_video_nsfw(video_id).await?;
+
+    let probability = nsfw_data.and_then(|data| data.probability);
 
     Ok(probability)
 }

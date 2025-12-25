@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use crate::kvrocks::VideoDedupStatus;
 use crate::milvus::{self, Client as MilvusClient};
 use anyhow::{Context, Result};
 use axum::{extract::State, http::StatusCode, Json};
@@ -591,55 +592,18 @@ async fn fetch_unprocessed_videos(
     state: &AppState,
     req: &IngestPhashRequest,
 ) -> Result<Vec<(String, String)>> {
-    let query = format!(
-        "SELECT video_id, phash
-         FROM `hot-or-not-feed-intelligence.yral_ds.videohash_phash`
-         WHERE video_id NOT IN (
-           SELECT video_id
-           FROM `hot-or-not-feed-intelligence.yral_ds.video_dedup_status`
-         )
-         ORDER BY created_at ASC
-         LIMIT {}",
-        req.limit
-    );
+    // Use kvrocks to fetch unprocessed videos
+    let kvrocks = state
+        .kvrocks_client
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("kvrocks client not available"))?;
 
-    log::debug!("Executing BigQuery query: {}", query);
-
-    let request = QueryRequest {
-        query,
-        ..Default::default()
-    };
-
-    let response = state
-        .bigquery_client
-        .job()
-        .query("hot-or-not-feed-intelligence", &request)
+    let videos = kvrocks
+        .fetch_unprocessed_video_phashes(req.limit as usize)
         .await
-        .context("Failed to execute BigQuery query")?;
+        .context("Failed to fetch unprocessed videos from kvrocks")?;
 
-    let mut videos = Vec::new();
-
-    if let Some(rows) = response.rows.as_ref() {
-        for row in rows {
-            if row.f.len() < 2 {
-                continue;
-            }
-
-            let video_id = match &row.f[0].v {
-                Value::String(s) => s.clone(),
-                _ => continue,
-            };
-
-            let phash = match &row.f[1].v {
-                Value::String(s) => s.clone(),
-                _ => continue,
-            };
-
-            videos.push((video_id, phash));
-        }
-    }
-
-    log::info!("Fetched {} videos from BigQuery", videos.len());
+    log::info!("Fetched {} unprocessed videos from kvrocks", videos.len());
     Ok(videos)
 }
 
@@ -648,66 +612,19 @@ async fn fetch_unique_videos_for_backfill(
     state: &AppState,
     req: &IngestPhashRequest,
 ) -> Result<Vec<(String, String)>> {
-    let query = format!(
-        "SELECT video_id, phash
-         FROM
-         (
-          SELECT
-              DISTINCT t1.video_id,
-              t2.phash
-            FROM
-              `hot-or-not-feed-intelligence`.`yral_ds`.`video_unique` AS t1
-            INNER JOIN
-              `hot-or-not-feed-intelligence`.`yral_ds`.`videohash_phash` AS t2
-            ON
-              t1.video_id = t2.video_id
-         )
-         WHERE video_id NOT IN (
-           SELECT video_id
-           FROM `hot-or-not-feed-intelligence.yral_ds.video_dedup_status`
-         )
-         LIMIT {}",
-        req.limit
-    );
+    // Use kvrocks to fetch unique videos for backfill
+    let kvrocks = state
+        .kvrocks_client
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("kvrocks client not available"))?;
 
-    log::debug!("Executing BigQuery backfill query: {}", query);
-
-    let request = QueryRequest {
-        query,
-        ..Default::default()
-    };
-
-    let response = state
-        .bigquery_client
-        .job()
-        .query("hot-or-not-feed-intelligence", &request)
+    let videos = kvrocks
+        .fetch_unique_videos_for_backfill(req.limit as usize)
         .await
-        .context("Failed to execute BigQuery backfill query")?;
-
-    let mut videos = Vec::new();
-
-    if let Some(rows) = response.rows.as_ref() {
-        for row in rows {
-            if row.f.len() < 2 {
-                continue;
-            }
-
-            let video_id = match &row.f[0].v {
-                Value::String(s) => s.clone(),
-                _ => continue,
-            };
-
-            let phash = match &row.f[1].v {
-                Value::String(s) => s.clone(),
-                _ => continue,
-            };
-
-            videos.push((video_id, phash));
-        }
-    }
+        .context("Failed to fetch unique videos for backfill from kvrocks")?;
 
     log::info!(
-        "Fetched {} unique videos from BigQuery for backfill",
+        "Fetched {} unique videos for backfill from kvrocks",
         videos.len()
     );
     Ok(videos)
@@ -715,34 +632,16 @@ async fn fetch_unique_videos_for_backfill(
 
 #[cfg(not(feature = "local-bin"))]
 async fn has_any_processed_videos(state: &AppState) -> Result<bool> {
-    let query = "SELECT COUNT(*) as count FROM `hot-or-not-feed-intelligence.yral_ds.video_dedup_status` LIMIT 1";
+    // Use kvrocks to check if any videos have been processed
+    let kvrocks = state
+        .kvrocks_client
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("kvrocks client not available"))?;
 
-    let request = QueryRequest {
-        query: query.to_string(),
-        ..Default::default()
-    };
-
-    let response = state
-        .bigquery_client
-        .job()
-        .query("hot-or-not-feed-intelligence", &request)
+    kvrocks
+        .has_any_processed_videos()
         .await
-        .context("Failed to check video_dedup_status count")?;
-
-    if let Some(rows) = response.rows.as_ref() {
-        if let Some(row) = rows.first() {
-            if let Some(field) = row.f.first() {
-                if let Value::String(count_str) = &field.v {
-                    if let Ok(count) = count_str.parse::<i64>() {
-                        return Ok(count > 0);
-                    }
-                }
-            }
-        }
-    }
-
-    // Default to false if we can't parse the result
-    Ok(false)
+        .context("Failed to check if any videos have been processed in kvrocks")
 }
 
 #[cfg(not(feature = "local-bin"))]
@@ -977,7 +876,15 @@ async fn store_dedup_status(
 
     // Also push to kvrocks
     if let Some(ref kvrocks) = state.kvrocks_client {
-        if let Err(e) = kvrocks.store_video_dedup_status(video_id, &row_data).await {
+        let dedup_status = VideoDedupStatus {
+            video_id: video_id.to_string(),
+            phash: phash.to_string(),
+            is_duplicate: !is_unique,
+            duplicate_of,
+            hamming_distance,
+            ingested_at: chrono::Utc::now().to_rfc3339(),
+        };
+        if let Err(e) = kvrocks.store_video_dedup_status(&dedup_status).await {
             log::error!("Error pushing dedup_status to kvrocks: {}", e);
         }
     }
@@ -1724,8 +1631,16 @@ async fn store_dedup_status_with_table(
     // Also push to kvrocks with table suffix
     if let Some(ref kvrocks) = state.kvrocks_client {
         let table_suffix = format!("HAM{}", hamming_distance_threshold);
+        let dedup_status = VideoDedupStatus {
+            video_id: video_id.to_string(),
+            phash: phash.to_string(),
+            is_duplicate: !is_unique,
+            duplicate_of,
+            hamming_distance: hamming_distance_actual,
+            ingested_at: chrono::Utc::now().to_rfc3339(),
+        };
         if let Err(e) = kvrocks
-            .store_video_dedup_status_with_table(&table_suffix, video_id, &row_data)
+            .store_video_dedup_status_with_table(&table_suffix, &dedup_status)
             .await
         {
             log::error!(
