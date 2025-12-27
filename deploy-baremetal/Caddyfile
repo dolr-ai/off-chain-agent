@@ -18,11 +18,6 @@ offchain.yral.com {
             versions h2c
         }
 
-        # Health checking
-        health_uri /
-        health_interval 30s
-        health_timeout 10s
-
         # Headers for gRPC
         header_up Host {host}
         header_up X-Real-IP {remote_host}
