@@ -330,6 +330,17 @@ async fn init_leaderboard_redis_pool() -> RedisPool {
     let redis_url =
         std::env::var("LEADERBOARD_REDIS_URL").expect("Either LEADERBOARD_REDIS_URL must be set");
 
+    // Add insecure=true parameter if using rediss:// to skip certificate verification
+    let redis_url = if redis_url.starts_with("rediss://") && !redis_url.contains("insecure") {
+        if redis_url.contains('?') {
+            format!("{}&insecure=true", redis_url)
+        } else {
+            format!("{}?insecure=true", redis_url)
+        }
+    } else {
+        redis_url
+    };
+
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
     RedisPool::builder().build(manager).await.unwrap()
