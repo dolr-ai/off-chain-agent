@@ -42,7 +42,7 @@ async fn get_timezone_from_ip(ip: &str) -> Option<(String, Tz)> {
     let token = std::env::var("TIMEZONE_API_TOKEN").ok()?;
 
     let url = format!(
-        "https://marketing-analytics-server.fly.dev/api/ip_v2/{}",
+        "https://analytics.yral.com/api/ip_v2/{}",
         ip
     );
 
