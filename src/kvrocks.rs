@@ -20,10 +20,6 @@ pub mod keys {
     pub const VIDEO_METADATA: &str = "offchain:metadata:video_details";
 }
 
-pub mod internal_keys {
-    pub const NSFW_V2_PENDING_BATCH: &str = "offchain_internal_video_processing:temp:nsfw_v2_batch";
-}
-
 /// NSFW classification data for a video
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoNsfw {
@@ -122,14 +118,6 @@ pub struct VideoMetadata {
     pub video_id: String,
     pub post_id: String,
     pub publisher_user_id: String,
-}
-
-/// Pending NSFW v2 batch item for batched BigQuery processing
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingNsfwV2Item {
-    pub video_id: String,
-    pub nsfw_prob: f32,
-    pub is_nsfw: bool,
 }
 
 #[derive(Clone)]
@@ -686,61 +674,6 @@ impl KvrocksClient {
             unique_videos.len()
         );
         Ok(unique_videos)
-    }
-
-    // ============ NSFW V2 Batch Methods ============
-
-    /// Add an item to the NSFW v2 pending batch. Returns the new batch size.
-    pub async fn add_to_nsfw_v2_batch(&self, item: &PendingNsfwV2Item) -> Result<usize> {
-        let mut conn = self.get_connection().await?;
-        let json_str = serde_json::to_string(item)?;
-        conn.hset::<_, _, _, ()>(
-            internal_keys::NSFW_V2_PENDING_BATCH,
-            &item.video_id,
-            json_str,
-        )
-        .await?;
-        let count: usize = conn.hlen(internal_keys::NSFW_V2_PENDING_BATCH).await?;
-        Ok(count)
-    }
-
-    /// Get the current batch size
-    pub async fn get_nsfw_v2_batch_size(&self) -> Result<usize> {
-        let mut conn = self.get_connection().await?;
-        let count: usize = conn.hlen(internal_keys::NSFW_V2_PENDING_BATCH).await?;
-        Ok(count)
-    }
-
-    /// Get all items in the pending batch
-    pub async fn get_nsfw_v2_batch_items(&self) -> Result<Vec<PendingNsfwV2Item>> {
-        let mut conn = self.get_connection().await?;
-        let items: std::collections::HashMap<String, String> =
-            conn.hgetall(internal_keys::NSFW_V2_PENDING_BATCH).await?;
-
-        let mut result = Vec::with_capacity(items.len());
-        for (_video_id, json_str) in items {
-            if let Ok(item) = serde_json::from_str::<PendingNsfwV2Item>(&json_str) {
-                result.push(item);
-            }
-        }
-        Ok(result)
-    }
-
-    /// Clear the pending batch
-    pub async fn clear_nsfw_v2_batch(&self) -> Result<()> {
-        let mut conn = self.get_connection().await?;
-        conn.del::<_, ()>(internal_keys::NSFW_V2_PENDING_BATCH)
-            .await?;
-        Ok(())
-    }
-
-    /// Atomically get all items and clear the batch
-    pub async fn take_nsfw_v2_batch(&self) -> Result<Vec<PendingNsfwV2Item>> {
-        let items = self.get_nsfw_v2_batch_items().await?;
-        if !items.is_empty() {
-            self.clear_nsfw_v2_batch().await?;
-        }
-        Ok(items)
     }
 }
 

@@ -270,15 +270,10 @@ pub struct VideoUniqueRow {
 
 #[instrument(skip(kvrocks_client))]
 async fn get_hash_from_videohash_original(
-    kvrocks_client: &Option<KvrocksClient>,
+    kvrocks_client: &KvrocksClient,
     video_id: &str,
 ) -> anyhow::Result<Option<String>> {
-    let Some(kvrocks) = kvrocks_client else {
-        return Ok(None);
-    };
-
-    let data = kvrocks.get_videohash_original(video_id).await?;
-
+    let data = kvrocks_client.get_videohash_original(video_id).await?;
     Ok(data.map(|d| d.videohash))
 }
 
@@ -286,15 +281,14 @@ async fn get_hash_from_videohash_original(
 pub async fn handle_duplicate_post_on_delete(
     agent: &Agent,
     bq_client: Client,
-    kvrocks_client: &Option<KvrocksClient>,
+    kvrocks_client: &KvrocksClient,
     video_id: String,
 ) -> Result<(), anyhow::Error> {
     // check if its unique using kvrocks
-    let is_unique = if let Some(kvrocks) = kvrocks_client {
-        kvrocks.get_video_unique_v2(&video_id).await?.is_some()
-    } else {
-        false
-    };
+    let is_unique = kvrocks_client
+        .get_video_unique_v2(&video_id)
+        .await?
+        .is_some();
 
     let videohash = get_hash_from_videohash_original(kvrocks_client, &video_id)
         .await
@@ -443,7 +437,7 @@ pub async fn insert_video_delete_row_to_bigquery_v2(
 
 pub async fn bulk_insert_video_delete_rows(
     bq_client: &Client,
-    kvrocks_client: &Option<KvrocksClient>,
+    kvrocks_client: &KvrocksClient,
     posts: Vec<UserPost>,
 ) -> Result<(), anyhow::Error> {
     // Process posts in batches of 500
@@ -489,22 +483,20 @@ pub async fn bulk_insert_video_delete_rows(
         }
 
         // Also push to kvrocks
-        if let Some(ref kvrocks) = kvrocks_client {
-            for post in chunk {
-                let delete_data = VideoDeleted {
-                    canister_id: post.canister_id.to_string(),
-                    post_id: post.post_id.to_string(),
-                    video_id: post.video_id.clone(),
-                    gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
-                    deleted_at: chrono::Utc::now().to_rfc3339(),
-                };
-                if let Err(e) = kvrocks.store_video_deleted(&delete_data).await {
-                    log::error!(
-                        "Error pushing video delete data to kvrocks for {}: {}",
-                        post.video_id,
-                        e
-                    );
-                }
+        for post in chunk {
+            let delete_data = VideoDeleted {
+                canister_id: post.canister_id.to_string(),
+                post_id: post.post_id.to_string(),
+                video_id: post.video_id.clone(),
+                gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
+                deleted_at: chrono::Utc::now().to_rfc3339(),
+            };
+            if let Err(e) = kvrocks_client.store_video_deleted(&delete_data).await {
+                log::error!(
+                    "Error pushing video delete data to kvrocks for {}: {}",
+                    post.video_id,
+                    e
+                );
             }
         }
     }
@@ -514,7 +506,7 @@ pub async fn bulk_insert_video_delete_rows(
 
 pub async fn bulk_insert_video_delete_rows_v2(
     bq_client: &Client,
-    kvrocks_client: &Option<KvrocksClient>,
+    kvrocks_client: &KvrocksClient,
     posts: Vec<UserPostV2>,
 ) -> Result<(), anyhow::Error> {
     // Process posts in batches of 500
@@ -560,22 +552,20 @@ pub async fn bulk_insert_video_delete_rows_v2(
         }
 
         // Also push to kvrocks
-        if let Some(ref kvrocks) = kvrocks_client {
-            for post in chunk {
-                let delete_data = VideoDeleted {
-                    canister_id: post.canister_id.clone(),
-                    post_id: post.post_id.clone(),
-                    video_id: post.video_id.clone(),
-                    gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
-                    deleted_at: chrono::Utc::now().to_rfc3339(),
-                };
-                if let Err(e) = kvrocks.store_video_deleted(&delete_data).await {
-                    log::error!(
-                        "Error pushing video delete data to kvrocks for {}: {}",
-                        post.video_id,
-                        e
-                    );
-                }
+        for post in chunk {
+            let delete_data = VideoDeleted {
+                canister_id: post.canister_id.clone(),
+                post_id: post.post_id.clone(),
+                video_id: post.video_id.clone(),
+                gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
+                deleted_at: chrono::Utc::now().to_rfc3339(),
+            };
+            if let Err(e) = kvrocks_client.store_video_deleted(&delete_data).await {
+                log::error!(
+                    "Error pushing video delete data to kvrocks for {}: {}",
+                    post.video_id,
+                    e
+                );
             }
         }
     }

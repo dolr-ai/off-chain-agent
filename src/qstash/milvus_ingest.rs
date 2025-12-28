@@ -593,12 +593,8 @@ async fn fetch_unprocessed_videos(
     req: &IngestPhashRequest,
 ) -> Result<Vec<(String, String)>> {
     // Use kvrocks to fetch unprocessed videos
-    let kvrocks = state
+    let videos = state
         .kvrocks_client
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("kvrocks client not available"))?;
-
-    let videos = kvrocks
         .fetch_unprocessed_video_phashes(req.limit as usize)
         .await
         .context("Failed to fetch unprocessed videos from kvrocks")?;
@@ -613,12 +609,8 @@ async fn fetch_unique_videos_for_backfill(
     req: &IngestPhashRequest,
 ) -> Result<Vec<(String, String)>> {
     // Use kvrocks to fetch unique videos for backfill
-    let kvrocks = state
+    let videos = state
         .kvrocks_client
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("kvrocks client not available"))?;
-
-    let videos = kvrocks
         .fetch_unique_videos_for_backfill(req.limit as usize)
         .await
         .context("Failed to fetch unique videos for backfill from kvrocks")?;
@@ -633,12 +625,8 @@ async fn fetch_unique_videos_for_backfill(
 #[cfg(not(feature = "local-bin"))]
 async fn has_any_processed_videos(state: &AppState) -> Result<bool> {
     // Use kvrocks to check if any videos have been processed
-    let kvrocks = state
+    state
         .kvrocks_client
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("kvrocks client not available"))?;
-
-    kvrocks
         .has_any_processed_videos()
         .await
         .context("Failed to check if any videos have been processed in kvrocks")
@@ -875,18 +863,20 @@ async fn store_dedup_status(
     }
 
     // Also push to kvrocks
-    if let Some(ref kvrocks) = state.kvrocks_client {
-        let dedup_status = VideoDedupStatus {
-            video_id: video_id.to_string(),
-            phash: phash.to_string(),
-            is_duplicate: !is_unique,
-            duplicate_of,
-            hamming_distance,
-            ingested_at: chrono::Utc::now().to_rfc3339(),
-        };
-        if let Err(e) = kvrocks.store_video_dedup_status(&dedup_status).await {
-            log::error!("Error pushing dedup_status to kvrocks: {}", e);
-        }
+    let dedup_status = VideoDedupStatus {
+        video_id: video_id.to_string(),
+        phash: phash.to_string(),
+        is_duplicate: !is_unique,
+        duplicate_of,
+        hamming_distance,
+        ingested_at: chrono::Utc::now().to_rfc3339(),
+    };
+    if let Err(e) = state
+        .kvrocks_client
+        .store_video_dedup_status(&dedup_status)
+        .await
+    {
+        log::error!("Error pushing dedup_status to kvrocks: {}", e);
     }
 
     Ok(())
@@ -1629,26 +1619,25 @@ async fn store_dedup_status_with_table(
     }
 
     // Also push to kvrocks with table suffix
-    if let Some(ref kvrocks) = state.kvrocks_client {
-        let table_suffix = format!("HAM{}", hamming_distance_threshold);
-        let dedup_status = VideoDedupStatus {
-            video_id: video_id.to_string(),
-            phash: phash.to_string(),
-            is_duplicate: !is_unique,
-            duplicate_of,
-            hamming_distance: hamming_distance_actual,
-            ingested_at: chrono::Utc::now().to_rfc3339(),
-        };
-        if let Err(e) = kvrocks
-            .store_video_dedup_status_with_table(&table_suffix, &dedup_status)
-            .await
-        {
-            log::error!(
-                "Error pushing dedup_status to kvrocks ({}): {}",
-                table_suffix,
-                e
-            );
-        }
+    let table_suffix = format!("HAM{}", hamming_distance_threshold);
+    let dedup_status = VideoDedupStatus {
+        video_id: video_id.to_string(),
+        phash: phash.to_string(),
+        is_duplicate: !is_unique,
+        duplicate_of,
+        hamming_distance: hamming_distance_actual,
+        ingested_at: chrono::Utc::now().to_rfc3339(),
+    };
+    if let Err(e) = state
+        .kvrocks_client
+        .store_video_dedup_status_with_table(&table_suffix, &dedup_status)
+        .await
+    {
+        log::error!(
+            "Error pushing dedup_status to kvrocks ({}): {}",
+            table_suffix,
+            e
+        );
     }
 
     Ok(())

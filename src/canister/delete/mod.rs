@@ -276,7 +276,7 @@ async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPostV2>) {
 async fn handle_duplicate_posts_cleanup(
     agent: &Agent,
     bigquery_client: google_cloud_bigquery::client::Client,
-    kvrocks_client: Option<crate::kvrocks::KvrocksClient>,
+    kvrocks_client: crate::kvrocks::KvrocksClient,
     video_ids: Vec<String>,
 ) {
     let futures: Vec<_> = video_ids

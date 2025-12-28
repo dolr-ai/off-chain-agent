@@ -261,6 +261,9 @@ jobs:
             KVROCKS_CA_CERT='${{ secrets.KVROCKS_CA_CERT }}' \
             KVROCKS_CLIENT_CERT='${{ secrets.KVROCKS_CLIENT_CERT }}' \
             KVROCKS_CLIENT_KEY='${{ secrets.KVROCKS_CLIENT_KEY }}' \
+            SCRATCHPAD_DRAGONFLY_HOST='${{ vars.SCRATCHPAD_DRAGONFLY_HOST }}' \
+            SCRATCHPAD_DRAGONFLY_PORT='${{ vars.SCRATCHPAD_DRAGONFLY_PORT }}' \
+            SCRATCHPAD_DRAGONFLY_PASSWORD='${{ secrets.SCRATCHPAD_DRAGONFLY_PASSWORD }}' \
             docker compose up -d
 
             echo 'Waiting for services to start...'

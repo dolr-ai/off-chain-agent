@@ -51,6 +51,7 @@ pub mod pipeline;
 mod posts;
 mod qstash;
 mod rewards;
+pub mod scratchpad;
 mod types;
 pub mod user;
 pub mod utils;

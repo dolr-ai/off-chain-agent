@@ -329,7 +329,7 @@ async fn fetch_pending_videos(
 #[instrument(skip(bigquery_client, kvrocks_client))]
 async fn update_approval_status(
     bigquery_client: &google_cloud_bigquery::client::Client,
-    kvrocks_client: &Option<KvrocksClient>,
+    kvrocks_client: &KvrocksClient,
     video_id: &str,
 ) -> Result<bool, anyhow::Error> {
     // Escape video ID for SQL
@@ -363,13 +363,11 @@ async fn update_approval_status(
 
     // Also update in kvrocks
     if affected {
-        if let Some(ref kvrocks) = kvrocks_client {
-            if let Err(e) = kvrocks
-                .update_user_uploaded_content_approval_status(video_id, true)
-                .await
-            {
-                log::error!("Error updating approval status in kvrocks: {}", e);
-            }
+        if let Err(e) = kvrocks_client
+            .update_user_uploaded_content_approval_status(video_id, true)
+            .await
+        {
+            log::error!("Error updating approval status in kvrocks: {}", e);
         }
     }
 
@@ -379,7 +377,7 @@ async fn update_approval_status(
 #[instrument(skip(bigquery_client, kvrocks_client))]
 async fn delete_video(
     bigquery_client: &google_cloud_bigquery::client::Client,
-    kvrocks_client: &Option<KvrocksClient>,
+    kvrocks_client: &KvrocksClient,
     video_id: &str,
 ) -> Result<bool, anyhow::Error> {
     // Escape video ID for SQL
@@ -412,13 +410,11 @@ async fn delete_video(
 
     // Also delete from kvrocks
     if deleted {
-        if let Some(ref kvrocks) = kvrocks_client {
-            if let Err(e) = kvrocks
-                .delete_user_uploaded_content_approval(video_id)
-                .await
-            {
-                log::error!("Error deleting approval from kvrocks: {}", e);
-            }
+        if let Err(e) = kvrocks_client
+            .delete_user_uploaded_content_approval(video_id)
+            .await
+        {
+            log::error!("Error deleting approval from kvrocks: {}", e);
         }
     }
 

@@ -55,17 +55,8 @@ pub async fn get_nsfw_data(
 }
 
 #[instrument(skip(kvrocks_client))]
-async fn query_nsfw(
-    kvrocks_client: &Option<KvrocksClient>,
-    video_id: &str,
-) -> Result<Option<f32>, Error> {
-    let Some(kvrocks) = kvrocks_client else {
-        return Ok(None);
-    };
-
-    let nsfw_data = kvrocks.get_video_nsfw(video_id).await?;
-
+async fn query_nsfw(kvrocks_client: &KvrocksClient, video_id: &str) -> Result<Option<f32>, Error> {
+    let nsfw_data = kvrocks_client.get_video_nsfw(video_id).await?;
     let probability = nsfw_data.and_then(|data| data.probability);
-
     Ok(probability)
 }
