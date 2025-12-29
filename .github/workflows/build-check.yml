@@ -69,8 +69,7 @@ jobs:
         env:
           RUSTFLAGS: "-C link-arg=-Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -L /usr/lib/x86_64-linux-gnu -l blas -l lapack"
         run: cargo build --release --bin icp-off-chain-agent --target x86_64-unknown-linux-gnu --features prod-bin
-      # - name: Run tests
-      #   run: cargo test --verbose
+
       - run: touch .empty
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4

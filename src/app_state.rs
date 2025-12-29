@@ -2,10 +2,12 @@ use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
+use crate::kvrocks::KvrocksClient;
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
+use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
@@ -62,6 +64,12 @@ pub struct AppState {
     pub user_migration_api_key: String,
     #[cfg(not(feature = "local-bin"))]
     pub milvus_client: Option<MilvusClient>,
+    #[cfg(not(feature = "local-bin"))]
+    pub kvrocks_client: KvrocksClient,
+
+    // This uses ds staging
+    #[cfg(not(feature = "local-bin"))]
+    pub scratchpad_client: ScratchpadClient,
 }
 
 impl AppState {
@@ -78,6 +86,11 @@ impl AppState {
 
         #[cfg(not(feature = "local-bin"))]
         let milvus_client = init_milvus_client(&app_config).await;
+
+        #[cfg(not(feature = "local-bin"))]
+        let kvrocks_client = init_kvrocks_client().await;
+        #[cfg(not(feature = "local-bin"))]
+        let scratchpad_client = init_scratchpad_client().await;
 
         AppState {
             admin_identity: init_identity(),
@@ -117,6 +130,10 @@ impl AppState {
                 .expect("YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY is not set"),
             #[cfg(not(feature = "local-bin"))]
             milvus_client,
+            #[cfg(not(feature = "local-bin"))]
+            kvrocks_client,
+            #[cfg(not(feature = "local-bin"))]
+            scratchpad_client,
         }
     }
 
@@ -375,4 +392,16 @@ async fn init_milvus_client(app_config: &AppConfig) -> Option<MilvusClient> {
             None
         }
     }
+}
+
+async fn init_kvrocks_client() -> KvrocksClient {
+    crate::kvrocks::init_kvrocks_client()
+        .await
+        .expect("Failed to connect to kvrocks - this is required for the application to function")
+}
+
+async fn init_scratchpad_client() -> ScratchpadClient {
+    crate::scratchpad::init_scratchpad_client()
+        .await
+        .expect("Failed to connect to scratchpad Dragonfly - this is required for the application to function")
 }

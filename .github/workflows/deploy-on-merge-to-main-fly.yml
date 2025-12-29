@@ -10,6 +10,12 @@ jobs:
     uses: ./.github/workflows/build-check.yml
     with:
       publish-artifact: true
+      KVROCKS_HOSTS: ${{ vars.KVROCKS_HOSTS }}
+    secrets:
+      KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
+      KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
+      KVROCKS_CLIENT_CERT: ${{ secrets.KVROCKS_CLIENT_CERT }}
+      KVROCKS_CLIENT_KEY: ${{ secrets.KVROCKS_CLIENT_KEY }}
 
   deploy:
     name: Deploy
@@ -75,6 +81,14 @@ jobs:
           flyctl secrets set "ANALYTICS_SERVER_TOKEN=$ANALYTICS_SERVER_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "MILVUS_URL=$MILVUS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set REPLICATE_WEBHOOK_SIGNING_SECRET="$REPLICATE_WEBHOOK_SIGNING_SECRET" --app "icp-off-chain-agent" --stage
+          flyctl secrets set KVROCKS_PASSWORD="$KVROCKS_PASSWORD" --app "icp-off-chain-agent" --stage
+          flyctl secrets set KVROCKS_HOSTS="$KVROCKS_HOSTS" --app "icp-off-chain-agent" --stage
+          printf '%s' "$KVROCKS_CA_CERT" | flyctl secrets set KVROCKS_CA_CERT=- --app "icp-off-chain-agent" --stage
+          printf '%s' "$KVROCKS_CLIENT_CERT" | flyctl secrets set KVROCKS_CLIENT_CERT=- --app "icp-off-chain-agent" --stage
+          printf '%s' "$KVROCKS_CLIENT_KEY" | flyctl secrets set KVROCKS_CLIENT_KEY=- --app "icp-off-chain-agent" --stage
+          flyctl secrets set SCRATCHPAD_DRAGONFLY_HOST="$SCRATCHPAD_DRAGONFLY_HOST" --app "icp-off-chain-agent" --stage
+          flyctl secrets set SCRATCHPAD_DRAGONFLY_PORT="$SCRATCHPAD_DRAGONFLY_PORT" --app "icp-off-chain-agent" --stage
+          flyctl secrets set SCRATCHPAD_DRAGONFLY_PASSWORD="$SCRATCHPAD_DRAGONFLY_PASSWORD" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
@@ -116,6 +130,14 @@ jobs:
           ANALYTICS_SERVER_TOKEN: ${{ secrets.ANALYTICS_SERVER_TOKEN }}
           MILVUS_URL: ${{ secrets.MILVUS_URL }}
           REPLICATE_WEBHOOK_SIGNING_SECRET: ${{ secrets.REPLICATE_WEBHOOK_SIGNING_SECRET }}
+          KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
+          KVROCKS_HOSTS: ${{ vars.KVROCKS_HOSTS }}
+          KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
+          KVROCKS_CLIENT_CERT: ${{ secrets.KVROCKS_CLIENT_CERT }}
+          KVROCKS_CLIENT_KEY: ${{ secrets.KVROCKS_CLIENT_KEY }}
+          SCRATCHPAD_DRAGONFLY_HOST: ${{ vars.SCRATCHPAD_DRAGONFLY_HOST }}
+          SCRATCHPAD_DRAGONFLY_PORT: ${{ vars.SCRATCHPAD_DRAGONFLY_PORT }}
+          SCRATCHPAD_DRAGONFLY_PASSWORD: ${{ secrets.SCRATCHPAD_DRAGONFLY_PASSWORD }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml
         env:

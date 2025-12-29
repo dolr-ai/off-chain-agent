@@ -1,5 +1,6 @@
 use crate::app_state::AppState;
 use crate::duplicate_video::phash::{download_video_from_storj, extract_metadata, PHasher};
+use crate::kvrocks::VideohashPhash;
 use crate::pipeline::Step;
 use crate::setup_context;
 use axum::{extract::State, response::Response, Json};
@@ -315,6 +316,26 @@ async fn store_phash_to_bigquery(
         }
 
         log::debug!("Successfully inserted phash for video_id: {}", video_id);
+
+        // Also push to kvrocks
+        let phash_data = VideohashPhash {
+            video_id: video_id.to_string(),
+            phash: phash.to_string(),
+            num_frames: 10,
+            hash_size: 8,
+            duration: metadata.duration,
+            width: metadata.width as i64,
+            height: metadata.height as i64,
+            fps: metadata.fps,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        };
+        if let Err(e) = state
+            .kvrocks_client
+            .store_videohash_phash(&phash_data)
+            .await
+        {
+            log::error!("Error pushing phash to kvrocks: {}", e);
+        }
     }
 
     #[cfg(feature = "local-bin")]

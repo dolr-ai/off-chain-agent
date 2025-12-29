@@ -20,6 +20,7 @@ jobs:
     uses: ./.github/workflows/build-check.yml
     with:
       publish-artifact: true
+    secrets: inherit
 
   build-and-push:
     name: Build and Push Docker Images
@@ -250,6 +251,14 @@ jobs:
             ANALYTICS_SERVER_TOKEN='${{ secrets.ANALYTICS_SERVER_TOKEN }}' \
             MILVUS_URL='${{ secrets.MILVUS_URL }}' \
             REPLICATE_WEBHOOK_SIGNING_SECRET='${{ secrets.REPLICATE_WEBHOOK_SIGNING_SECRET }}' \
+            KVROCKS_PASSWORD='${{ secrets.KVROCKS_PASSWORD }}' \
+            KVROCKS_HOSTS='${{ vars.KVROCKS_HOSTS }}' \
+            KVROCKS_CA_CERT='${{ secrets.KVROCKS_CA_CERT }}' \
+            KVROCKS_CLIENT_CERT='${{ secrets.KVROCKS_CLIENT_CERT }}' \
+            KVROCKS_CLIENT_KEY='${{ secrets.KVROCKS_CLIENT_KEY }}' \
+            SCRATCHPAD_DRAGONFLY_HOST='${{ vars.SCRATCHPAD_DRAGONFLY_HOST }}' \
+            SCRATCHPAD_DRAGONFLY_PORT='${{ vars.SCRATCHPAD_DRAGONFLY_PORT }}' \
+            SCRATCHPAD_DRAGONFLY_PASSWORD='${{ secrets.SCRATCHPAD_DRAGONFLY_PASSWORD }}' \
             docker compose up -d
 
             echo 'Waiting for services to start...'

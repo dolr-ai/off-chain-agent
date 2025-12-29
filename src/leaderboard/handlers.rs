@@ -41,10 +41,7 @@ async fn get_timezone_from_ip(ip: &str) -> Option<(String, Tz)> {
     // Get the bearer token from environment or config
     let token = std::env::var("TIMEZONE_API_TOKEN").ok()?;
 
-    let url = format!(
-        "https://analytics.yral.com/api/ip_v2/{}",
-        ip
-    );
+    let url = format!("https://analytics.yral.com/api/ip_v2/{}", ip);
 
     let client = reqwest::Client::new();
     let response = client

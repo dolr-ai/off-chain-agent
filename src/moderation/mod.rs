@@ -15,6 +15,7 @@ use tracing::instrument;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
+use crate::kvrocks::KvrocksClient;
 use crate::{
     app_state::AppState, consts::MODERATOR_PRINCIPALS, events::push_notifications::dispatch_notif,
     types::DelegatedIdentityWire,
@@ -182,8 +183,8 @@ pub async fn approve_video(
     // First fetch the video info before updating
     let video_info = fetch_video_info(&state.bigquery_client, &video_id).await?;
 
-    let updated = update_approval_status(&state.bigquery_client, &video_id).await?;
-
+    let updated =
+        update_approval_status(&state.bigquery_client, &state.kvrocks_client, &video_id).await?;
     if updated {
         // Send notification to the video owner via event pipeline
         if let Some(info) = video_info {
@@ -234,8 +235,7 @@ pub async fn disapprove_video(
     // First fetch the video info before deleting
     let video_info = fetch_video_info(&state.bigquery_client, &video_id).await?;
 
-    let deleted = delete_video(&state.bigquery_client, &video_id).await?;
-
+    let deleted = delete_video(&state.bigquery_client, &state.kvrocks_client, &video_id).await?;
     if deleted {
         // Send notification to the video owner via event pipeline
         if let Some(info) = video_info {
@@ -326,9 +326,10 @@ async fn fetch_pending_videos(
     Ok(videos)
 }
 
-#[instrument(skip(bigquery_client))]
+#[instrument(skip(bigquery_client, kvrocks_client))]
 async fn update_approval_status(
     bigquery_client: &google_cloud_bigquery::client::Client,
+    kvrocks_client: &KvrocksClient,
     video_id: &str,
 ) -> Result<bool, anyhow::Error> {
     // Escape video ID for SQL
@@ -360,12 +361,23 @@ async fn update_approval_status(
         if affected { "success" } else { "not found" }
     );
 
+    // Also update in kvrocks
+    if affected {
+        if let Err(e) = kvrocks_client
+            .update_user_uploaded_content_approval_status(video_id, true)
+            .await
+        {
+            log::error!("Error updating approval status in kvrocks: {}", e);
+        }
+    }
+
     Ok(affected)
 }
 
-#[instrument(skip(bigquery_client))]
+#[instrument(skip(bigquery_client, kvrocks_client))]
 async fn delete_video(
     bigquery_client: &google_cloud_bigquery::client::Client,
+    kvrocks_client: &KvrocksClient,
     video_id: &str,
 ) -> Result<bool, anyhow::Error> {
     // Escape video ID for SQL
@@ -395,6 +407,16 @@ async fn delete_video(
         video_id,
         if deleted { "success" } else { "not found" }
     );
+
+    // Also delete from kvrocks
+    if deleted {
+        if let Err(e) = kvrocks_client
+            .delete_user_uploaded_content_approval(video_id)
+            .await
+        {
+            log::error!("Error deleting approval from kvrocks: {}", e);
+        }
+    }
 
     Ok(deleted)
 }

@@ -67,9 +67,9 @@ impl Event {
                 ]
             });
 
-            let res = stream_to_bigquery(&app_state, data).await;
-            if res.is_err() {
-                error!("Error sending data to BigQuery: {}", res.err().unwrap());
+            // Push to BigQuery (events stay in analytical DB only, not kvrocks)
+            if let Err(e) = stream_to_bigquery(&app_state, data).await {
+                error!("Error sending data to BigQuery: {}", e);
             }
         });
     }
