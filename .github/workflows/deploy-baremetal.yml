@@ -113,7 +113,7 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.OFFCHAIN_FLY_API_TOKEN }}
         run: |
           # Get Redis status and extract password from Private URL
-          OUTPUT=$(flyctl redis status yral-ml-feed-cache 2>&1)
+          OUTPUT=$(flyctl redis status yral-metadata-auth 2>&1)
           REDIS_URL=$(echo "$OUTPUT" | grep "Private URL" | awk '{print $NF}')
 
           # Extract password first, then mask it immediately
@@ -237,7 +237,6 @@ jobs:
             ALLOYDB_DB_PASSWORD='${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}' \
             CANISTER_BACKUP_CACHE_REDIS_URL='${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}' \
             YRAL_METADATA_NOTIFICATION_API_KEY='${{ secrets.YRAL_METADATA_NOTIFICATION_API_KEY }}' \
-            YRAL_AUTH_REDIS_URL='${{ secrets.YRAL_AUTH_REDIS_URL }}' \
             ML_FEED_CACHE_MEMORYSTORE_URL='${{ secrets.ML_FEED_CACHE_MEMORYSTORE_URL }}' \
             LUMALABS_API_KEY='${{ secrets.VIDEOGEN_PROVIDER_LUMALABS_API_KEY }}' \
             YRAL_HON_WORKER_JWT='${{ secrets.YRAL_HON_WORKER_JWT }}' \
@@ -297,6 +296,6 @@ jobs:
           echo "- ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-offchain:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Services" >> $GITHUB_STEP_SUMMARY
-          echo "- fly-redis-proxy (Fly Redis tunnel for yral-ml-feed-cache)" >> $GITHUB_STEP_SUMMARY
+          echo "- fly-redis-proxy (Fly Redis tunnel for yral-metadata-auth)" >> $GITHUB_STEP_SUMMARY
           echo "- offchain-agent (gRPC service on port 50051)" >> $GITHUB_STEP_SUMMARY
           echo "- caddy (TLS termination + HTTP/2 reverse proxy)" >> $GITHUB_STEP_SUMMARY

@@ -19,7 +19,7 @@ if ! kill -0 $AGENT_PID > /dev/null 2>&1; then
 fi
 echo "Fly Agent started (PID: $AGENT_PID)"
 
-echo "Starting Fly Redis proxy for yral-ml-feed-cache..."
+echo "Starting Fly Redis proxy for yral-metadata-auth..."
 /app/fly_redis_proxy.exp 2>&1 &
 PROXY_PID=$!
 

@@ -29,10 +29,9 @@ services:
       ALLOYDB_DB_PASSWORD: ${ALLOYDB_DB_PASSWORD}
 
       # === Redis Configuration ===
-      # ML Feed Cache - uses Fly Redis proxy
-      ML_FEED_CACHE_REDIS_URL: redis://default:${FLY_REDIS_PASSWORD}@fly-redis-proxy:16379
+      # Yral Auth Redis - uses Fly Redis proxy
+      YRAL_AUTH_REDIS_URL: redis://default:${FLY_REDIS_PASSWORD}@fly-redis-proxy:16379
       # Other Redis instances (direct connection)
-      YRAL_AUTH_REDIS_URL: ${YRAL_AUTH_REDIS_URL}
       CANISTER_BACKUP_CACHE_REDIS_URL: ${CANISTER_BACKUP_CACHE_REDIS_URL}
       LEADERBOARD_REDIS_URL: ${LEADERBOARD_REDIS_URL}
       SERVICE_CANISTER_MIGRATION_REDIS_URL: ${SERVICE_CANISTER_MIGRATION_REDIS_URL}
