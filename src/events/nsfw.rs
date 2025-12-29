@@ -750,6 +750,21 @@ pub async fn push_nsfw_data_bigquery_v2(
                 probability: Some(pending_item.nsfw_prob),
                 video_id: Some(vid.clone()),
             };
+            // Also push to kvrocks for fast retrieval
+            if !embedding.ml_generate_embedding_result.is_empty() {
+                let embedding_f32: Vec<f32> = embedding
+                    .ml_generate_embedding_result
+                    .iter()
+                    .map(|&v| v as f32)
+                    .collect();
+                if let Err(e) = kvrocks_client
+                    .push_video_embedding(vid, embedding_f32, None)
+                    .await
+                {
+                    log::error!("Failed to push embedding to kvrocks for {}: {}", vid, e);
+                }
+            }
+
             embedding_rows.push(Row {
                 insert_id: None,
                 json: embedding,
