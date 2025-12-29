@@ -75,7 +75,7 @@ jobs:
           SCRATCHPAD_DRAGONFLY_HOST: ${{ vars.SCRATCHPAD_DRAGONFLY_HOST }}
           SCRATCHPAD_DRAGONFLY_PORT: ${{ vars.SCRATCHPAD_DRAGONFLY_PORT }}
           SCRATCHPAD_DRAGONFLY_PASSWORD: ${{ secrets.SCRATCHPAD_DRAGONFLY_PASSWORD }}
-        run: cargo test test_scratchpad_connection -- --nocapture
+        run: cargo test --release test_scratchpad_connection -- --nocapture
 
       - run: touch .empty
       - name: Archive production artifacts

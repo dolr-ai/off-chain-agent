@@ -173,7 +173,9 @@ pub async fn init_scratchpad_client() -> Result<ScratchpadClient> {
 
     // Build Redis URL: redis://:password@host:port
     // No TLS (redis:// not rediss://), no cluster
-    let redis_url = format!("redis://:{}@{}:{}", password, host, port);
+    // URL encode password in case it contains special characters
+    let encoded_password = urlencoding::encode(&password);
+    let redis_url = format!("redis://:{}@{}:{}", encoded_password, host, port);
 
     log::info!("Connecting to scratchpad Dragonfly at {}:{}", host, port);
 
