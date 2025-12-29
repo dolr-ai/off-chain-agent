@@ -132,6 +132,11 @@ async fn main_impl() -> Result<()> {
     let qstash_routes = qstash_router(shared_state.clone());
     let replicate_webhook_routes = videogen::router::replicate_webhook_router(shared_state.clone());
 
+    #[cfg(not(feature = "local-bin"))]
+    let test_scratchpad_route = Router::new()
+        .route("/test/scratchpad", get(scratchpad::test_scratchpad_handler))
+        .with_state(shared_state.clone());
+
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/report-approved", post(report_approved_handler))
@@ -141,7 +146,12 @@ async fn main_impl() -> Result<()> {
         )
         .nest("/qstash", qstash_routes)
         .nest("/replicate", replicate_webhook_routes)
-        .fallback_service(router)
+        .fallback_service(router);
+
+    #[cfg(not(feature = "local-bin"))]
+    let http = http.merge(test_scratchpad_route);
+
+    let http = http
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB limit
         .layer(CorsLayer::permissive())
         .layer(axum::middleware::from_fn(

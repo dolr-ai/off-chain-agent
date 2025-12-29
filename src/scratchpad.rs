@@ -206,6 +206,46 @@ pub async fn init_scratchpad_client() -> Result<ScratchpadClient> {
     Ok(ScratchpadClient { client })
 }
 
+/// Test endpoint handler to verify scratchpad connection
+#[cfg(not(feature = "local-bin"))]
+pub async fn test_scratchpad_handler(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::app_state::AppState>>,
+) -> Result<axum::Json<serde_json::Value>, http::StatusCode> {
+    let test_key = "test:scratchpad_connection_check";
+    let test_data = serde_json::json!({
+        "test": "value",
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    });
+
+    // Test set
+    if let Err(e) = state.scratchpad_client.set_json(test_key, &test_data).await {
+        log::error!("Scratchpad test failed on set: {}", e);
+        return Err(http::StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // Test get
+    let result: Option<serde_json::Value> = match state.scratchpad_client.get_json(test_key).await {
+        Ok(r) => r,
+        Err(e) => {
+            log::error!("Scratchpad test failed on get: {}", e);
+            return Err(http::StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Test delete
+    if let Err(e) = state.scratchpad_client.del(test_key).await {
+        log::error!("Scratchpad test failed on delete: {}", e);
+        return Err(http::StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(axum::Json(serde_json::json!({
+        "status": "ok",
+        "message": "Scratchpad Dragonfly connection test passed",
+        "test_data": test_data,
+        "retrieved_data": result
+    })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
