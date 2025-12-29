@@ -7,18 +7,6 @@ on:
         default: false
         required: false
         type: boolean
-      KVROCKS_HOSTS:
-        required: false
-        type: string
-    secrets:
-      KVROCKS_PASSWORD:
-        required: false
-      KVROCKS_CA_CERT:
-        required: false
-      KVROCKS_CLIENT_CERT:
-        required: false
-      KVROCKS_CLIENT_KEY:
-        required: false
   workflow_dispatch:
 
 env:
@@ -81,6 +69,13 @@ jobs:
         env:
           RUSTFLAGS: "-C link-arg=-Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -L /usr/lib/x86_64-linux-gnu -l blas -l lapack"
         run: cargo build --release --bin icp-off-chain-agent --target x86_64-unknown-linux-gnu --features prod-bin
+
+      - name: Test Scratchpad Dragonfly Connection
+        env:
+          SCRATCHPAD_DRAGONFLY_HOST: ${{ vars.SCRATCHPAD_DRAGONFLY_HOST }}
+          SCRATCHPAD_DRAGONFLY_PORT: ${{ vars.SCRATCHPAD_DRAGONFLY_PORT }}
+          SCRATCHPAD_DRAGONFLY_PASSWORD: ${{ secrets.SCRATCHPAD_DRAGONFLY_PASSWORD }}
+        run: cargo test test_scratchpad_connection -- --nocapture
 
       - run: touch .empty
       - name: Archive production artifacts

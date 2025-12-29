@@ -444,20 +444,6 @@ impl KvrocksClient {
         self.get_hash(&key).await
     }
 
-    pub async fn store_video_dedup_status_with_table(
-        &self,
-        table_suffix: &str,
-        data: &VideoDedupStatus,
-    ) -> Result<()> {
-        let key = format!(
-            "{}:{}:{}",
-            keys::VIDEO_DEDUP_STATUS,
-            table_suffix,
-            data.video_id
-        );
-        self.set_hash(&key, data).await
-    }
-
     pub async fn push_video_embedding(
         &self,
         video_id: &str,

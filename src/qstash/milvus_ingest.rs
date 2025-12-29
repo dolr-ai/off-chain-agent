@@ -1618,8 +1618,7 @@ async fn store_dedup_status_with_table(
         }
     }
 
-    // Also push to kvrocks with table suffix
-    let table_suffix = format!("HAM{}", hamming_distance_threshold);
+    // Also push to kvrocks
     let dedup_status = VideoDedupStatus {
         video_id: video_id.to_string(),
         phash: phash.to_string(),
@@ -1630,14 +1629,10 @@ async fn store_dedup_status_with_table(
     };
     if let Err(e) = state
         .kvrocks_client
-        .store_video_dedup_status_with_table(&table_suffix, &dedup_status)
+        .store_video_dedup_status(&dedup_status)
         .await
     {
-        log::error!(
-            "Error pushing dedup_status to kvrocks ({}): {}",
-            table_suffix,
-            e
-        );
+        log::error!("Error pushing dedup_status to kvrocks: {}", e);
     }
 
     Ok(())
