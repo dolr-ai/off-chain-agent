@@ -95,44 +95,54 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  fetch-redis-password:
-    name: Fetch Fly Redis Password
+  fetch-redis-passwords:
+    name: Fetch Fly Redis Passwords
     needs: build_check
     runs-on: ubuntu-latest
 
     outputs:
-      password: ${{ steps.redis.outputs.password }}
+      auth_password: ${{ steps.redis.outputs.auth_password }}
+      ml_feed_password: ${{ steps.redis.outputs.ml_feed_password }}
 
     steps:
       - name: Install Fly CLI
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Fetch Redis password from Fly
+      - name: Fetch Redis passwords from Fly
         id: redis
         env:
           FLY_API_TOKEN: ${{ secrets.OFFCHAIN_FLY_API_TOKEN }}
         run: |
-          # Get Redis status and extract password from Private URL
-          OUTPUT=$(flyctl redis status yral-metadata-auth 2>&1)
-          REDIS_URL=$(echo "$OUTPUT" | grep "Private URL" | awk '{print $NF}')
+          # Function to fetch and extract password
+          fetch_redis_password() {
+            local db_name=$1
+            local output_name=$2
 
-          # Extract password first, then mask it immediately
-          REDIS_PASSWORD=$(echo "$REDIS_URL" | sed -n 's|redis://default:\([^@]*\)@.*|\1|p')
-          if [ -n "$REDIS_PASSWORD" ]; then
-            echo "::add-mask::$REDIS_PASSWORD"
-            echo "::add-mask::$REDIS_URL"
-          fi
+            OUTPUT=$(flyctl redis status "$db_name" 2>&1)
+            REDIS_URL=$(echo "$OUTPUT" | grep "Private URL" | awk '{print $NF}')
+            REDIS_PASSWORD=$(echo "$REDIS_URL" | sed -n 's|redis://default:\([^@]*\)@.*|\1|p')
 
-          if [ -z "$REDIS_URL" ]; then
-            echo "Error: Could not fetch Redis URL from flyctl redis status"
-            exit 1
-          fi
-          if [ -z "$REDIS_PASSWORD" ]; then
-            echo "Error: Could not extract Redis password from URL"
-            exit 1
-          fi
-          echo "password=$REDIS_PASSWORD" >> $GITHUB_OUTPUT
-          echo "Redis password fetched successfully"
+            if [ -n "$REDIS_PASSWORD" ]; then
+              echo "::add-mask::$REDIS_PASSWORD"
+              echo "::add-mask::$REDIS_URL"
+            fi
+
+            if [ -z "$REDIS_URL" ]; then
+              echo "Error: Could not fetch Redis URL for $db_name"
+              exit 1
+            fi
+            if [ -z "$REDIS_PASSWORD" ]; then
+              echo "Error: Could not extract Redis password for $db_name"
+              exit 1
+            fi
+
+            echo "${output_name}=$REDIS_PASSWORD" >> $GITHUB_OUTPUT
+            echo "Password for $db_name fetched successfully"
+          }
+
+          # Fetch both passwords
+          fetch_redis_password "yral-metadata-auth" "auth_password"
+          fetch_redis_password "yral-ml-feed-cache" "ml_feed_password"
 
   prepare-servers:
     name: Prepare Server List
@@ -150,7 +160,7 @@ jobs:
 
   deploy:
     name: Deploy to Server
-    needs: [build-and-push, fetch-redis-password, prepare-servers]
+    needs: [build-and-push, fetch-redis-passwords, prepare-servers]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -212,7 +222,8 @@ jobs:
             PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-offchain \
             IMAGE_TAG=${{ github.sha }} \
             FLY_API_TOKEN='${{ secrets.OFFCHAIN_FLY_API_TOKEN }}' \
-            FLY_REDIS_PASSWORD='${{ needs.fetch-redis-password.outputs.password }}' \
+            FLY_REDIS_AUTH_PASSWORD='${{ needs.fetch-redis-passwords.outputs.auth_password }}' \
+            FLY_REDIS_ML_FEED_PASSWORD='${{ needs.fetch-redis-passwords.outputs.ml_feed_password }}' \
             CF_R2_ACCESS_KEY_TEMP='${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}' \
             CF_R2_SECRET_ACCESS_KEY_TEMP='${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_SECRET_ACCESS_KEY }}' \
             CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY='${{ secrets.CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY }}' \
@@ -296,6 +307,7 @@ jobs:
           echo "- ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-offchain:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Services" >> $GITHUB_STEP_SUMMARY
-          echo "- fly-redis-proxy (Fly Redis tunnel for yral-metadata-auth)" >> $GITHUB_STEP_SUMMARY
+          echo "- fly-redis-proxy-auth (Fly Redis tunnel for yral-metadata-auth)" >> $GITHUB_STEP_SUMMARY
+          echo "- fly-redis-proxy-ml-feed (Fly Redis tunnel for yral-ml-feed-cache)" >> $GITHUB_STEP_SUMMARY
           echo "- offchain-agent (gRPC service on port 50051)" >> $GITHUB_STEP_SUMMARY
           echo "- caddy (TLS termination + HTTP/2 reverse proxy)" >> $GITHUB_STEP_SUMMARY

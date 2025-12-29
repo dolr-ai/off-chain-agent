@@ -7,6 +7,12 @@ if [ -z "$FLY_API_TOKEN" ]; then
     exit 1
 fi
 
+# FLY_REDIS_DB_NAME specifies which Fly Redis database to connect to
+if [ -z "$FLY_REDIS_DB_NAME" ]; then
+    echo "Error: FLY_REDIS_DB_NAME environment variable not set"
+    exit 1
+fi
+
 echo "Starting Fly Agent..."
 flyctl agent run > /tmp/flyctl-agent.log 2>&1 &
 AGENT_PID=$!
@@ -19,7 +25,7 @@ if ! kill -0 $AGENT_PID > /dev/null 2>&1; then
 fi
 echo "Fly Agent started (PID: $AGENT_PID)"
 
-echo "Starting Fly Redis proxy for yral-metadata-auth..."
+echo "Starting Fly Redis proxy for $FLY_REDIS_DB_NAME..."
 /app/fly_redis_proxy.exp 2>&1 &
 PROXY_PID=$!
 

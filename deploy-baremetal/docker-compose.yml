@@ -1,9 +1,25 @@
 services:
-  fly-redis-proxy:
+  fly-redis-proxy-auth:
     image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy-offchain}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       - FLY_API_TOKEN=${FLY_API_TOKEN}
+      - FLY_REDIS_DB_NAME=yral-metadata-auth
+    networks:
+      - offchain-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "16379"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  fly-redis-proxy-ml-feed:
+    image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy-offchain}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      - FLY_API_TOKEN=${FLY_API_TOKEN}
+      - FLY_REDIS_DB_NAME=yral-ml-feed-cache
     networks:
       - offchain-net
     healthcheck:
@@ -30,7 +46,9 @@ services:
 
       # === Redis Configuration ===
       # Yral Auth Redis - uses Fly Redis proxy
-      YRAL_AUTH_REDIS_URL: redis://default:${FLY_REDIS_PASSWORD}@fly-redis-proxy:16379
+      YRAL_AUTH_REDIS_URL: redis://default:${FLY_REDIS_AUTH_PASSWORD}@fly-redis-proxy-auth:16379
+      # ML Feed Cache Redis - uses Fly Redis proxy
+      ML_FEED_CACHE_REDIS_URL: redis://default:${FLY_REDIS_ML_FEED_PASSWORD}@fly-redis-proxy-ml-feed:16379
       # Other Redis instances (direct connection)
       CANISTER_BACKUP_CACHE_REDIS_URL: ${CANISTER_BACKUP_CACHE_REDIS_URL}
       LEADERBOARD_REDIS_URL: ${LEADERBOARD_REDIS_URL}
@@ -103,7 +121,9 @@ services:
     networks:
       - offchain-net
     depends_on:
-      fly-redis-proxy:
+      fly-redis-proxy-auth:
+        condition: service_healthy
+      fly-redis-proxy-ml-feed:
         condition: service_healthy
 
   caddy:
