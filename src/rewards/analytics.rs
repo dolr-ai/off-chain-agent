@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use crate::consts::ANALYTICS_SERVER_URL;
 use candid::Principal;
 use reqwest::Client;
 use serde_json::json;
@@ -152,7 +153,7 @@ async fn send_event_internal(payload: serde_json::Value) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let url = "https://analytics.yral.com/api/send_event";
+    let url = format!("{}/api/send_event", ANALYTICS_SERVER_URL);
 
     let client = Client::new();
     let response = client

@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
+use crate::consts::{ANALYTICS_SERVER_URL, NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
@@ -20,6 +20,7 @@ use ic_agent::identity::Secp256k1Identity;
 use ic_agent::Agent;
 #[cfg(not(feature = "local-bin"))]
 use milvus::client::Client as MilvusClient;
+use reqwest::Client as ReqwestClient;
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
@@ -29,6 +30,31 @@ use yral_metadata_client::MetadataClient;
 use yral_ml_feed_cache::MLFeedCacheState;
 use yup_oauth2::hyper_rustls::HttpsConnector;
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
+
+#[derive(Clone)]
+pub struct MixpanelClient {
+    pub client: ReqwestClient,
+    pub token: Option<String>,
+    pub url: String,
+}
+
+impl MixpanelClient {
+    pub fn new() -> Self {
+        let token = env::var("ANALYTICS_SERVER_TOKEN").ok();
+        if token.is_none() {
+            log::warn!("ANALYTICS_SERVER_TOKEN not set, mixpanel forwarding will be disabled");
+        }
+        Self {
+            client: ReqwestClient::new(),
+            token,
+            url: format!("{}/api/send_mixpanel", ANALYTICS_SERVER_URL),
+        }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.token.is_some()
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -70,6 +96,8 @@ pub struct AppState {
     // This uses ds staging
     #[cfg(not(feature = "local-bin"))]
     pub scratchpad_client: ScratchpadClient,
+
+    pub mixpanel_client: MixpanelClient,
 }
 
 impl AppState {
@@ -134,6 +162,7 @@ impl AppState {
             kvrocks_client,
             #[cfg(not(feature = "local-bin"))]
             scratchpad_client,
+            mixpanel_client: MixpanelClient::new(),
         }
     }
 
