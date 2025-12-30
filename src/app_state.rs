@@ -34,25 +34,18 @@ use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
 #[derive(Clone)]
 pub struct MixpanelClient {
     pub client: ReqwestClient,
-    pub token: Option<String>,
+    pub token: String,
     pub url: String,
 }
 
 impl MixpanelClient {
     pub fn new() -> Self {
-        let token = env::var("ANALYTICS_SERVER_TOKEN").ok();
-        if token.is_none() {
-            log::warn!("ANALYTICS_SERVER_TOKEN not set, mixpanel forwarding will be disabled");
-        }
+        let token = env::var("ANALYTICS_SERVER_TOKEN").expect("ANALYTICS_SERVER_TOKEN is required");
         Self {
             client: ReqwestClient::new(),
             token,
             url: format!("{}/api/send_mixpanel", ANALYTICS_SERVER_URL),
         }
-    }
-
-    pub fn is_enabled(&self) -> bool {
-        self.token.is_some()
     }
 }
 

@@ -76,19 +76,11 @@ impl Event {
 
     pub fn forward_to_mixpanel(&self, app_state: &AppState) {
         let mixpanel_client = app_state.mixpanel_client.clone();
-
-        if !mixpanel_client.is_enabled() {
-            return;
-        }
-
         let event_name = self.event.event.clone();
         let params_str = self.event.params.clone();
 
         tokio::spawn(async move {
-            let token = match &mixpanel_client.token {
-                Some(t) => t.clone(),
-                None => return,
-            };
+            let token = mixpanel_client.token.clone();
 
             let mut params: serde_json::Value = match serde_json::from_str(&params_str) {
                 Ok(p) => p,
