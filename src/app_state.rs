@@ -38,6 +38,12 @@ pub struct MixpanelClient {
     pub url: String,
 }
 
+impl Default for MixpanelClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MixpanelClient {
     pub fn new() -> Self {
         let token = env::var("ANALYTICS_SERVER_TOKEN").expect("ANALYTICS_SERVER_TOKEN is required");
