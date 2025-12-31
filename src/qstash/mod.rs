@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use axum::middleware;
 use axum::{extract::State, response::Response, routing::post, Json, Router};
-use hotornot_job::start_hotornot_job_v2;
 use http::StatusCode;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
@@ -13,7 +12,6 @@ use tracing::instrument;
 
 use crate::pipeline::Step;
 use crate::qstash::duplicate::VideoPublisherDataV2;
-use crate::qstash::hotornot_job::start_hotornot_job_v3;
 use crate::qstash::service_canister_migration::{
     migrate_individual_user_to_service_canister, transfer_all_posts_for_the_individual_user,
     update_the_metadata_mapping,
@@ -41,7 +39,6 @@ use crate::{
 pub mod client;
 pub mod dedup_index_backfill;
 pub mod duplicate;
-pub mod hotornot_job;
 #[cfg(not(feature = "local-bin"))]
 pub mod milvus_ingest;
 pub mod phash_bulk;
@@ -155,8 +152,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
-        .route("/start_hotornot_job_v2", post(start_hotornot_job_v2))
-        .route("/start_hotornot_job_v3", post(start_hotornot_job_v3))
         .route(
             "/delete_and_reclaim_canisters",
             post(handle_delete_and_reclaim_canisters),

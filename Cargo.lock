@@ -1199,7 +1199,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a68215c76c457dccfed027a397ccd72482feabd64c2f93cbb2971a7c4121351"
 dependencies = [
  "bb8",
- "redis 0.29.5",
+ "redis",
 ]
 
 [[package]]
@@ -2650,29 +2650,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.106",
-]
-
-[[package]]
-name = "env_filter"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "186e05a59d4c50738528153b83b0b0194d3a29507dfec16eccd4b342903397d0"
-dependencies = [
- "log",
- "regex",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.11.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c863f0904021b108aa8b2f55046443e6b1ebde8fd4a15c399893aae4fa069f"
-dependencies = [
- "anstream",
- "anstyle",
- "env_filter",
- "jiff",
- "log",
 ]
 
 [[package]]
@@ -5810,30 +5787,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
-name = "jiff"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be1f93b8b1eb69c77f24bbb0afdf66f54b632ee39af40ca21c4365a1d7347e49"
-dependencies = [
- "jiff-static",
- "log",
- "portable-atomic",
- "portable-atomic-util",
- "serde",
-]
-
-[[package]]
-name = "jiff-static"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03343451ff899767262ec32146f6d559dd759fdadf42ff0e227c7c48f72594b4"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.106",
-]
-
-[[package]]
 name = "jobserver"
 version = "0.1.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6332,26 +6285,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ml-feed-cache"
-version = "0.2.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#cb230bf559c826b84868662af39b75d819ed958c"
-dependencies = [
- "anyhow",
- "bb8",
- "bb8-redis",
- "env_logger",
- "log",
- "redis 0.29.5",
- "redis-macros",
- "serde",
- "serde-redis",
- "serde_json",
- "tokio",
- "utoipa",
- "yral-types",
-]
-
-[[package]]
 name = "mockall"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6642,14 +6575,13 @@ dependencies = [
  "k256",
  "log",
  "milvus-sdk-rust",
- "ml-feed-cache",
  "num-bigint 0.4.6",
  "num-traits",
  "once_cell",
  "prost 0.13.5",
  "rand 0.9.2",
  "rayon",
- "redis 0.29.5",
+ "redis",
  "regex",
  "reqwest 0.12.23",
  "rustls 0.23.32",
@@ -7142,21 +7074,6 @@ dependencies = [
  "fdeflate",
  "flate2",
  "miniz_oxide",
-]
-
-[[package]]
-name = "portable-atomic"
-version = "1.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
-
-[[package]]
-name = "portable-atomic-util"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8a2f0d8d040d7848a709caf78912debcc3f33ee4b3cac47d73d1e1069e83507"
-dependencies = [
- "portable-atomic",
 ]
 
 [[package]]
@@ -7773,21 +7690,6 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c580d9cbbe1d1b479e8d67cf9daf6a62c957e6846048408b80b43ac3f6af84cd"
-dependencies = [
- "combine",
- "itoa",
- "percent-encoding",
- "ryu",
- "sha1_smol",
- "socket2 0.4.10",
- "url",
-]
-
-[[package]]
-name = "redis"
 version = "0.29.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bc42f3a12fd4408ce64d8efef67048a924e543bd35c6591c0447fda9054695f"
@@ -7816,46 +7718,6 @@ dependencies = [
  "tokio-util",
  "url",
  "webpki-roots 0.26.11",
-]
-
-[[package]]
-name = "redis"
-version = "0.32.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15965fbccb975c38a08a68beca6bdb57da9081cd0859417c5975a160d968c3cb"
-dependencies = [
- "combine",
- "itoa",
- "num-bigint 0.4.6",
- "percent-encoding",
- "ryu",
- "sha1_smol",
- "socket2 0.6.0",
- "url",
-]
-
-[[package]]
-name = "redis-macros"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ac3609707f8c68aac6f3871c9a9596a7a9e30e3cc42ebba741d13b39e27c6d8"
-dependencies = [
- "redis 0.32.6",
- "redis-macros-derive",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "redis-macros-derive"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "923db076e23f014fd5c5504fba397d3dd06b29724a3dd8e21aa7a3423c00b129"
-dependencies = [
- "proc-macro2",
- "quote",
- "redis 0.32.6",
- "syn 2.0.106",
 ]
 
 [[package]]
@@ -8833,16 +8695,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-redis"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2de4a9aae36db9b30ba139b9e7b4edfc424494dbe6b40073797b8d92bb5bae6"
-dependencies = [
- "redis 0.24.0",
- "serde",
-]
-
-[[package]]
 name = "serde_bytes"
 version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9178,16 +9030,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "web-time",
-]
-
-[[package]]
-name = "socket2"
-version = "0.4.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f7916fc008ca5542385b89a3d3ce689953c143e9304a9bf8beec1de48994c0d"
-dependencies = [
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -11271,8 +11113,6 @@ source = "git+https://github.com/yral-dapp/yral-common?branch=master#cb230bf559c
 dependencies = [
  "ic-agent",
  "k256",
- "redis 0.29.5",
- "redis-macros",
  "serde",
  "serde_json",
  "utoipa",
