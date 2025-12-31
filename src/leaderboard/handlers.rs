@@ -11,7 +11,7 @@ use yral_username_gen::random_username_from_principal;
 use super::redis_ops::LeaderboardRedis;
 use super::types::*;
 use super::utils::get_usernames_with_fallback;
-use crate::{app_state::AppState, auth::check_auth_events};
+use crate::{app_state::AppState, auth::check_auth_events, consts::ANALYTICS_SERVER_URL};
 use chrono::{DateTime, TimeZone};
 use chrono_tz::Tz;
 use serde::Deserialize;
@@ -41,7 +41,7 @@ async fn get_timezone_from_ip(ip: &str) -> Option<(String, Tz)> {
     // Get the bearer token from environment or config
     let token = std::env::var("TIMEZONE_API_TOKEN").ok()?;
 
-    let url = format!("https://analytics.yral.com/api/ip_v2/{}", ip);
+    let url = format!("{}/api/ip_v2/{}", ANALYTICS_SERVER_URL, ip);
 
     let client = reqwest::Client::new();
     let response = client

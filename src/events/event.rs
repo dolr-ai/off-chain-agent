@@ -60,6 +60,59 @@ impl Event {
         });
     }
 
+    pub fn forward_to_mixpanel(&self, app_state: &AppState) {
+        let mixpanel_client = app_state.mixpanel_client.clone();
+        let event_name = self.event.event.clone();
+        let params_str = self.event.params.clone();
+
+        tokio::spawn(async move {
+            let token = mixpanel_client.token.clone();
+
+            let mut params: serde_json::Value = match serde_json::from_str(&params_str) {
+                Ok(p) => p,
+                Err(e) => {
+                    error!("Failed to parse params for mixpanel: {}", e);
+                    return;
+                }
+            };
+
+            // Add event name to payload
+            if let serde_json::Value::Object(ref mut map) = params {
+                map.insert(
+                    "event".to_string(),
+                    serde_json::Value::String(event_name.clone()),
+                );
+            }
+
+            let response = match mixpanel_client
+                .client
+                .post(&mixpanel_client.url)
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", token))
+                .json(&params)
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("Failed to send mixpanel request: {}", e);
+                    return;
+                }
+            };
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                error!(
+                    "Mixpanel proxy returned error {} for event '{}': {}",
+                    status, event_name, error_text
+                );
+            } else {
+                log::debug!("Successfully forwarded event '{}' to mixpanel", event_name);
+            }
+        });
+    }
+
     pub fn check_video_deduplication(&self, app_state: &AppState) {
         if self.event.event == "video_upload_successful" {
             let params: Result<VideoUploadSuccessfulPayload, _> =

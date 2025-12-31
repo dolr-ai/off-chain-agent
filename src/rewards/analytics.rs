@@ -1,8 +1,8 @@
-use crate::app_state::AppState;
+use crate::app_state::{AppState, MixpanelClient};
+use crate::consts::OFF_CHAIN_AGENT_URL;
 use candid::Principal;
-use reqwest::Client;
 use serde_json::json;
-use std::{env, sync::Arc};
+use std::sync::Arc;
 
 pub struct BtcVideoViewedEventParams<'a> {
     pub video_id: &'a str,
@@ -30,11 +30,13 @@ pub struct BtcRewardedEventParams<'a> {
     pub tx_id: Option<String>,
 }
 
-/// Send btc_video_viewed event to marketing analytics server
+/// Send btc_video_viewed event via the event pipeline
 pub async fn send_btc_video_viewed_event(
     params: BtcVideoViewedEventParams<'_>,
     app_state: &Arc<AppState>,
 ) {
+    let mixpanel_client = app_state.mixpanel_client.clone();
+
     // Spawn async task to avoid blocking
     let video_id = params.video_id.to_string();
     let publisher_user_id = params.publisher_user_id.to_text();
@@ -59,10 +61,9 @@ pub async fn send_btc_video_viewed_event(
             .await
             .ok();
 
-        // Build JSON payload
+        // Build JSON payload for params
         let timestamp = chrono::Utc::now().timestamp();
-        let payload = json!({
-            "event": "btc_video_viewed",
+        let event_params = json!({
             "video_id": video_id,
             "publisher_user_id": publisher_user_id,
             "user_id": user_id_text,
@@ -81,17 +82,21 @@ pub async fn send_btc_video_viewed_event(
             "ts": timestamp,
         });
 
-        if let Err(e) = send_event_internal(payload).await {
+        if let Err(e) =
+            send_event_to_pipeline(&mixpanel_client, "btc_video_viewed", event_params).await
+        {
             log::error!("Failed to send btc_video_viewed event: {}", e);
         }
     });
 }
 
-/// Send btc_rewarded event to marketing analytics server
+/// Send btc_rewarded event via the event pipeline
 pub async fn send_btc_rewarded_event(
     params: BtcRewardedEventParams<'_>,
     app_state: &Arc<AppState>,
 ) {
+    let mixpanel_client = app_state.mixpanel_client.clone();
+
     // Spawn async task to avoid blocking
     let creator_id = *params.creator_id;
     let creator_id_text = params.creator_id.to_text();
@@ -110,10 +115,9 @@ pub async fn send_btc_rewarded_event(
             .await
             .ok();
 
-        // Build JSON payload
+        // Build JSON payload for params
         let timestamp = chrono::Utc::now().timestamp();
-        let payload = json!({
-            "event": "btc_rewarded",
+        let event_params = json!({
             "creator_id": creator_id_text,
             "principal": creator_id_text,
             "canister_id": canister_id.map(|c| c.to_text()),
@@ -126,7 +130,8 @@ pub async fn send_btc_rewarded_event(
             "ts": timestamp,
         });
 
-        if let Err(e) = send_event_internal(payload).await {
+        if let Err(e) = send_event_to_pipeline(&mixpanel_client, "btc_rewarded", event_params).await
+        {
             log::error!("Failed to send btc_rewarded event: {}", e);
         } else {
             log::info!(
@@ -141,51 +146,42 @@ pub async fn send_btc_rewarded_event(
     });
 }
 
-async fn send_event_internal(payload: serde_json::Value) -> anyhow::Result<()> {
-    // Get analytics server token from environment
-    let token = env::var("ANALYTICS_SERVER_TOKEN").unwrap_or_else(|_| {
-        log::warn!("ANALYTICS_SERVER_TOKEN not set, skipping analytics event");
-        String::new()
+/// Send event to the /api/v2/events endpoint for processing through the event pipeline
+async fn send_event_to_pipeline(
+    mixpanel_client: &MixpanelClient,
+    event_name: &str,
+    params: serde_json::Value,
+) -> anyhow::Result<()> {
+    let url = OFF_CHAIN_AGENT_URL.join("api/v2/events").unwrap();
+
+    // Format as EventRequest { event: String, params: String }
+    let request_body = json!({
+        "event": event_name,
+        "params": params.to_string(),
     });
 
-    if token.is_empty() {
-        return Ok(());
-    }
-
-    let url = "https://analytics.yral.com/api/send_event";
-
-    let client = Client::new();
-    let response = client
-        .post(url)
+    let response = mixpanel_client
+        .client
+        .post(url.as_str())
         .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&payload)
+        .header("Authorization", format!("Bearer {}", mixpanel_client.token))
+        .json(&request_body)
         .send()
         .await?;
 
     if !response.status().is_success() {
         let status = response.status();
         let error_text = response.text().await.unwrap_or_default();
-        log::error!("Analytics server returned error {}: {}", status, error_text);
-        anyhow::bail!("Analytics server error: {}", status);
+        log::error!(
+            "Event pipeline returned error {} for event '{}': {}",
+            status,
+            event_name,
+            error_text
+        );
+        anyhow::bail!("Event pipeline error: {}", status);
     }
 
-    // Extract fields from payload for logging
-    log::debug!(
-        "Successfully sent btc_video_viewed event for video {} (unique: {}, count: {})",
-        payload
-            .get("video_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown"),
-        payload
-            .get("is_unique_view")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        payload
-            .get("btc_video_view_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
-    );
+    log::debug!("Successfully sent '{}' event to pipeline", event_name);
 
     Ok(())
 }
