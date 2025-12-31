@@ -118,7 +118,6 @@ yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", 
     "full",
     "user-post-service",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
 yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
 yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
 yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
@@ -137,7 +136,6 @@ yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", branch =
 #     "full",
 #     "user-post-service",
 # ] }
-# yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
 # yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
 # yral-qstash-types = { path = "../yral-common/qstash-types" }
 # yral-metrics = { path = "../yral-common/metrics" }

@@ -109,24 +109,6 @@ pub async fn delete_canister_data(
         });
     }
 
-    // Step 5: Delete from Redis caches
-    // Wont return error if cache deletion fails, just log it
-    if let Err(e) = state
-        .ml_feed_cache
-        .delete_user_caches(&canister_id.to_string())
-        .await
-    {
-        log::error!("Failed to delete Redis caches for canister {canister_id}: {e}");
-    }
-
-    if let Err(e) = state
-        .ml_feed_cache
-        .delete_user_caches_v2(&user_principal.to_string())
-        .await
-    {
-        log::error!("Failed to delete Redis caches for canister {canister_id}: {e}");
-    }
-
     Ok(())
 }
 
