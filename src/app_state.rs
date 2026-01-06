@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
+use crate::consts::{ANALYTICS_SERVER_URL, NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
@@ -20,6 +20,7 @@ use ic_agent::identity::Secp256k1Identity;
 use ic_agent::Agent;
 #[cfg(not(feature = "local-bin"))]
 use milvus::client::Client as MilvusClient;
+use reqwest::Client as ReqwestClient;
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
@@ -28,6 +29,30 @@ use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
 use yup_oauth2::hyper_rustls::HttpsConnector;
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
+
+#[derive(Clone)]
+pub struct MixpanelClient {
+    pub client: ReqwestClient,
+    pub token: String,
+    pub url: String,
+}
+
+impl Default for MixpanelClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MixpanelClient {
+    pub fn new() -> Self {
+        let token = env::var("ANALYTICS_SERVER_TOKEN").expect("ANALYTICS_SERVER_TOKEN is required");
+        Self {
+            client: ReqwestClient::new(),
+            token,
+            url: format!("{}/api/send_mixpanel", ANALYTICS_SERVER_URL),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -67,6 +92,8 @@ pub struct AppState {
     // This uses ds staging
     #[cfg(not(feature = "local-bin"))]
     pub scratchpad_client: ScratchpadClient,
+
+    pub mixpanel_client: MixpanelClient,
 }
 
 impl AppState {
@@ -129,6 +156,7 @@ impl AppState {
             kvrocks_client,
             #[cfg(not(feature = "local-bin"))]
             scratchpad_client,
+            mixpanel_client: MixpanelClient::new(),
         }
     }
 

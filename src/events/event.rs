@@ -22,6 +22,14 @@ use tracing::instrument;
 
 pub mod storj;
 
+/// Flat event for Mixpanel - event name + all params at same level
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlatEvent {
+    pub event: String,
+    #[serde(flatten)]
+    pub params: Value,
+}
+
 #[derive(Debug)]
 pub struct Event {
     pub event: WarehouseEvent,
@@ -32,6 +40,22 @@ impl Event {
         Self { event }
     }
 
+    /// Convert to flat event (for Mixpanel)
+    fn to_flat_event(&self) -> Option<FlatEvent> {
+        let mut params: Value = serde_json::from_str(&self.event.params).ok()?;
+
+        // Remove "event" from params if present (avoid duplication)
+        if let Value::Object(ref mut map) = params {
+            map.remove("event");
+        }
+
+        Some(FlatEvent {
+            event: self.event.event.clone(),
+            params,
+        })
+    }
+
+    /// BigQuery format: {event: string, params: string (JSON), timestamp: string}
     pub fn stream_to_bigquery(&self, app_state: &AppState) {
         let event_str = self.event.event.clone();
         let params_str = self.event.params.clone();
@@ -56,6 +80,50 @@ impl Event {
             // Push to BigQuery (events stay in analytical DB only, not kvrocks)
             if let Err(e) = stream_to_bigquery(&app_state, data).await {
                 error!("Error sending data to BigQuery: {}", e);
+            }
+        });
+    }
+
+    /// Mixpanel format: {event: string, user_id: string, video_id: string, ...} (flat)
+    pub fn forward_to_mixpanel(&self, app_state: &AppState) {
+        let mixpanel_client = app_state.mixpanel_client.clone();
+        let flat_event = match self.to_flat_event() {
+            Some(e) => e,
+            None => {
+                error!("Failed to parse params for mixpanel");
+                return;
+            }
+        };
+
+        tokio::spawn(async move {
+            let token = mixpanel_client.token.clone();
+            let event_name = flat_event.event.clone();
+
+            let response = match mixpanel_client
+                .client
+                .post(&mixpanel_client.url)
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", token))
+                .json(&flat_event)
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("Failed to send mixpanel request: {}", e);
+                    return;
+                }
+            };
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                error!(
+                    "Mixpanel proxy returned error {} for event '{}': {}",
+                    status, event_name, error_text
+                );
+            } else {
+                log::debug!("Successfully forwarded event '{}' to mixpanel", event_name);
             }
         });
     }

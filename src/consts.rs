@@ -46,6 +46,9 @@ pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev
 
 pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
 
+// Analytics Server
+pub const ANALYTICS_SERVER_URL: &str = "https://analytics.yral.com";
+
 pub static STORJ_INTERFACE_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://storj-interface.yral.com/").unwrap());
 
