@@ -16,7 +16,6 @@ use yral_metrics::metrics::sealed_metric::SealedMetric;
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::check_auth_events;
-use crate::events::types::AnalyticsEventV3;
 use crate::events::verify::verify_event_bulk_request_v3;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::types::DelegatedIdentityWire;
@@ -254,21 +253,25 @@ async fn handle_bulk_events(
     Ok((StatusCode::OK, "Events processed".to_string()))
 }
 
+/// V2 bulk event request with delegated identity auth and arbitrary payloads
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
-pub struct EventBulkRequestV3 {
+pub struct EventBulkRequestV2 {
     pub delegated_identity_wire: DelegatedIdentityWire,
-    pub events: Vec<AnalyticsEventV3>,
+    /// Array of event payloads - each must contain "event" field for the event name
+    #[schema(value_type = Vec<Object>)]
+    pub events: Vec<Value>,
 }
 
+/// V2 verified bulk events (after middleware validation)
 #[derive(Clone, Serialize, Deserialize)]
-pub struct VerifiedEventBulkRequestV3 {
-    pub events: Vec<AnalyticsEventV3>,
+pub struct VerifiedEventBulkRequestV2 {
+    pub events: Vec<Value>,
 }
 
 #[utoipa::path(
     post,
     path = "/bulk",
-    request_body = EventBulkRequestV3,
+    request_body = EventBulkRequestV2,
     tag = "events",
     responses(
         (status = 200, description = "Bulk event success"),
@@ -279,12 +282,19 @@ pub struct VerifiedEventBulkRequestV3 {
 )]
 async fn handle_bulk_events_v2(
     State(state): State<Arc<AppState>>,
-    Json(request): Json<VerifiedEventBulkRequestV3>,
+    Json(request): Json<VerifiedEventBulkRequestV2>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    for req_event in request.events {
+    for payload in request.events {
+        // Extract event name from the payload
+        let event_name = payload
+            .get("event")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
         let event = Event::new(WarehouseEvent {
-            event: req_event.tag(),
-            params: req_event.params().to_string(),
+            event: event_name,
+            params: payload.to_string(),
         });
 
         if let Err(e) = process_event_impl_v2(event, state.clone()).await {

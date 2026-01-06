@@ -11,7 +11,7 @@ use yral_metrics::metrics::sealed_metric::SealedMetric;
 
 use crate::{
     app_state::AppState,
-    events::{EventBulkRequestV3, VerifiedEventBulkRequestV3},
+    events::{EventBulkRequestV2, VerifiedEventBulkRequestV2},
     utils::delegated_identity::get_user_info_from_delegated_identity_wire,
 };
 
@@ -95,18 +95,18 @@ pub async fn verify_event_bulk_request_v3(
         Err(e) => {
             return Err((
                 StatusCode::BAD_REQUEST,
-                format!("Failed to parse request body #1: {e}"),
+                format!("Failed to parse request body: {e}"),
             ))
         }
     };
 
     // Parse the JSON
-    let event_bulk_request: EventBulkRequestV3 = match serde_json::from_slice(&bytes) {
+    let event_bulk_request: EventBulkRequestV2 = match serde_json::from_slice(&bytes) {
         Ok(req) => req,
         Err(e) => {
             return Err((
                 StatusCode::BAD_REQUEST,
-                format!("Failed to parse request body to EventBulkRequest: {e}"),
+                format!("Failed to parse request body to EventBulkRequestV2: {e}"),
             ))
         }
     };
@@ -127,14 +127,19 @@ pub async fn verify_event_bulk_request_v3(
     // Set Sentry user context for tracking
     crate::middleware::set_user_context(user_principal);
 
-    // verify all events are valid
-    for event in event_bulk_request.events.clone() {
-        if event.user_id().unwrap_or_default() != user_principal.to_string() {
-            return Err((StatusCode::BAD_REQUEST, "Invalid user id".to_string()));
+    let user_principal_str = user_principal.to_string();
+    for event in &event_bulk_request.events {
+        if let Some(event_user_id) = event.get("user_id").and_then(|v| v.as_str()) {
+            if event_user_id != user_principal_str {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "Invalid user_id: does not match authenticated principal".to_string(),
+                ));
+            }
         }
     }
 
-    let verified_request = VerifiedEventBulkRequestV3 {
+    let verified_request = VerifiedEventBulkRequestV2 {
         events: event_bulk_request.events,
     };
 
