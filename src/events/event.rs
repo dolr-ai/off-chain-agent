@@ -47,6 +47,10 @@ impl Event {
         // Remove "event" from params if present (avoid duplication)
         if let Value::Object(ref mut map) = params {
             map.remove("event");
+            // Add "principal" field from "user_id" if present (analytics server expects this)
+            if let Some(user_id) = map.get("user_id").cloned() {
+                map.insert("principal".to_string(), user_id);
+            }
         }
 
         Some(FlatEvent {
