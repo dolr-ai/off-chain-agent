@@ -36,6 +36,14 @@ use yral_ml_feed_cache::types_v3::MLFeedCacheHistoryItemV3;
 
 pub mod storj;
 
+/// Flat event for Mixpanel - event name + all params at same level
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlatEvent {
+    pub event: String,
+    #[serde(flatten)]
+    pub params: Value,
+}
+
 #[derive(Debug)]
 pub struct Event {
     pub event: WarehouseEvent,
@@ -46,6 +54,22 @@ impl Event {
         Self { event }
     }
 
+    /// Convert to flat event (for Mixpanel)
+    fn to_flat_event(&self) -> Option<FlatEvent> {
+        let mut params: Value = serde_json::from_str(&self.event.params).ok()?;
+
+        // Remove "event" from params if present (avoid duplication)
+        if let Value::Object(ref mut map) = params {
+            map.remove("event");
+        }
+
+        Some(FlatEvent {
+            event: self.event.event.clone(),
+            params,
+        })
+    }
+
+    /// BigQuery format: {event: string, params: string (JSON), timestamp: string}
     pub fn stream_to_bigquery(&self, app_state: &AppState) {
         let event_str = self.event.event.clone();
         let params_str = self.event.params.clone();
@@ -74,36 +98,27 @@ impl Event {
         });
     }
 
+    /// Mixpanel format: {event: string, user_id: string, video_id: string, ...} (flat)
     pub fn forward_to_mixpanel(&self, app_state: &AppState) {
         let mixpanel_client = app_state.mixpanel_client.clone();
-        let event_name = self.event.event.clone();
-        let params_str = self.event.params.clone();
+        let flat_event = match self.to_flat_event() {
+            Some(e) => e,
+            None => {
+                error!("Failed to parse params for mixpanel");
+                return;
+            }
+        };
 
         tokio::spawn(async move {
             let token = mixpanel_client.token.clone();
-
-            let mut params: serde_json::Value = match serde_json::from_str(&params_str) {
-                Ok(p) => p,
-                Err(e) => {
-                    error!("Failed to parse params for mixpanel: {}", e);
-                    return;
-                }
-            };
-
-            // Add event name to payload
-            if let serde_json::Value::Object(ref mut map) = params {
-                map.insert(
-                    "event".to_string(),
-                    serde_json::Value::String(event_name.clone()),
-                );
-            }
+            let event_name = flat_event.event.clone();
 
             let response = match mixpanel_client
                 .client
                 .post(&mixpanel_client.url)
                 .header("Content-Type", "application/json")
                 .header("Authorization", format!("Bearer {}", token))
-                .json(&params)
+                .json(&flat_event)
                 .send()
                 .await
             {
