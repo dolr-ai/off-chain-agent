@@ -49,7 +49,7 @@ impl MixpanelClient {
         Self {
             client: ReqwestClient::new(),
             token,
-            url: format!("{}/api/send_mixpanel", ANALYTICS_SERVER_URL),
+            url: format!("{}/api/send_event", ANALYTICS_SERVER_URL),
         }
     }
 }
