@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod alert;
 pub mod download;
+pub mod ic_snapshot;
 pub mod snapshot_v2;
 pub mod upload;
 pub mod utils;

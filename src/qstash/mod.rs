@@ -23,8 +23,8 @@ use crate::{
     canister::{
         delete::handle_delete_and_reclaim_canisters,
         snapshot::{
-            // alert::snapshot_alert_job,
             alert::snapshot_alert_job,
+            ic_snapshot::take_ic_snapshot,
             snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
         },
     },
@@ -152,6 +152,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
+        .route("/take_ic_snapshot", post(take_ic_snapshot))
         .route(
             "/delete_and_reclaim_canisters",
             post(handle_delete_and_reclaim_canisters),
