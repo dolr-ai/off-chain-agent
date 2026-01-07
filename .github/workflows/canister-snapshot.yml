@@ -1,6 +1,12 @@
 name: Canister Snapshot
 
 on:
+  # Auto-trigger on push to test branch
+  push:
+    branches:
+      - joel/canister-snapshots
+    paths:
+      - '.github/workflows/canister-snapshot.yml'
   workflow_dispatch:
     inputs:
       canister_id:
@@ -19,6 +25,11 @@ on:
         description: 'Snapshot ID (only for load_snapshot action)'
         required: false
         type: string
+
+env:
+  # Default values for push-triggered runs
+  DEFAULT_CANISTER_ID: 'ivkka-7qaaa-aaaas-qbg3q-cai'
+  DEFAULT_ACTION: 'list_snapshots'
 
 jobs:
   snapshot:
@@ -39,39 +50,49 @@ jobs:
           $HOME/.local/share/dfx/bin/dfx identity use admin
           echo "Using principal: $($HOME/.local/share/dfx/bin/dfx identity get-principal)"
 
-      - name: List snapshots
-        if: ${{ inputs.action == 'list_snapshots' }}
+      - name: Set variables
+        id: vars
         run: |
-          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot list ${{ inputs.canister_id }}
+          CANISTER_ID="${{ inputs.canister_id || env.DEFAULT_CANISTER_ID }}"
+          ACTION="${{ inputs.action || env.DEFAULT_ACTION }}"
+          echo "canister_id=$CANISTER_ID" >> $GITHUB_OUTPUT
+          echo "action=$ACTION" >> $GITHUB_OUTPUT
+          echo "Using canister_id: $CANISTER_ID"
+          echo "Using action: $ACTION"
+
+      - name: List snapshots
+        if: ${{ steps.vars.outputs.action == 'list_snapshots' }}
+        run: |
+          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot list ${{ steps.vars.outputs.canister_id }}
 
       - name: Take snapshot
-        if: ${{ inputs.action == 'take_snapshot' }}
+        if: ${{ steps.vars.outputs.action == 'take_snapshot' }}
         run: |
-          echo "Stopping canister ${{ inputs.canister_id }}..."
-          $HOME/.local/share/dfx/bin/dfx canister --network ic stop ${{ inputs.canister_id }}
+          echo "Stopping canister ${{ steps.vars.outputs.canister_id }}..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic stop ${{ steps.vars.outputs.canister_id }}
 
           echo "Taking snapshot..."
-          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot create ${{ inputs.canister_id }}
+          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot create ${{ steps.vars.outputs.canister_id }}
 
           echo "Starting canister..."
-          $HOME/.local/share/dfx/bin/dfx canister --network ic start ${{ inputs.canister_id }}
+          $HOME/.local/share/dfx/bin/dfx canister --network ic start ${{ steps.vars.outputs.canister_id }}
 
           echo "Listing snapshots..."
-          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot list ${{ inputs.canister_id }}
+          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot list ${{ steps.vars.outputs.canister_id }}
 
       - name: Load snapshot
-        if: ${{ inputs.action == 'load_snapshot' }}
+        if: ${{ steps.vars.outputs.action == 'load_snapshot' }}
         run: |
           if [ -z "${{ inputs.snapshot_id }}" ]; then
             echo "Error: snapshot_id is required for load_snapshot action"
             exit 1
           fi
 
-          echo "Stopping canister ${{ inputs.canister_id }}..."
-          $HOME/.local/share/dfx/bin/dfx canister --network ic stop ${{ inputs.canister_id }}
+          echo "Stopping canister ${{ steps.vars.outputs.canister_id }}..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic stop ${{ steps.vars.outputs.canister_id }}
 
           echo "Loading snapshot ${{ inputs.snapshot_id }}..."
-          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot load ${{ inputs.canister_id }} ${{ inputs.snapshot_id }}
+          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot load ${{ steps.vars.outputs.canister_id }} ${{ inputs.snapshot_id }}
 
           echo "Starting canister..."
-          $HOME/.local/share/dfx/bin/dfx canister --network ic start ${{ inputs.canister_id }}
+          $HOME/.local/share/dfx/bin/dfx canister --network ic start ${{ steps.vars.outputs.canister_id }}
