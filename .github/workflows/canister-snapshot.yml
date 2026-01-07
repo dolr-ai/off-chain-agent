@@ -33,6 +33,8 @@ jobs:
   snapshot:
     name: Canister Snapshot
     runs-on: ubuntu-latest
+    env:
+      DFX_WARNING: -mainnet_plaintext_identity
 
     steps:
       - name: Install dfx
