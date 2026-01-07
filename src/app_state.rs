@@ -246,7 +246,7 @@ pub async fn init_agent() -> Agent {
         };
 
         match Agent::builder()
-            .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
+            .with_url("https://ic0.app")
             .with_identity(identity)
             .build()
         {
