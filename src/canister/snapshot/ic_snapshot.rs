@@ -31,9 +31,28 @@ struct ListCanisterSnapshotsArgs {
 }
 
 #[derive(CandidType, Serialize)]
-struct DeleteCanisterSnapshotArgs {
+struct CanisterIdRecord {
     canister_id: Principal,
-    snapshot_id: Vec<u8>,
+}
+
+async fn stop_canister(agent: &Agent, canister_id: Principal) -> Result<(), anyhow::Error> {
+    let args = CanisterIdRecord { canister_id };
+    agent
+        .update(&MANAGEMENT_CANISTER_ID, "stop_canister")
+        .with_arg(Encode!(&args)?)
+        .call_and_wait()
+        .await?;
+    Ok(())
+}
+
+async fn start_canister(agent: &Agent, canister_id: Principal) -> Result<(), anyhow::Error> {
+    let args = CanisterIdRecord { canister_id };
+    agent
+        .update(&MANAGEMENT_CANISTER_ID, "start_canister")
+        .with_arg(Encode!(&args)?)
+        .call_and_wait()
+        .await?;
+    Ok(())
 }
 
 async fn list_canister_snapshots(
@@ -72,7 +91,7 @@ async fn take_canister_snapshot(
     Ok(snapshot)
 }
 
-/// Evict oldest snapshot if at the limit, then take a new snapshot
+/// Stop canister, take snapshot (evicting oldest if at limit), then start canister again
 async fn take_snapshot_with_eviction(
     agent: &Agent,
     canister_id: Principal,
@@ -101,7 +120,24 @@ async fn take_snapshot_with_eviction(
         None
     };
 
-    take_canister_snapshot(agent, canister_id, replace_snapshot).await
+    // Stop the canister before taking snapshot
+    log::info!("Stopping canister {} for snapshot", canister_id);
+    stop_canister(agent, canister_id).await?;
+
+    // Take the snapshot
+    let snapshot_result = take_canister_snapshot(agent, canister_id, replace_snapshot).await;
+
+    // Always try to restart the canister, even if snapshot failed
+    log::info!("Starting canister {} after snapshot", canister_id);
+    if let Err(e) = start_canister(agent, canister_id).await {
+        log::error!(
+            "Failed to restart canister {} after snapshot: {}",
+            canister_id,
+            e
+        );
+    }
+
+    snapshot_result
 }
 
 #[derive(Debug, Serialize, Deserialize)]
