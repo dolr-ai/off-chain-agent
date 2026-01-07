@@ -21,6 +21,22 @@ use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::types::DelegatedIdentityWire;
 use crate::AppState;
 
+/// Convert PascalCase to snake_case (e.g., "VideoDurationWatched" -> "video_duration_watched")
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() + 5);
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(c.to_ascii_lowercase());
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 pub mod warehouse_events {
     tonic::include_proto!("warehouse_events");
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
@@ -276,12 +292,13 @@ async fn handle_bulk_events_v2(
     Json(request): Json<VerifiedEventBulkRequestV2>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     for payload in request.events {
-        // Extract event name from the payload
+        // Extract event name from the payload and convert to snake_case
+        // (mobile sends PascalCase like "VideoDurationWatched", we need "video_duration_watched")
         let event_name = payload
             .get("event")
             .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
+            .map(to_snake_case)
+            .unwrap_or_else(|| "unknown".to_string());
 
         let event = Event::new(WarehouseEvent {
             event: event_name,
