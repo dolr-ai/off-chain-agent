@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - joel/canister-snapshots
-    paths:
-      - '.github/workflows/canister-snapshot.yml'
   workflow_dispatch:
     inputs:
       canister_id:
