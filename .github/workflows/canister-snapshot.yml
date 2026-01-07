@@ -1,0 +1,77 @@
+name: Canister Snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      canister_id:
+        description: 'Canister ID to snapshot'
+        required: true
+        type: string
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - take_snapshot
+          - list_snapshots
+          - load_snapshot
+      snapshot_id:
+        description: 'Snapshot ID (only for load_snapshot action)'
+        required: false
+        type: string
+
+jobs:
+  snapshot:
+    name: Canister Snapshot
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install dfx
+        run: |
+          DFXVM_INIT_YES=true sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+          echo "$HOME/.local/share/dfx/bin" >> $GITHUB_PATH
+
+      - name: Setup identity
+        run: |
+          mkdir -p ~/.config/dfx/identity/admin
+          echo "${{ secrets.YRAL_DAPP_BACKEND_APP_ADMIN_AND_PROPOSAL_SUBMITTER_IDENTITY_PRIVATE_KEY }}" > ~/.config/dfx/identity/admin/identity.pem
+          chmod 600 ~/.config/dfx/identity/admin/identity.pem
+          $HOME/.local/share/dfx/bin/dfx identity use admin
+          echo "Using principal: $($HOME/.local/share/dfx/bin/dfx identity get-principal)"
+
+      - name: List snapshots
+        if: ${{ inputs.action == 'list_snapshots' }}
+        run: |
+          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot list ${{ inputs.canister_id }}
+
+      - name: Take snapshot
+        if: ${{ inputs.action == 'take_snapshot' }}
+        run: |
+          echo "Stopping canister ${{ inputs.canister_id }}..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic stop ${{ inputs.canister_id }}
+
+          echo "Taking snapshot..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot create ${{ inputs.canister_id }}
+
+          echo "Starting canister..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic start ${{ inputs.canister_id }}
+
+          echo "Listing snapshots..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot list ${{ inputs.canister_id }}
+
+      - name: Load snapshot
+        if: ${{ inputs.action == 'load_snapshot' }}
+        run: |
+          if [ -z "${{ inputs.snapshot_id }}" ]; then
+            echo "Error: snapshot_id is required for load_snapshot action"
+            exit 1
+          fi
+
+          echo "Stopping canister ${{ inputs.canister_id }}..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic stop ${{ inputs.canister_id }}
+
+          echo "Loading snapshot ${{ inputs.snapshot_id }}..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic snapshot load ${{ inputs.canister_id }} ${{ inputs.snapshot_id }}
+
+          echo "Starting canister..."
+          $HOME/.local/share/dfx/bin/dfx canister --network ic start ${{ inputs.canister_id }}
