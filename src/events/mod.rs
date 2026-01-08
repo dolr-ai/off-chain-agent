@@ -35,6 +35,22 @@ pub mod types;
 pub mod utils;
 pub mod verify;
 
+/// Convert PascalCase to snake_case (e.g., "VideoDurationWatched" -> "video_duration_watched")
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() + 5);
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(c.to_ascii_lowercase());
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
 }
@@ -275,13 +291,18 @@ async fn handle_bulk_events_v2(
     State(state): State<Arc<AppState>>,
     Json(request): Json<VerifiedEventBulkRequestV2>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    for payload in request.events {
-        // Extract event name from the payload
+    for mut payload in request.events {
+        // Extract event name and convert PascalCase to snake_case for backwards compat
         let event_name = payload
             .get("event")
             .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
+            .map(to_snake_case)
+            .unwrap_or_else(|| "unknown".to_string());
+
+        // Remove "event" field from params (old AnalyticsEventV3.params() didn't include it)
+        if let Value::Object(ref mut map) = payload {
+            map.remove("event");
+        }
 
         let event = Event::new(WarehouseEvent {
             event: event_name,
@@ -319,8 +340,11 @@ async fn post_event_v2(
 
     check_auth_events(auth_token).map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
 
+    // Convert event name to snake_case for backwards compat with mobile sending PascalCase
+    let event_name = to_snake_case(&payload.event);
+
     let warehouse_event = WarehouseEvent {
-        event: payload.event,
+        event: event_name,
         params: payload.params,
     };
 
