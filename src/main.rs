@@ -222,12 +222,10 @@ fn main() {
     ));
 
     // Configure sentry to only capture errors (not debug/info/warn)
-    let sentry_layer = sentry_tracing::layer().event_filter(|metadata| {
-        match *metadata.level() {
-            tracing::Level::ERROR => sentry_tracing::EventFilter::Event,
-            tracing::Level::WARN => sentry_tracing::EventFilter::Breadcrumb,
-            _ => sentry_tracing::EventFilter::Ignore,
-        }
+    let sentry_layer = sentry_tracing::layer().event_filter(|metadata| match *metadata.level() {
+        tracing::Level::ERROR => sentry_tracing::EventFilter::Event,
+        tracing::Level::WARN => sentry_tracing::EventFilter::Breadcrumb,
+        _ => sentry_tracing::EventFilter::Ignore,
     });
 
     tracing_subscriber::registry()
