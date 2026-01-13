@@ -154,6 +154,10 @@ async fn send_event_to_pipeline(
 ) -> anyhow::Result<()> {
     let url = OFF_CHAIN_AGENT_URL.join("api/v2/events").unwrap();
 
+    // Use GRPC_AUTH_TOKEN for internal API auth (not the mixpanel token)
+    let grpc_auth_token = std::env::var("GRPC_AUTH_TOKEN")
+        .expect("GRPC_AUTH_TOKEN is required for event pipeline");
+
     // Format as EventRequest { event: String, params: String }
     let request_body = json!({
         "event": event_name,
@@ -164,7 +168,7 @@ async fn send_event_to_pipeline(
         .client
         .post(url.as_str())
         .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", mixpanel_client.token))
+        .header("Authorization", format!("Bearer {}", grpc_auth_token))
         .json(&request_body)
         .send()
         .await?;
