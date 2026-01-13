@@ -38,7 +38,7 @@ pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
 pub static OFF_CHAIN_AGENT_URL: Lazy<Url> = Lazy::new(|| {
     let url = std::env::var("OFF_CHAIN_AGENT_URL")
-        .unwrap_or_else(|_| "https://icp-off-chain-agent.fly.dev/".into());
+        .unwrap_or_else(|_| "https://offchain.yral.com/".into());
     Url::parse(&url).unwrap()
 });
 
