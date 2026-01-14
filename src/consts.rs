@@ -137,5 +137,11 @@ pub static MODERATOR_PRINCIPALS: Lazy<Vec<Principal>> = Lazy::new(|| {
         "7vovb-nk3ke-4cptr-p57qb-wtcrl-rlc2f-4kweo-tksld-pfq2p-ptkiw-pqe"
             .parse()
             .unwrap(),
+        "l4eip-toa2d-bsauv-gew7y-62oie-lhoka-vb2xf-e2wrw-g6ltk-rpgvf-vae"
+            .parse()
+            .unwrap(),
+        "k23zg-uy5z7-m7cji-tseis-j5soz-zy6f5-bixo5-sicn3-zhwc6-qdkrt-lae"
+            .parse()
+            .unwrap()
     ]
 });
