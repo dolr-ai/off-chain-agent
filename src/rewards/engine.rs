@@ -132,6 +132,17 @@ impl RewardEngine {
             .publisher_user_id
             .as_ref()
             .context("Missing publisher_user_id")?;
+
+        // Skip self-views (creator viewing their own video)
+        if event.user_id == *publisher_user_id {
+            log::debug!(
+                "Self-view detected for video {} by user {}, skipping reward",
+                video_id,
+                event.user_id
+            );
+            return Ok(());
+        }
+
         let is_logged_in = event.is_logged_in.unwrap_or(true);
 
         // Determine if we should track views based on client_type and absolute_watched
