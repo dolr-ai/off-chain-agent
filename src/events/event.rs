@@ -41,15 +41,34 @@ impl Event {
     }
 
     /// Convert to flat event (for Mixpanel)
+    /// Returns None if no principal can be determined (analytics server requires it)
     fn to_flat_event(&self) -> Option<FlatEvent> {
         let mut params: Value = serde_json::from_str(&self.event.params).ok()?;
 
         // Remove "event" from params if present (avoid duplication)
         if let Value::Object(ref mut map) = params {
             map.remove("event");
-            // Add "principal" field from "user_id" if present (analytics server expects this)
-            if let Some(user_id) = map.get("user_id").cloned() {
-                map.insert("principal".to_string(), user_id);
+
+            // Analytics server requires "principal" field
+            // Check multiple possible sources in priority order
+            if !map.contains_key("principal") {
+                let principal_value = map
+                    .get("user_id")
+                    .or_else(|| map.get("publisher_user_id"))
+                    .or_else(|| map.get("creator_id"))
+                    .or_else(|| map.get("viewer_id"))
+                    .cloned();
+
+                if let Some(value) = principal_value {
+                    map.insert("principal".to_string(), value);
+                } else {
+                    // No principal found - skip this event for Mixpanel
+                    log::debug!(
+                        "Skipping event '{}' for Mixpanel - no principal field found",
+                        self.event.event
+                    );
+                    return None;
+                }
             }
         }
 
