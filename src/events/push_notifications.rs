@@ -10,7 +10,7 @@ use crate::{
     events::types::{deserialize_event_payload, EventPayload},
 };
 
-const METADATA_SERVER_URL: &str = "https://yral-metadata.fly.dev";
+const METADATA_SERVER_URL: &str = "https://metadata.yral.com";
 
 #[derive(Clone)]
 pub struct NotificationClient {
