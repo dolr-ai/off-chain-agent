@@ -8,6 +8,7 @@ use axum::routing::post;
 use axum::{routing::get, Router};
 use canister::canister_health_handler;
 use config::AppConfig;
+use webhooks::sentry_webhook_handler;
 use events::event::storj::enqueue_storj_backfill_item;
 use http::header::CONTENT_TYPE;
 use offchain_service::report_approved_handler;
@@ -57,6 +58,7 @@ mod types;
 pub mod user;
 pub mod utils;
 pub mod videogen;
+mod webhooks;
 pub mod yral_auth;
 
 use app_state::AppState;
@@ -137,6 +139,7 @@ async fn main_impl() -> Result<()> {
         .route("/healthz", get(health_handler))
         .route("/canister-health", get(canister_health_handler))
         .route("/report-approved", post(report_approved_handler))
+        .route("/webhooks/sentry", post(sentry_webhook_handler))
         .route(
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
