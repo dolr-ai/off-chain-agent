@@ -13,9 +13,8 @@ static GCHAT_SENTRY_WEBHOOK_URL: Lazy<String> = Lazy::new(|| {
     std::env::var("GCHAT_SENTRY_WEBHOOK_URL").expect("GCHAT_SENTRY_WEBHOOK_URL must be set")
 });
 
-static SENTRY_CLIENT_SECRET: Lazy<String> = Lazy::new(|| {
-    std::env::var("SENTRY_CLIENT_SECRET").expect("SENTRY_CLIENT_SECRET must be set")
-});
+static SENTRY_CLIENT_SECRET: Lazy<String> =
+    Lazy::new(|| std::env::var("SENTRY_CLIENT_SECRET").expect("SENTRY_CLIENT_SECRET must be set"));
 
 fn verify_sentry_signature(body: &[u8], signature: &str, secret: &str) -> bool {
     type HmacSha256 = Hmac<Sha256>;
