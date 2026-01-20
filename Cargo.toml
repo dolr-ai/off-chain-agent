@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 axum = { version = "0.8.0", features = ["macros", "json"] }
 candid = "0.10.6"
-chrono = { version = "=0.4.38", features = ["serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
 chrono-tz = "0.10"
 futures = "0.3.30"
 ic-agent = "0.41.0"
@@ -101,8 +101,8 @@ redis = { version = "0.32.7", features = [
     "acl",
     "sentinel"
 ] }
-bb8 = "0.9.0"
-bb8-redis = "0.21.0"
+bb8 = "=0.9.0"
+bb8-redis = "=0.21.0"
 aws-sdk-s3 = { version = "1.65", features = ["behavior-version-latest"] }
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 rustls = { version = "0.23", features = ["ring"] }
