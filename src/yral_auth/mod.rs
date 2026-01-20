@@ -2,6 +2,7 @@ use candid::Principal;
 use redis::AsyncCommands;
 
 use crate::{config::AppConfig, types::RedisPool};
+pub mod dragonfly;
 
 #[derive(Clone)]
 pub struct YralAuthRedis {
