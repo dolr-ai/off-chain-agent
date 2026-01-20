@@ -22,7 +22,7 @@ pub static YRAL_UPLOAD_VIDEO_WORKER_URL: Lazy<Url> =
 pub const PLATFORM_ORCHESTRATOR_ID: &str = "74zq4-iqaaa-aaaam-ab53a-cai";
 
 pub static YRAL_METADATA_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://yral-metadata.fly.dev/").unwrap());
+    Lazy::new(|| Url::parse("https://metadata.yral.com/").unwrap());
 
 #[allow(dead_code)]
 pub const RECYCLE_THRESHOLD_SECS: u64 = 15 * 24 * 60 * 60; // 15 days
