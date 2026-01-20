@@ -13,7 +13,7 @@ chrono-tz = "0.10"
 futures = "0.3.30"
 ic-agent = "0.41.0"
 serde = "=1.0.219"
-serde_json = { version = "1.0.114", default-features = false }
+serde_json = { version = "=1.0.143", default-features = false }
 stringreader = "0.1.1"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
@@ -91,7 +91,7 @@ regex = "1.11.1"
 google-cloud-alloydb-v1 = "0.2.0"
 google-cloud-auth = "0.19.0"
 rand = "0.9.1"
-redis = { version = "0.31.0", features = [
+redis = { version = "0.32.7", features = [
     "tokio-rustls-comp",
     "tls-rustls-webpki-roots",
     "json",
