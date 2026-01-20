@@ -9,7 +9,9 @@ use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
-use crate::yral_auth::dragonfly::{init_dragonfly_redis, get_ca_cert_pem,get_client_key_pem, get_client_cert_pem, DragonflyPool};
+use crate::yral_auth::dragonfly::{
+    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis, DragonflyPool,
+};
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -393,8 +395,11 @@ async fn init_dragonfly_redis_pool() -> DragonflyPool {
     let ca_cert_bytes = get_ca_cert_pem().expect("Failed to read DRAGONFLY_CA_CERT");
     let client_cert_bytes = get_client_cert_pem().expect("Failed to read DRAGONFLY_CLIENT_CERT");
     let client_key_bytes = get_client_key_pem().expect("Failed to read DRAGONFLY_CLIENT_KEY");
-    let dragonfly_pool:DragonflyPool = init_dragonfly_redis(ca_cert_bytes, client_cert_bytes, client_key_bytes).await.expect("failed to initalize DragonflyPool");
-    
+    let dragonfly_pool: DragonflyPool =
+        init_dragonfly_redis(ca_cert_bytes, client_cert_bytes, client_key_bytes)
+            .await
+            .expect("failed to initalize DragonflyPool");
+
     dragonfly_pool
 }
 

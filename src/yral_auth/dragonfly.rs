@@ -1,5 +1,5 @@
-use futures::StreamExt;
 use candid::Principal;
+use futures::StreamExt;
 use redis::aio::MultiplexedConnection;
 use redis::sentinel::SentinelClient;
 use redis::sentinel::SentinelClientBuilder;

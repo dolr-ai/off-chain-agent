@@ -60,7 +60,10 @@ pub async fn delete_canister_data(
             .delete_principal(user_principal)
             .await?;
 
-        state.yral_auth_dragonfly.delete_principal(user_principal).await?;
+        state
+            .yral_auth_dragonfly
+            .delete_principal(user_principal)
+            .await?;
     }
 
     // 1. Delete user metadata using yral_metadata_client (this step is unique to user deletion)
