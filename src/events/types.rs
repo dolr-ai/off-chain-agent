@@ -745,6 +745,14 @@ pub struct VideoApprovalPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoReportBannedPayload {
+    pub video_id: String,
+    pub post_id: String,
+    pub canister_id: String,
+    pub publisher_user_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum EventPayload {
     VideoDurationWatched(VideoDurationWatchedPayloadV2),
@@ -780,6 +788,7 @@ pub enum EventPayload {
     FollowUser(FollowUserPayload),
     VideoApproved(VideoApprovalPayload),
     VideoDisapproved(VideoApprovalPayload),
+    VideoReportBanned(VideoReportBannedPayload),
 }
 
 fn serialize_reward_earned<S>(
@@ -1372,6 +1381,79 @@ impl EventPayload {
                     .await;
             }
 
+            EventPayload::VideoReportBanned(payload) => {
+                let Ok(user_principal) = Principal::from_text(&payload.publisher_user_id) else {
+                    log::error!(
+                        "Failed to parse publisher_user_id {} as principal for video_report_banned",
+                        payload.publisher_user_id
+                    );
+                    return;
+                };
+
+                let title = "Video Banned";
+                let body = "Your video has been banned due to user reports.";
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    data: Some(json!({
+                        "type": "video_report_banned",
+                        "video_id": payload.video_id,
+                        "post_id": payload.post_id,
+                        "canister_id": payload.canister_id
+                    })),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some("https://yral.com".to_string()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body.to_string(),
+                                },
+                                "sound": "default",
+                            },
+                            "url": "https://yral.com"
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, user_principal)
+                    .await;
+            }
+
             _ => {}
         }
     }
@@ -1443,6 +1525,9 @@ pub fn deserialize_event_payload(
         "follow_user" => Ok(EventPayload::FollowUser(serde_json::from_value(value)?)),
         "video_approved" => Ok(EventPayload::VideoApproved(serde_json::from_value(value)?)),
         "video_disapproved" => Ok(EventPayload::VideoDisapproved(serde_json::from_value(
+            value,
+        )?)),
+        "video_report_banned" => Ok(EventPayload::VideoReportBanned(serde_json::from_value(
             value,
         )?)),
         _ => Err(serde_json::Error::unknown_field(event_name, &[])),
