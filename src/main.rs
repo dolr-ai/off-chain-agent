@@ -8,7 +8,6 @@ use axum::routing::post;
 use axum::{routing::get, Router};
 use canister::canister_health_handler;
 use config::AppConfig;
-use webhooks::sentry_webhook_handler;
 use events::event::storj::enqueue_storj_backfill_item;
 use http::header::CONTENT_TYPE;
 use offchain_service::report_approved_handler;
@@ -25,6 +24,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
+use webhooks::sentry_webhook_handler;
 
 use crate::auth::check_auth_grpc;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;

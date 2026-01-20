@@ -1,9 +1,4 @@
-use axum::{
-    extract::State,
-    http::HeaderMap,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -12,13 +7,11 @@ use std::sync::Arc;
 use crate::{app_state::AppState, offchain_service::send_message_gchat};
 
 fn get_gchat_sentry_webhook_url() -> String {
-    std::env::var("GCHAT_SENTRY_WEBHOOK_URL")
-        .expect("GCHAT_SENTRY_WEBHOOK_URL must be set")
+    std::env::var("GCHAT_SENTRY_WEBHOOK_URL").expect("GCHAT_SENTRY_WEBHOOK_URL must be set")
 }
 
 fn get_sentry_webhook_api_key() -> String {
-    std::env::var("SENTRY_WEBHOOK_API_KEY")
-        .expect("SENTRY_WEBHOOK_API_KEY must be set")
+    std::env::var("SENTRY_WEBHOOK_API_KEY").expect("SENTRY_WEBHOOK_API_KEY must be set")
 }
 
 /// Sentry webhook payload (simplified - Sentry sends more fields)
@@ -124,7 +117,9 @@ fn build_gchat_message(payload: &SentryWebhookPayload) -> Value {
         let last_seen = issue.last_seen.as_deref().unwrap_or("Unknown");
 
         // Get environment from event if available
-        let environment = payload.data.event
+        let environment = payload
+            .data
+            .event
             .as_ref()
             .and_then(|e| e.environment.as_deref())
             .unwrap_or("production");
@@ -221,7 +216,12 @@ pub async fn sentry_webhook_handler(
     log::info!(
         "Received Sentry webhook: action={}, project={}",
         payload.action,
-        payload.data.issue.as_ref().map(|i| &i.project.name).unwrap_or(&"unknown".to_string())
+        payload
+            .data
+            .issue
+            .as_ref()
+            .map(|i| &i.project.name)
+            .unwrap_or(&"unknown".to_string())
     );
 
     let gchat_message = build_gchat_message(&payload);
