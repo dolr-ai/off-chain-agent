@@ -1,6 +1,6 @@
 use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 use http::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -16,11 +16,12 @@ fn get_sentry_webhook_api_key() -> String {
 
 /// Sentry webhook payload (simplified - Sentry sends more fields)
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct SentryWebhookPayload {
     pub action: String,
     pub data: SentryData,
     #[serde(default)]
-    pub actor: Option<SentryActor>,
+    actor: Option<SentryActor>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,20 +31,21 @@ pub struct SentryData {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct SentryIssue {
     pub id: String,
     pub title: String,
     #[serde(default)]
     pub culprit: Option<String>,
-    #[serde(default)]
-    pub shortId: Option<String>,
+    #[serde(default, rename = "shortId")]
+    pub short_id: Option<String>,
     #[serde(rename = "permalink")]
     pub url: Option<String>,
     pub project: SentryProject,
     #[serde(default)]
     pub level: Option<String>,
     #[serde(default)]
-    pub status: Option<String>,
+    status: Option<String>,
     #[serde(rename = "firstSeen")]
     pub first_seen: Option<String>,
     #[serde(rename = "lastSeen")]
@@ -52,30 +54,33 @@ pub struct SentryIssue {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct SentryEvent {
-    pub event_id: Option<String>,
-    pub title: Option<String>,
-    pub message: Option<String>,
+    event_id: Option<String>,
+    title: Option<String>,
+    message: Option<String>,
     #[serde(default)]
     pub environment: Option<String>,
     #[serde(default)]
-    pub release: Option<String>,
-    pub url: Option<String>,
+    release: Option<String>,
+    url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct SentryProject {
-    pub id: String,
+    id: String,
     pub name: String,
-    pub slug: String,
+    slug: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct SentryActor {
     #[serde(rename = "type")]
-    pub actor_type: String,
-    pub id: Option<String>,
-    pub name: Option<String>,
+    actor_type: String,
+    id: Option<String>,
+    name: Option<String>,
 }
 
 fn get_level_emoji(level: Option<&str>) -> &'static str {
@@ -110,7 +115,7 @@ fn build_gchat_message(payload: &SentryWebhookPayload) -> Value {
         let level_text = level.unwrap_or("error").to_uppercase();
 
         let issue_url = issue.url.as_deref().unwrap_or("#");
-        let short_id = issue.shortId.as_deref().unwrap_or(&issue.id);
+        let short_id = issue.short_id.as_deref().unwrap_or(&issue.id);
         let culprit = issue.culprit.as_deref().unwrap_or("Unknown");
         let count = issue.count.as_deref().unwrap_or("1");
         let first_seen = issue.first_seen.as_deref().unwrap_or("Unknown");
