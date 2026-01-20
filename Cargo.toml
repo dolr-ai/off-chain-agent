@@ -12,7 +12,7 @@ chrono = { version = "=0.4.38", features = ["serde"] }
 chrono-tz = "0.10"
 futures = "0.3.30"
 ic-agent = "0.41.0"
-serde = "1.0.219"
+serde = "1.0"
 serde_json = { version = "1.0.114", default-features = false }
 stringreader = "0.1.1"
 strum = { version = "0.26", features = ["derive"] }
@@ -97,6 +97,8 @@ redis = { version = "1.0.2", features = [
     "json",
     "cluster",
     "cluster-async",
+    "acl",
+    "sentinel"
 ] }
 bb8 = "0.9.1"
 bb8-redis = "0.26.0"
