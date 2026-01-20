@@ -6,6 +6,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
+use canister::canister_health_handler;
 use config::AppConfig;
 use events::event::storj::enqueue_storj_backfill_item;
 use http::header::CONTENT_TYPE;
@@ -134,6 +135,7 @@ async fn main_impl() -> Result<()> {
 
     let http = Router::new()
         .route("/healthz", get(health_handler))
+        .route("/canister-health", get(canister_health_handler))
         .route("/report-approved", post(report_approved_handler))
         .route(
             "/enqueue_storj_backfill_item",
