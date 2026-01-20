@@ -391,45 +391,11 @@ impl VideoHashDuplication {
             return Ok(());
         }
 
-        // Use standard SQL INSERT instead of streaming insert
-        let canister_id_sql = canister_id
-            .as_ref()
-            .map(|id| format!("'{}'", id.replace('\'', "''")))
-            .unwrap_or_else(|| "NULL".to_string());
-
-        let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-             (video_id, post_id, canister_id, user_id, is_approved, created_at)
-             VALUES ('{}', '{}', {}, '{}', FALSE, CURRENT_TIMESTAMP())",
-            video_id.replace('\'', "''"),
-            post_id.replace('\'', "''"),
-            canister_id_sql,
-            user_id.replace('\'', "''")
-        );
-
-        let request = QueryRequest {
-            query,
-            ..Default::default()
-        };
-
-        bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
-            .await?;
-
-        log::info!(
-            "Successfully inserted ugc_content_approval: video_id={}, post_id={}, canister_id={:?}, user_id={}, is_approved=false",
-            video_id,
-            post_id,
-            canister_id,
-            user_id
-        );
-
-        // Also push to kvrocks
+        // First store to kvrocks (fast, synchronous)
         let approval_data = UserUploadedContentApproval {
             video_id: video_id.to_string(),
             post_id: post_id.to_string(),
-            canister_id: canister_id.unwrap_or_default(),
+            canister_id: canister_id.clone().unwrap_or_default(),
             user_id: user_id.to_string(),
             is_approved: false,
             created_at: chrono::Utc::now().to_rfc3339(),
@@ -439,10 +405,64 @@ impl VideoHashDuplication {
             .await
         {
             log::error!(
-                "Error pushing user_uploaded_content_approval to kvrocks: {}",
+                "Error storing user_uploaded_content_approval to kvrocks: {}",
                 e
             );
         }
+
+        log::info!(
+            "Stored ugc_content_approval to kvrocks: video_id={}, post_id={}, canister_id={:?}, user_id={}, is_approved=false",
+            video_id,
+            post_id,
+            canister_id,
+            user_id
+        );
+
+        // Then insert into BigQuery in the background
+        let video_id_owned = video_id.to_string();
+        let post_id_owned = post_id.to_string();
+        let user_id_owned = user_id.to_string();
+        let canister_id_owned = canister_id.clone();
+        let bigquery_client = bigquery_client.clone();
+
+        tokio::spawn(async move {
+            let canister_id_sql = canister_id_owned
+                .as_ref()
+                .map(|id| format!("'{}'", id.replace('\'', "''")))
+                .unwrap_or_else(|| "NULL".to_string());
+
+            let query = format!(
+                "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+                 (video_id, post_id, canister_id, user_id, is_approved, created_at)
+                 VALUES ('{}', '{}', {}, '{}', FALSE, CURRENT_TIMESTAMP())",
+                video_id_owned.replace('\'', "''"),
+                post_id_owned.replace('\'', "''"),
+                canister_id_sql,
+                user_id_owned.replace('\'', "''")
+            );
+
+            let request = QueryRequest {
+                query,
+                ..Default::default()
+            };
+
+            if let Err(e) = bigquery_client
+                .job()
+                .query("hot-or-not-feed-intelligence", &request)
+                .await
+            {
+                log::error!(
+                    "Failed to insert ugc_content_approval to BigQuery for video_id={}: {}",
+                    video_id_owned,
+                    e
+                );
+            } else {
+                log::info!(
+                    "Successfully inserted ugc_content_approval to BigQuery: video_id={}",
+                    video_id_owned
+                );
+            }
+        });
 
         Ok(())
     }

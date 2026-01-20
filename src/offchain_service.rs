@@ -1,8 +1,11 @@
 use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
-    app_state::AppState, consts::GOOGLE_CHAT_REPORT_SPACE_URL,
-    posts::report_post::repost_post_common_impl, AppError,
+    app_state::AppState,
+    consts::GOOGLE_CHAT_REPORT_SPACE_URL,
+    events::{event::Event, warehouse_events::WarehouseEvent},
+    posts::report_post::repost_post_common_impl,
+    AppError,
 };
 use anyhow::{Context, Result};
 use axum::extract::State;
@@ -12,7 +15,8 @@ use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
 use yral_canisters_client::{
-    ic::USER_POST_SERVICE_ID, user_post_service::PostStatus, user_post_service::UserPostService,
+    ic::USER_POST_SERVICE_ID,
+    user_post_service::{Post, PostStatus, Result2, UserPostService},
 };
 use yup_oauth2::ServiceAccountAuthenticator;
 
@@ -221,6 +225,22 @@ pub async fn report_approved_handler(
 
     let user_post_service = UserPostService(USER_POST_SERVICE_ID, &state.agent);
 
+    let Result2::Ok(Post {
+        video_uid,
+        creator_principal,
+        ..
+    }) = user_post_service
+        .get_individual_post_details_by_id(post_id.to_string())
+        .await?
+    else {
+        return Err(anyhow::anyhow!(
+            "Failed to fetch post details for {}/{}",
+            canister_id,
+            post_id
+        )
+        .into());
+    };
+
     user_post_service
         .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
         .await?;
@@ -230,6 +250,18 @@ pub async fn report_approved_handler(
         "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
     });
     send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+    let params = json!({
+        "video_id": video_uid,
+        "publisher_user_id": creator_principal,
+        "canister_id": canister_id,
+        "post_id": post_id
+    });
+
+    let event = Event::new(WarehouseEvent {
+        event: "video_report_banned".to_string(),
+        params: params.to_string(),
+    });
+    event.stream_to_bigquery(&state);
 
     Ok(())
 }
