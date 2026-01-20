@@ -1,17 +1,33 @@
-use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
+use axum::{body::Bytes, extract::State, http::HeaderMap, response::IntoResponse};
+use hmac::{Hmac, Mac};
 use http::StatusCode;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sha2::Sha256;
 use std::sync::Arc;
 
 use crate::{app_state::AppState, offchain_service::send_message_gchat};
 
-fn get_gchat_sentry_webhook_url() -> String {
+static GCHAT_SENTRY_WEBHOOK_URL: Lazy<String> = Lazy::new(|| {
     std::env::var("GCHAT_SENTRY_WEBHOOK_URL").expect("GCHAT_SENTRY_WEBHOOK_URL must be set")
-}
+});
 
-fn get_sentry_webhook_api_key() -> String {
-    std::env::var("SENTRY_WEBHOOK_API_KEY").expect("SENTRY_WEBHOOK_API_KEY must be set")
+static SENTRY_CLIENT_SECRET: Lazy<String> = Lazy::new(|| {
+    std::env::var("SENTRY_CLIENT_SECRET").expect("SENTRY_CLIENT_SECRET must be set")
+});
+
+fn verify_sentry_signature(body: &[u8], signature: &str, secret: &str) -> bool {
+    type HmacSha256 = Hmac<Sha256>;
+
+    let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes()) else {
+        return false;
+    };
+
+    mac.update(body);
+    let expected = hex::encode(mac.finalize().into_bytes());
+
+    expected == signature
 }
 
 /// Sentry webhook payload (simplified - Sentry sends more fields)
@@ -204,19 +220,25 @@ fn build_gchat_message(payload: &SentryWebhookPayload) -> Value {
 pub async fn sentry_webhook_handler(
     State(_state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(payload): Json<SentryWebhookPayload>,
+    body: Bytes,
 ) -> impl IntoResponse {
-    // Verify API key
-    let expected_key = get_sentry_webhook_api_key();
-    let provided_key = headers
-        .get("x-api-key")
+    let signature = headers
+        .get("sentry-hook-signature")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    if provided_key != expected_key {
-        log::warn!("Sentry webhook: invalid API key");
-        return (StatusCode::UNAUTHORIZED, "Invalid API key");
+    if !verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET) {
+        log::warn!("Sentry webhook: invalid signature");
+        return (StatusCode::UNAUTHORIZED, "Invalid signature");
     }
+
+    let payload: SentryWebhookPayload = match serde_json::from_slice(&body) {
+        Ok(p) => p,
+        Err(e) => {
+            log::error!("Failed to parse Sentry webhook payload: {}", e);
+            return (StatusCode::BAD_REQUEST, "Invalid payload");
+        }
+    };
 
     log::info!(
         "Received Sentry webhook: action={}, project={}",
@@ -231,8 +253,7 @@ pub async fn sentry_webhook_handler(
 
     let gchat_message = build_gchat_message(&payload);
 
-    let webhook_url = get_gchat_sentry_webhook_url();
-    match send_message_gchat(&webhook_url, gchat_message).await {
+    match send_message_gchat(&GCHAT_SENTRY_WEBHOOK_URL, gchat_message).await {
         Ok(_) => {
             log::info!("Successfully forwarded Sentry alert to Google Chat");
             (StatusCode::OK, "OK")
