@@ -269,6 +269,9 @@ jobs:
             SCRATCHPAD_DRAGONFLY_HOST='${{ vars.SCRATCHPAD_DRAGONFLY_HOST }}' \
             SCRATCHPAD_DRAGONFLY_PORT='${{ vars.SCRATCHPAD_DRAGONFLY_PORT }}' \
             SCRATCHPAD_DRAGONFLY_PASSWORD='${{ secrets.SCRATCHPAD_DRAGONFLY_PASSWORD }}' \
+            GCHAT_SENTRY_WEBHOOK_URL='${{ secrets.GCHAT_SENTRY_WEBHOOK_URL }}' \
+            SENTRY_CLIENT_SECRET_1='${{ secrets.SENTRY_CLIENT_SECRET_1 }}' \
+            SENTRY_CLIENT_SECRET_2='${{ secrets.SENTRY_CLIENT_SECRET_2 }}' \
             docker compose up -d
 
             echo 'Waiting for services to start...'
