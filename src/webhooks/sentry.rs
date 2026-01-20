@@ -1,10 +1,10 @@
 use axum::{body::Bytes, extract::State, http::HeaderMap, response::IntoResponse};
-// use hmac::{Hmac, Mac};
+use hmac::{Hmac, Mac};
 use http::StatusCode;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::{json, Value};
-// use sha2::Sha256;
+use sha2::Sha256;
 use std::sync::Arc;
 
 use crate::{app_state::AppState, offchain_service::send_message_gchat};
@@ -13,21 +13,26 @@ static GCHAT_SENTRY_WEBHOOK_URL: Lazy<String> = Lazy::new(|| {
     std::env::var("GCHAT_SENTRY_WEBHOOK_URL").expect("GCHAT_SENTRY_WEBHOOK_URL must be set")
 });
 
-// static SENTRY_CLIENT_SECRET: Lazy<String> =
-//     Lazy::new(|| std::env::var("SENTRY_CLIENT_SECRET").expect("SENTRY_CLIENT_SECRET must be set"));
+static SENTRY_CLIENT_SECRET_1: Lazy<String> = Lazy::new(|| {
+    std::env::var("SENTRY_CLIENT_SECRET_1").expect("SENTRY_CLIENT_SECRET_1 must be set")
+});
 
-// fn verify_sentry_signature(body: &[u8], signature: &str, secret: &str) -> bool {
-//     type HmacSha256 = Hmac<Sha256>;
+static SENTRY_CLIENT_SECRET_2: Lazy<String> = Lazy::new(|| {
+    std::env::var("SENTRY_CLIENT_SECRET_2").expect("SENTRY_CLIENT_SECRET_2 must be set")
+});
 
-//     let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes()) else {
-//         return false;
-//     };
+fn verify_sentry_signature(body: &[u8], signature: &str, secret: &str) -> bool {
+    type HmacSha256 = Hmac<Sha256>;
 
-//     mac.update(body);
-//     let expected = hex::encode(mac.finalize().into_bytes());
+    let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes()) else {
+        return false;
+    };
 
-//     expected == signature
-// }
+    mac.update(body);
+    let expected = hex::encode(mac.finalize().into_bytes());
+
+    expected == signature
+}
 
 /// Sentry webhook payload (simplified - Sentry sends more fields)
 #[derive(Debug, Deserialize)]
@@ -218,19 +223,20 @@ fn build_gchat_message(payload: &SentryWebhookPayload) -> Value {
 /// Sentry webhook handler - forwards alerts to Google Chat
 pub async fn sentry_webhook_handler(
     State(_state): State<Arc<AppState>>,
-    _headers: HeaderMap,
+    headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
-    // Signature verification disabled for now
-    // let signature = headers
-    //     .get("sentry-hook-signature")
-    //     .and_then(|v| v.to_str().ok())
-    //     .unwrap_or("");
+    let signature = headers
+        .get("sentry-hook-signature")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
 
-    // if !verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET) {
-    //     log::warn!("Sentry webhook: invalid signature");
-    //     return (StatusCode::UNAUTHORIZED, "Invalid signature");
-    // }
+    if !verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_1)
+        && !verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_2)
+    {
+        log::warn!("Sentry webhook: invalid signature");
+        return (StatusCode::UNAUTHORIZED, "Invalid signature");
+    }
 
     let payload: SentryWebhookPayload = match serde_json::from_slice(&body) {
         Ok(p) => p,
