@@ -94,6 +94,7 @@ rand = "0.9.1"
 redis = { version = "0.32.7", features = [
     "tokio-rustls-comp",
     "tls-rustls-webpki-roots",
+    "aio",
     "json",
     "cluster",
     "cluster-async",
