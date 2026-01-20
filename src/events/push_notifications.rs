@@ -43,11 +43,26 @@ impl NotificationClient {
     }
 }
 
+const NOTIFICATION_EVENTS: &[&str] = &[
+    "video_upload_successful",
+    "like_video",
+    "video_approved",
+    "video_disapproved",
+    "tournament_started",
+    "tournament_ended_winner",
+    "reward_earned",
+    "follow_user",
+];
+
 pub async fn dispatch_notif(
-    event_type: &str, // todo make this an enum
+    event_type: &str,
     params: Value,
     app_state: &AppState,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if !NOTIFICATION_EVENTS.contains(&event_type) {
+        return Ok(());
+    }
+
     let event = deserialize_event_payload(event_type, params)?;
 
     event.send_notification(app_state).await;
