@@ -266,8 +266,7 @@ impl SentinelConnectionManager {
         Ok(client)
     }
 
-    pub async fn start_failover_listener(self: Arc<Self>, tls_certs: redis::TlsCertificates) {
-        let hosts = get_hosts_from_env();
+    pub async fn start_failover_listener(self: Arc<Self>, tls_certs: redis::TlsCertificates, hosts: Vec<String>) {
 
         if hosts.is_empty() {
             tracing::error!("No Sentinel hosts configured, failover listener disabled");
@@ -467,9 +466,10 @@ pub async fn init_dragonfly_redis(
     // Start failover listener
     let conn_man_for_listener = conn_man_arc.clone();
     let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
     tokio::spawn(async move {
         conn_man_for_listener
-            .start_failover_listener(tls_certs_for_listener)
+            .start_failover_listener(tls_certs_for_listener, hosts_for_listener)
             .await;
     });
 
@@ -532,9 +532,10 @@ pub async fn init_dragonfly_redis_2() -> Result<Arc<DragonflyPool>, anyhow::Erro
     // Start failover listener
     let conn_man_for_listener = conn_man_arc.clone();
     let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
     tokio::spawn(async move {
         conn_man_for_listener
-            .start_failover_listener(tls_certs_for_listener)
+            .start_failover_listener(tls_certs_for_listener, hosts_for_listener)
             .await;
     });
 
@@ -592,9 +593,10 @@ pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>, anyho
     // Start failover listener
     let conn_man_for_listener = conn_man_arc.clone();
     let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
     tokio::spawn(async move {
         conn_man_for_listener
-            .start_failover_listener(tls_certs_for_listener)
+            .start_failover_listener(tls_certs_for_listener, hosts_for_listener)
             .await;
     });
 
