@@ -87,6 +87,7 @@ fn get_hosts_from_env() -> Vec<String> {
 
 /// Simple connection pool - just wraps SentinelConnectionManager
 /// MultiplexedConnection handles multiplexing internally, so we just need one connection
+#[derive(Clone)]
 pub struct DragonflyPool {
     connection_manager: Arc<SentinelConnectionManager>,
     /// Cached connection - MultiplexedConnection is cheap to clone
@@ -387,7 +388,7 @@ pub async fn init_dragonfly_redis(
     ca_cert_bytes: Vec<u8>,
     client_cert_bytes: Vec<u8>,
     client_key_bytes: Vec<u8>,
-) -> Result<Arc<DragonflyPool>, RedisError> {
+) -> Result<Arc<DragonflyPool>, anyhow::Error> {
     rustls::crypto::ring::default_provider()
         .install_default()
         .ok();
@@ -445,7 +446,7 @@ pub async fn init_dragonfly_redis(
     Ok(pool)
 }
 
-pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>, RedisError> {
+pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>, anyhow::Error> {
     rustls::crypto::ring::default_provider()
         .install_default()
         .ok();
