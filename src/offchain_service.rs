@@ -112,15 +112,22 @@ pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
         .header("Content-Type", "application/json")
         .json(&data)
         .send()
-        .await;
+        .await
+        .context("Failed to send request to Google Chat")?;
 
-    if response.is_err() {
-        log::error!("Error sending data to Google Chat: {response:?}");
-        return Err(anyhow::anyhow!("Error sending data to Google Chat"));
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        log::debug!("Google Chat API error: status={}, body={}", status, body);
+        return Err(anyhow::anyhow!(
+            "Google Chat API error: status={}, body={}",
+            status,
+            body
+        ));
     }
 
-    let _body = response.unwrap().text().await.unwrap();
-
+    log::debug!("Google Chat response: {}", body);
     Ok(())
 }
 
