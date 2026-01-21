@@ -9,6 +9,9 @@ use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
+use crate::yral_auth::dragonfly::{
+    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis, DragonflyPool,
+};
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -78,6 +81,8 @@ pub struct AppState {
     pub notification_client: NotificationClient,
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_redis: YralAuthRedis,
+    #[cfg(not(feature = "local-bin"))]
+    pub yral_auth_dragonfly: Arc<DragonflyPool>,
     pub leaderboard_redis_pool: RedisPool,
     pub rewards_module: RewardsModule,
     pub service_cansister_migration_redis_pool: RedisPool,
@@ -142,6 +147,8 @@ impl AppState {
             ),
             #[cfg(not(feature = "local-bin"))]
             yral_auth_redis: YralAuthRedis::init(&app_config).await,
+            #[cfg(not(feature = "local-bin"))]
+            yral_auth_dragonfly: init_dragonfly_redis_pool().await,
             leaderboard_redis_pool,
             rewards_module,
             config: app_config,
@@ -382,6 +389,18 @@ async fn init_service_canister_migration_redis_pool() -> RedisPool {
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
     RedisPool::builder().build(manager).await.unwrap()
+}
+
+async fn init_dragonfly_redis_pool() -> Arc<DragonflyPool> {
+    let ca_cert_bytes = get_ca_cert_pem().expect("Failed to read DRAGONFLY_CA_CERT");
+    let client_cert_bytes = get_client_cert_pem().expect("Failed to read DRAGONFLY_CLIENT_CERT");
+    let client_key_bytes = get_client_key_pem().expect("Failed to read DRAGONFLY_CLIENT_KEY");
+    let dragonfly_pool: Arc<DragonflyPool> =
+        init_dragonfly_redis(ca_cert_bytes, client_cert_bytes, client_key_bytes)
+            .await
+            .expect("failed to initalize DragonflyPool");
+
+    dragonfly_pool
 }
 
 #[cfg(not(feature = "local-bin"))]
