@@ -487,14 +487,11 @@ pub async fn init_dragonfly_redis_2() -> Result<Arc<DragonflyPool>, anyhow::Erro
         .ok();
 
     let ca_cert_bytes = get_ca_cert_pem_2().expect("Failed to read DRAGONFLY_2_CA_CERT");
-    let client_cert_bytes = get_client_cert_pem_2().expect("Failed to read DRAGONFLY_2_CLIENT_CERT");
+    let client_cert_bytes =
+        get_client_cert_pem_2().expect("Failed to read DRAGONFLY_2_CLIENT_CERT");
     let client_key_bytes = get_client_key_pem_2().expect("Failed to read DRAGONFLY_2_CLIENT_KEY");
 
-    let tls_certs = build_tls_certs(
-        ca_cert_bytes,
-        client_cert_bytes,
-        client_key_bytes,
-    );
+    let tls_certs = build_tls_certs(ca_cert_bytes, client_cert_bytes, client_key_bytes);
 
     let hosts = get_hosts_from_env_2();
 
@@ -524,7 +521,9 @@ pub async fn init_dragonfly_redis_2() -> Result<Arc<DragonflyPool>, anyhow::Erro
     builder = builder.set_client_to_redis_certificates(tls_certs.clone());
     builder = builder.set_client_to_redis_tls_mode(redis::TlsMode::Secure);
 
-    let sentinel_client = builder.build().expect("Failed to build SentinelClient for cluster 2");
+    let sentinel_client = builder
+        .build()
+        .expect("Failed to build SentinelClient for cluster 2");
     let conn_man =
         SentinelConnectionManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
 
