@@ -1194,9 +1194,9 @@ dependencies = [
 
 [[package]]
 name = "bb8-redis"
-version = "0.24.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5143936af5e1eea1a881e3e3d21b6777da6315e5e307bc3d0c2301c44fa37da9"
+checksum = "8a68215c76c457dccfed027a397ccd72482feabd64c2f93cbb2971a7c4121351"
 dependencies = [
  "bb8",
  "redis",
@@ -1240,7 +1240,7 @@ dependencies = [
  "bitflags 2.9.4",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "regex",
@@ -1258,7 +1258,7 @@ dependencies = [
  "bitflags 2.9.4",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "log",
  "prettyplease 0.2.37",
  "proc-macro2",
@@ -7326,8 +7326,8 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.5.0",
- "itertools 0.12.1",
+ "heck 0.4.1",
+ "itertools 0.10.5",
  "log",
  "multimap 0.10.1",
  "once_cell",
@@ -7360,7 +7360,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -7373,7 +7373,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -7690,12 +7690,12 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.32.7"
+version = "0.29.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "014cc767fefab6a3e798ca45112bccad9c6e0e218fbd49720042716c73cfef44"
+checksum = "1bc42f3a12fd4408ce64d8efef67048a924e543bd35c6591c0447fda9054695f"
 dependencies = [
+ "arc-swap",
  "bytes",
- "cfg-if",
  "combine",
  "crc16",
  "futures-sink",
@@ -7712,12 +7712,12 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1_smol",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tokio",
  "tokio-rustls 0.26.4",
  "tokio-util",
  "url",
- "webpki-roots 1.0.2",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -10521,7 +10521,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.1",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
