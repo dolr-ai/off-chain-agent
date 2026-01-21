@@ -113,7 +113,11 @@ impl Event {
         let flat_event = match self.to_flat_event() {
             Some(e) => e,
             None => {
-                error!("Failed to parse params for mixpanel {}", self.event.event);
+                log::warn!(
+                    "Skipping mixpanel forward - event: '{}', params: {}",
+                    self.event.event,
+                    self.event.params
+                );
                 return;
             }
         };
