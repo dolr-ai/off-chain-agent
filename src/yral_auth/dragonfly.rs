@@ -266,8 +266,11 @@ impl SentinelConnectionManager {
         Ok(client)
     }
 
-    pub async fn start_failover_listener(self: Arc<Self>, tls_certs: redis::TlsCertificates, hosts: Vec<String>) {
-
+    pub async fn start_failover_listener(
+        self: Arc<Self>,
+        tls_certs: redis::TlsCertificates,
+        hosts: Vec<String>,
+    ) {
         if hosts.is_empty() {
             tracing::error!("No Sentinel hosts configured, failover listener disabled");
             return;
