@@ -84,6 +84,7 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_dragonfly: Arc<DragonflyPool>,
     pub leaderboard_redis_pool: RedisPool,
+    #[cfg(not(feature = "local-bin"))]
     pub rewards_module: RewardsModule,
     pub service_cansister_migration_redis_pool: RedisPool,
     pub config: AppConfig,
@@ -105,10 +106,15 @@ impl AppState {
     pub async fn new(app_config: AppConfig) -> Self {
         let leaderboard_redis_pool = init_leaderboard_redis_pool().await;
         let agent = init_agent().await;
-        let mut rewards_module =
-            RewardsModule::new(leaderboard_redis_pool.clone(), agent.clone()).await;
+
+        #[cfg(not(feature = "local-bin"))]
+        let rewards_dragonfly_pool = init_dragonfly_redis_pool().await;
+
+        #[cfg(not(feature = "local-bin"))]
+        let mut rewards_module = RewardsModule::new(rewards_dragonfly_pool, agent.clone()).await;
 
         // Initialize the rewards module (loads Lua scripts)
+        #[cfg(not(feature = "local-bin"))]
         if let Err(e) = rewards_module.initialize().await {
             log::error!("Failed to initialize rewards module: {}", e);
         }
@@ -150,6 +156,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             yral_auth_dragonfly: init_dragonfly_redis_pool().await,
             leaderboard_redis_pool,
+            #[cfg(not(feature = "local-bin"))]
             rewards_module,
             config: app_config,
             service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool()

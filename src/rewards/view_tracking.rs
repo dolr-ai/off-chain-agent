@@ -1,16 +1,18 @@
-use crate::types::RedisPool;
+use crate::yral_auth::dragonfly::DragonflyPool;
 use anyhow::{Context, Result};
 use candid::Principal;
 use redis::AsyncCommands;
 use sha1::{Digest, Sha1};
+use std::sync::Arc;
 
 const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     --!df flags=allow-undeclared-keys
     -- Atomic operation for view counting with config change handling
     -- This script only runs for logged-in users
     -- Using HSET to store both count and config_version in single hash
-    local views_set = KEYS[1]  -- rewards:views:{video_id} (set of user IDs)
-    local video_hash = KEYS[2]  -- rewards:video:{video_id} (hash with count & config_version)
+    local views_set = KEYS[1]  -- impressions:rewards:views:{video_id} (set of user IDs)
+    local video_hash = KEYS[2]  -- impressions:rewards:video:{video_id} (hash with count & config_version)
+    local config_version_key = KEYS[3]  -- impressions:rewards:config:version
 
     local user_id = ARGV[1]
 
@@ -18,7 +20,7 @@ const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     redis.call('HINCRBY', video_hash, 'total_count_all', 1)
 
     -- Get current global config version from Redis
-    local current_global_version = redis.call('GET', 'rewards:config:version') or '1'
+    local current_global_version = redis.call('GET', config_version_key) or '1'
 
     -- Get video's stored config version from hash
     local video_config_version = redis.call('HGET', video_hash, 'config_version') or '0'
@@ -51,12 +53,12 @@ fn calculate_script_sha(script: &str) -> String {
 
 #[derive(Clone)]
 pub struct ViewTracker {
-    pool: RedisPool,
+    pool: Arc<DragonflyPool>,
     script_sha: Option<String>,
 }
 
 impl ViewTracker {
-    pub fn new(pool: RedisPool) -> Self {
+    pub fn new(pool: Arc<DragonflyPool>) -> Self {
         Self {
             pool,
             script_sha: None,
@@ -68,7 +70,7 @@ impl ViewTracker {
         let sha: String = redis::cmd("SCRIPT")
             .arg("LOAD")
             .arg(LUA_ATOMIC_VIEW_SCRIPT)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .context("Failed to load Lua script")?;
 
@@ -97,26 +99,28 @@ impl ViewTracker {
 
         // Fast path for non-logged-in: just increment total_count_all
         if !is_logged_in {
-            let video_hash_key = format!("rewards:video:{}", video_id);
+            let video_hash_key = format!("impressions:rewards:video:{}", video_id);
             conn.hincr::<_, _, _, ()>(&video_hash_key, "total_count_all", 1)
                 .await?;
             return Ok(None);
         }
 
         // Logged-in path: use Lua script for atomic duplicate checking
-        let views_set_key = format!("rewards:views:{}", video_id);
-        let video_hash_key = format!("rewards:video:{}", video_id);
+        let views_set_key = format!("impressions:rewards:views:{}", video_id);
+        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+        let config_version_key = "impressions:rewards:config:version".to_string();
 
         // Try to use the loaded script SHA, fallback to EVAL if not loaded
         let result: Option<u64> = if let Some(sha) = &self.script_sha {
             // Use EVALSHA for better performance
             let evalsha_result = redis::cmd("EVALSHA")
                 .arg(sha)
-                .arg(2) // number of keys
+                .arg(3) // number of keys
                 .arg(&views_set_key)
                 .arg(&video_hash_key)
+                .arg(&config_version_key)
                 .arg(user_id.to_string())
-                .query_async(&mut *conn)
+                .query_async(&mut conn)
                 .await;
 
             match evalsha_result {
@@ -126,11 +130,12 @@ impl ViewTracker {
                     log::warn!("EVALSHA failed, falling back to EVAL: {}", e);
                     redis::cmd("EVAL")
                         .arg(LUA_ATOMIC_VIEW_SCRIPT)
-                        .arg(2)
+                        .arg(3)
                         .arg(&views_set_key)
                         .arg(&video_hash_key)
+                        .arg(&config_version_key)
                         .arg(user_id.to_string())
-                        .query_async(&mut *conn)
+                        .query_async(&mut conn)
                         .await
                         .context("Failed to execute view tracking script")?
                 }
@@ -139,11 +144,12 @@ impl ViewTracker {
             // Script not loaded, use EVAL
             redis::cmd("EVAL")
                 .arg(LUA_ATOMIC_VIEW_SCRIPT)
-                .arg(2)
+                .arg(3)
                 .arg(&views_set_key)
                 .arg(&video_hash_key)
+                .arg(&config_version_key)
                 .arg(user_id.to_string())
-                .query_async(&mut *conn)
+                .query_async(&mut conn)
                 .await
                 .context("Failed to execute view tracking script")?
         };
@@ -153,21 +159,21 @@ impl ViewTracker {
 
     pub async fn get_view_count(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         let count: Option<String> = conn.hget(&video_hash_key, "count").await?;
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn get_last_milestone(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         let milestone: Option<String> = conn.hget(&video_hash_key, "last_milestone").await?;
         Ok(milestone.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn set_last_milestone(&self, video_id: &str, milestone: u64) -> Result<()> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         conn.hset::<_, _, _, ()>(&video_hash_key, "last_milestone", milestone)
             .await?;
         Ok(())
@@ -175,14 +181,14 @@ impl ViewTracker {
 
     pub async fn get_total_count_loggedin(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         let count: Option<String> = conn.hget(&video_hash_key, "total_count_loggedin").await?;
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn get_total_count_all(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         let count: Option<String> = conn.hget(&video_hash_key, "total_count_all").await?;
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
@@ -190,7 +196,7 @@ impl ViewTracker {
     /// Get all video stats in a single Redis call
     pub async fn get_all_video_stats(&self, video_id: &str) -> Result<(u64, u64, u64, u64)> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
 
         // Get all fields in one call
         let data: std::collections::HashMap<String, String> = conn.hgetall(&video_hash_key).await?;
@@ -226,13 +232,13 @@ impl ViewTracker {
         // Build pipeline with HGETALL for each video
         let mut pipe = redis::pipe();
         for video_id in video_ids {
-            let video_hash_key = format!("rewards:video:{}", video_id);
+            let video_hash_key = format!("impressions:rewards:video:{}", video_id);
             pipe.hgetall(&video_hash_key);
         }
 
         // Execute pipeline - all commands in single round-trip
         let results: Vec<std::collections::HashMap<String, String>> =
-            pipe.query_async(&mut *conn).await?;
+            pipe.query_async(&mut conn).await?;
 
         // Parse results
         let mut response = std::collections::HashMap::new();

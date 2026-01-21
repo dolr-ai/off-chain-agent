@@ -1,6 +1,7 @@
 use std::env;
+use std::sync::Arc;
 
-use crate::types::RedisPool;
+use crate::yral_auth::dragonfly::DragonflyPool;
 use anyhow::Result;
 use candid::Principal;
 use chrono::Utc;
@@ -20,25 +21,29 @@ pub enum FraudCheck {
 
 #[derive(Clone)]
 pub struct FraudDetector {
-    redis_pool: RedisPool,
+    dragonfly_pool: Arc<DragonflyPool>,
     threshold: usize,
     time_window: i64,
     shadow_ban_duration: u64,
 }
 
 impl FraudDetector {
-    pub fn new(redis_pool: RedisPool) -> Self {
+    pub fn new(dragonfly_pool: Arc<DragonflyPool>) -> Self {
         Self {
-            redis_pool,
+            dragonfly_pool,
             threshold: DEFAULT_FRAUD_THRESHOLD,
             time_window: DEFAULT_TIME_WINDOW,
             shadow_ban_duration: DEFAULT_SHADOW_BAN_DURATION,
         }
     }
 
-    pub fn with_config(redis_pool: RedisPool, threshold: usize, shadow_ban_duration: u64) -> Self {
+    pub fn with_config(
+        dragonfly_pool: Arc<DragonflyPool>,
+        threshold: usize,
+        shadow_ban_duration: u64,
+    ) -> Self {
         Self {
-            redis_pool,
+            dragonfly_pool,
             threshold,
             time_window: DEFAULT_TIME_WINDOW,
             shadow_ban_duration,
@@ -47,10 +52,10 @@ impl FraudDetector {
 
     /// Check for fraud patterns and shadow ban if necessary
     pub async fn check_fraud_patterns(&self, creator_id: Principal) -> FraudCheck {
-        let key = format!("rewards:user:{}:recent", creator_id);
+        let key = format!("impressions:rewards:user:{}:recent", creator_id);
         let current_timestamp = Utc::now().timestamp();
 
-        let redis_pool = self.redis_pool.clone();
+        let dragonfly_pool = self.dragonfly_pool.clone();
         let threshold = self.threshold;
         let time_window = self.time_window;
         let shadow_ban_duration = self.shadow_ban_duration;
@@ -58,7 +63,7 @@ impl FraudDetector {
 
         // Run fraud check asynchronously
         tokio::spawn(async move {
-            if let Ok(mut conn) = redis_pool.get().await {
+            if let Ok(mut conn) = dragonfly_pool.get().await {
                 // Add current timestamp
                 let _ = conn.lpush::<_, _, ()>(&key, current_timestamp).await;
                 let _ = conn.ltrim::<_, ()>(&key, 0, 100).await; // Keep last 100 rewards
@@ -78,7 +83,7 @@ impl FraudDetector {
 
                     if recent_count > threshold {
                         // Shadow ban the creator
-                        let ban_key = format!("rewards:shadow_ban:{}", creator_id_str);
+                        let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id_str);
                         if let Err(e) = conn
                             .set_ex::<_, _, ()>(&ban_key, "1", shadow_ban_duration)
                             .await
@@ -102,8 +107,8 @@ impl FraudDetector {
         });
 
         // For the immediate check, we need to check if already shadow banned
-        if let Ok(mut conn) = self.redis_pool.get().await {
-            let ban_key = format!("rewards:shadow_ban:{}", creator_id);
+        if let Ok(mut conn) = self.dragonfly_pool.get().await {
+            let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
             if let Ok(is_banned) = conn.exists::<_, bool>(&ban_key).await {
                 if is_banned {
                     return FraudCheck::Suspicious;
@@ -116,8 +121,8 @@ impl FraudDetector {
 
     /// Check if a creator is currently shadow banned
     pub async fn is_shadow_banned(&self, creator_id: &Principal) -> Result<bool> {
-        let mut conn = self.redis_pool.get().await?;
-        let ban_key = format!("rewards:shadow_ban:{}", creator_id);
+        let mut conn = self.dragonfly_pool.get().await?;
+        let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
         let is_banned: bool = conn.exists(&ban_key).await?;
         Ok(is_banned)
     }
