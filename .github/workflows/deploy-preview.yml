@@ -79,7 +79,6 @@ jobs:
           flyctl secrets set "ALLOYDB_DB_PASSWORD=$ALLOYDB_DB_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set "CANISTER_BACKUP_CACHE_REDIS_URL=$CANISTER_BACKUP_CACHE_REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set "YRAL_METADATA_NOTIFICATION_API_KEY=$YRAL_METADATA_NOTIFICATION_API_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set "YRAL_AUTH_REDIS_URL=$YRAL_AUTH_REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set "ML_FEED_CACHE_MEMORYSTORE_URL=$ML_FEED_CACHE_MEMORYSTORE_URL" --app "$APP_NAME" --stage
           flyctl secrets set "LUMALABS_API_KEY=$LUMALABS_API_KEY" --app "$APP_NAME" --stage
           flyctl secrets set "YRAL_HON_WORKER_JWT=$YRAL_HON_WORKER_JWT" --app "$APP_NAME" --stage
@@ -141,7 +140,6 @@ jobs:
           ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}
           CANISTER_BACKUP_CACHE_REDIS_URL: ${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}
           YRAL_METADATA_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_NOTIFICATION_API_KEY }}
-          YRAL_AUTH_REDIS_URL: ${{ secrets.YRAL_AUTH_REDIS_URL }}
           ML_FEED_CACHE_MEMORYSTORE_URL: ${{ secrets.ML_FEED_CACHE_MEMORYSTORE_URL }}
           LUMALABS_API_KEY: ${{ secrets.VIDEOGEN_PROVIDER_LUMALABS_API_KEY }}
           YRAL_HON_WORKER_JWT: ${{ secrets.YRAL_HON_WORKER_JWT }}

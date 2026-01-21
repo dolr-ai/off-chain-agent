@@ -101,7 +101,6 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      auth_password: ${{ steps.redis.outputs.auth_password }}
       ml_feed_password: ${{ steps.redis.outputs.ml_feed_password }}
 
     steps:
@@ -140,8 +139,7 @@ jobs:
             echo "Password for $db_name fetched successfully"
           }
 
-          # Fetch both passwords
-          fetch_redis_password "yral-metadata-auth" "auth_password"
+          # Fetch password
           fetch_redis_password "yral-ml-feed-cache" "ml_feed_password"
 
   prepare-servers:
@@ -222,7 +220,6 @@ jobs:
             PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-offchain \
             IMAGE_TAG=${{ github.sha }} \
             FLY_API_TOKEN='${{ secrets.OFFCHAIN_FLY_API_TOKEN }}' \
-            FLY_REDIS_AUTH_PASSWORD='${{ needs.fetch-redis-passwords.outputs.auth_password }}' \
             FLY_REDIS_ML_FEED_PASSWORD='${{ needs.fetch-redis-passwords.outputs.ml_feed_password }}' \
             CF_R2_ACCESS_KEY_TEMP='${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}' \
             CF_R2_SECRET_ACCESS_KEY_TEMP='${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_SECRET_ACCESS_KEY }}' \
@@ -320,7 +317,6 @@ jobs:
           echo "- ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-offchain:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Services" >> $GITHUB_STEP_SUMMARY
-          echo "- fly-redis-proxy-auth (Fly Redis tunnel for yral-metadata-auth)" >> $GITHUB_STEP_SUMMARY
           echo "- fly-redis-proxy-ml-feed (Fly Redis tunnel for yral-ml-feed-cache)" >> $GITHUB_STEP_SUMMARY
           echo "- offchain-agent (gRPC service on port 50051)" >> $GITHUB_STEP_SUMMARY
           echo "- caddy (TLS termination + HTTP/2 reverse proxy)" >> $GITHUB_STEP_SUMMARY
