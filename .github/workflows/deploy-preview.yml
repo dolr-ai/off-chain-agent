@@ -104,9 +104,14 @@ jobs:
           flyctl secrets set SCRATCHPAD_DRAGONFLY_PASSWORD="$SCRATCHPAD_DRAGONFLY_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set DRAGONFLY_PASSWORD="$DRAGONFLY_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set DRAGONFLY_HOSTS="$DRAGONFLY_HOSTS" --app "$APP_NAME" --stage
-          flyctl secrets set DRAGONFLY_CA_CERT="$DRAGONFLY_CA_CERT" --app "$APP_NAME" --stage
-          flyctl secrets set DRAGONFLY_CLIENT_CERT="$DRAGONFLY_CLIENT_CERT" --app "$APP_NAME" --stage
-          flyctl secrets set DRAGONFLY_CLIENT_KEY="$DRAGONFLY_CLIENT_KEY" --app "$APP_NAME" --stage
+          printf '%s' "$DRAGONFLY_CA_CERT" | flyctl secrets set DRAGONFLY_CA_CERT=- --app "$APP_NAME" --stage
+          printf '%s' "$DRAGONFLY_CLIENT_CERT" | flyctl secrets set DRAGONFLY_CLIENT_CERT=- --app "$APP_NAME" --stage
+          printf '%s' "$DRAGONFLY_CLIENT_KEY" | flyctl secrets set DRAGONFLY_CLIENT_KEY=- --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_2_PASSWORD="$DRAGONFLY_2_PASSWORD" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_2_HOSTS="$DRAGONFLY_2_HOSTS" --app "$APP_NAME" --stage
+          printf '%s' "$DRAGONFLY_2_CA_CERT" | flyctl secrets set DRAGONFLY_2_CA_CERT=- --app "$APP_NAME" --stage
+          printf '%s' "$DRAGONFLY_2_CLIENT_CERT" | flyctl secrets set DRAGONFLY_2_CLIENT_CERT=- --app "$APP_NAME" --stage
+          printf '%s' "$DRAGONFLY_2_CLIENT_KEY" | flyctl secrets set DRAGONFLY_2_CLIENT_KEY=- --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -164,3 +169,8 @@ jobs:
           DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
           DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
           DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
+          DRAGONFLY_2_PASSWORD: ${{ secrets.DRAGONFLY_2_PASSWORD }}
+          DRAGONFLY_2_HOSTS: ${{ vars.DRAGONFLY_2_HOSTS }}
+          DRAGONFLY_2_CA_CERT: ${{ secrets.DRAGONFLY_2_CA_CERT }}
+          DRAGONFLY_2_CLIENT_CERT: ${{ secrets.DRAGONFLY_2_CLIENT_CERT }}
+          DRAGONFLY_2_CLIENT_KEY: ${{ secrets.DRAGONFLY_2_CLIENT_KEY }}
