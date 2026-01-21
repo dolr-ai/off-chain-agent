@@ -13,3 +13,5 @@ docs/
 *.hurl
 local_scripts/
 tests/
+certs/
+scripts/
