@@ -91,14 +91,14 @@ fn get_hosts_from_env() -> Vec<String> {
 pub struct DragonflyPool {
     connection_manager: Arc<SentinelConnectionManager>,
     /// Cached connection - MultiplexedConnection is cheap to clone
-    cached_conn: RwLock<Option<MultiplexedConnection>>,
+    cached_conn: Arc<RwLock<Option<MultiplexedConnection>>>,
 }
 
 impl DragonflyPool {
     pub fn new(connection_manager: Arc<SentinelConnectionManager>) -> Arc<Self> {
         Arc::new(Self {
             connection_manager,
-            cached_conn: RwLock::new(None),
+            cached_conn: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -223,9 +223,9 @@ impl SentinelConnectionManager {
 
         // Log the discovered master for debugging
         let connection_info = client.get_connection_info();
-        let (host, port) = match connection_info.addr() {
-            redis::ConnectionAddr::Tcp(h, p) => (h.clone(), *p),
-            redis::ConnectionAddr::TcpTls { host, port, .. } => (host.clone(), *port),
+        let (host, port) = match connection_info.addr {
+            redis::ConnectionAddr::Tcp(h, p) => (h.clone(), p),
+            redis::ConnectionAddr::TcpTls { host, port, .. } => (host.clone(), port),
             _ => ("unknown".to_string(), 0),
         };
 
