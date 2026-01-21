@@ -1,9 +1,10 @@
-use crate::types::RedisPool;
+use crate::yral_auth::dragonfly::DragonflyPool;
 use anyhow::Result;
 use candid::Principal;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::Arc;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -28,25 +29,26 @@ pub struct RewardRecord {
 
 #[derive(Clone)]
 pub struct HistoryTracker {
-    redis_pool: RedisPool,
+    dragonfly_pool: Arc<DragonflyPool>,
 }
 
 impl HistoryTracker {
-    pub fn new(redis_pool: RedisPool) -> Self {
-        Self { redis_pool }
+    pub fn new(dragonfly_pool: Arc<DragonflyPool>) -> Self {
+        Self { dragonfly_pool }
     }
 
     /// Record a view in history (non-atomic, best effort)
     pub async fn record_view(&self, record: ViewRecord) {
-        let video_history_key = format!("rewards:video:{}:view_history", record.video_id);
-        let user_history_key = format!("rewards:user:{}:view_history", record.user_id);
+        let video_history_key =
+            format!("impressions:rewards:video:{}:view_history", record.video_id);
+        let user_history_key = format!("impressions:rewards:user:{}:view_history", record.user_id);
 
-        let redis_pool = self.redis_pool.clone();
+        let dragonfly_pool = self.dragonfly_pool.clone();
         let record_clone = record.clone();
 
         // Fire and forget - don't block on history storage
         tokio::spawn(async move {
-            if let Ok(mut conn) = redis_pool.get().await {
+            if let Ok(mut conn) = dragonfly_pool.get().await {
                 // Store video view history
                 let video_json = json!({
                     "user_id": record_clone.user_id,
@@ -86,10 +88,13 @@ impl HistoryTracker {
     /// Record a reward in history (non-atomic, best effort)
     pub async fn record_reward(&self, creator_id: &Principal, record: RewardRecord) {
         let creator_id_str = creator_id.to_string();
-        let user_key = format!("rewards:user:{}:reward_history", creator_id_str);
-        let creator_key = format!("rewards:creator:{}:reward_history", creator_id_str);
+        let user_key = format!("impressions:rewards:user:{}:reward_history", creator_id_str);
+        let creator_key = format!(
+            "impressions:rewards:creator:{}:reward_history",
+            creator_id_str
+        );
 
-        let redis_pool = self.redis_pool.clone();
+        let dragonfly_pool = self.dragonfly_pool.clone();
         let json = match serde_json::to_string(&record) {
             Ok(j) => j,
             Err(e) => {
@@ -101,7 +106,7 @@ impl HistoryTracker {
         let creator_id_clone = creator_id_str.clone();
         // Fire and forget
         tokio::spawn(async move {
-            if let Ok(mut conn) = redis_pool.get().await {
+            if let Ok(mut conn) = dragonfly_pool.get().await {
                 let _ = conn.lpush::<_, _, ()>(&user_key, &json).await;
                 let _ = conn.lpush::<_, _, ()>(&creator_key, &json).await;
                 let _ = conn.ltrim::<_, ()>(&user_key, 0, 999).await; // Keep last 1k
@@ -114,8 +119,8 @@ impl HistoryTracker {
 
     /// Get video view history
     pub async fn get_video_views(&self, video_id: &str, limit: usize) -> Result<Vec<ViewRecord>> {
-        let mut conn = self.redis_pool.get().await?;
-        let key = format!("rewards:video:{}:view_history", video_id);
+        let mut conn = self.dragonfly_pool.get().await?;
+        let key = format!("impressions:rewards:video:{}:view_history", video_id);
 
         let history: Vec<String> = conn.lrange(&key, 0, limit as isize - 1).await?;
 
@@ -139,8 +144,8 @@ impl HistoryTracker {
         user_id: &Principal,
         limit: usize,
     ) -> Result<Vec<ViewRecord>> {
-        let mut conn = self.redis_pool.get().await?;
-        let key = format!("rewards:user:{}:view_history", user_id);
+        let mut conn = self.dragonfly_pool.get().await?;
+        let key = format!("impressions:rewards:user:{}:view_history", user_id);
 
         let history: Vec<String> = conn.lrange(&key, 0, limit as isize - 1).await?;
 
@@ -164,8 +169,8 @@ impl HistoryTracker {
         user_id: &Principal,
         limit: usize,
     ) -> Result<Vec<RewardRecord>> {
-        let mut conn = self.redis_pool.get().await?;
-        let key = format!("rewards:user:{}:reward_history", user_id);
+        let mut conn = self.dragonfly_pool.get().await?;
+        let key = format!("impressions:rewards:user:{}:reward_history", user_id);
 
         let history: Vec<String> = conn.lrange(&key, 0, limit as isize - 1).await?;
 
@@ -185,8 +190,8 @@ impl HistoryTracker {
         creator_id: &Principal,
         limit: usize,
     ) -> Result<Vec<RewardRecord>> {
-        let mut conn = self.redis_pool.get().await?;
-        let key = format!("rewards:creator:{}:reward_history", creator_id);
+        let mut conn = self.dragonfly_pool.get().await?;
+        let key = format!("impressions:rewards:creator:{}:reward_history", creator_id);
 
         let history: Vec<String> = conn.lrange(&key, 0, limit as isize - 1).await?;
 

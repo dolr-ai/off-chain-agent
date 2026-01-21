@@ -11,7 +11,7 @@ use crate::{
         view_tracking::ViewTracker,
         wallet::WalletIntegration,
     },
-    types::RedisPool,
+    yral_auth::dragonfly::DragonflyPool,
 };
 use anyhow::{Context, Result};
 use candid::Principal;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RewardEngine {
-    redis_pool: RedisPool,
+    dragonfly_pool: Arc<DragonflyPool>,
     view_tracker: ViewTracker,
     user_verification: UserVerification,
     history_tracker: HistoryTracker,
@@ -30,15 +30,15 @@ pub struct RewardEngine {
 }
 
 impl RewardEngine {
-    pub fn new(redis_pool: RedisPool, admin_agent: ic_agent::Agent) -> Self {
-        let view_tracker = ViewTracker::new(redis_pool.clone());
-        let user_verification = UserVerification::new(redis_pool.clone());
-        let history_tracker = HistoryTracker::new(redis_pool.clone());
-        let fraud_detector = FraudDetector::new(redis_pool.clone());
+    pub fn new(dragonfly_pool: Arc<DragonflyPool>, admin_agent: ic_agent::Agent) -> Self {
+        let view_tracker = ViewTracker::new(dragonfly_pool.clone());
+        let user_verification = UserVerification::new(dragonfly_pool.clone());
+        let history_tracker = HistoryTracker::new(dragonfly_pool.clone());
+        let fraud_detector = FraudDetector::new(dragonfly_pool.clone());
         let btc_converter = BtcConverter::new();
         let wallet = WalletIntegration::new(admin_agent);
         Self {
-            redis_pool,
+            dragonfly_pool,
             view_tracker,
             user_verification,
             history_tracker,
@@ -49,32 +49,32 @@ impl RewardEngine {
     }
 
     pub fn with_config(
-        redis_pool: RedisPool,
+        dragonfly_pool: Arc<DragonflyPool>,
         admin_agent: ic_agent::Agent,
         config: RewardConfig,
     ) -> Self {
-        let view_tracker = ViewTracker::new(redis_pool.clone());
-        let user_verification = UserVerification::new(redis_pool.clone());
-        let history_tracker = HistoryTracker::new(redis_pool.clone());
+        let view_tracker = ViewTracker::new(dragonfly_pool.clone());
+        let user_verification = UserVerification::new(dragonfly_pool.clone());
+        let history_tracker = HistoryTracker::new(dragonfly_pool.clone());
         let fraud_detector = FraudDetector::with_config(
-            redis_pool.clone(),
+            dragonfly_pool.clone(),
             config.fraud_threshold,
             config.shadow_ban_duration,
         );
         let btc_converter = BtcConverter::new();
         let wallet = WalletIntegration::new(admin_agent);
-        // Initialize config in Redis if provided
+        // Initialize config in Dragonfly if provided
         tokio::spawn({
-            let redis_pool = redis_pool.clone();
+            let dragonfly_pool = dragonfly_pool.clone();
             async move {
-                if let Err(e) = update_config_fn(&redis_pool, config).await {
-                    log::error!("Failed to initialize config in Redis: {}", e);
+                if let Err(e) = update_config_fn(&dragonfly_pool, config).await {
+                    log::error!("Failed to initialize config in Dragonfly: {}", e);
                 }
             }
         });
 
         Self {
-            redis_pool,
+            dragonfly_pool,
             view_tracker,
             user_verification,
             history_tracker,
@@ -109,7 +109,7 @@ impl RewardEngine {
         );
         // }
 
-        let config = get_config(&self.redis_pool)
+        let config = get_config(&self.dragonfly_pool)
             .await
             .map_err(|e| {
                 log::error!("Failed to get config: {}", e);
@@ -482,7 +482,7 @@ impl RewardEngine {
 
     /// Get current configuration
     pub async fn get_config(&self) -> RewardConfig {
-        get_config(&self.redis_pool).await.unwrap_or_else(|e| {
+        get_config(&self.dragonfly_pool).await.unwrap_or_else(|e| {
             log::error!("Failed to get config: {}", e);
             RewardConfig::default()
         })
@@ -490,7 +490,7 @@ impl RewardEngine {
 
     /// Update configuration
     pub async fn update_config(&self, new_config: RewardConfig) -> Result<()> {
-        update_config_fn(&self.redis_pool, new_config).await?;
+        update_config_fn(&self.dragonfly_pool, new_config).await?;
         log::info!("Reward configuration updated");
         Ok(())
     }
