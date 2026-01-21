@@ -330,16 +330,8 @@ async fn handle_bulk_events_v2(
 )]
 async fn post_event_v2(
     State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
     Json(payload): Json<EventRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_token = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.trim_start_matches("Bearer ").to_string());
-
-    check_auth_events(auth_token).map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
-
     // Convert event name to snake_case for backwards compat with mobile sending PascalCase
     let event_name = to_snake_case(&payload.event);
 
