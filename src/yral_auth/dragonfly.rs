@@ -414,8 +414,11 @@ pub async fn init_dragonfly_redis(
     let dragonfly_pass = std::env::var("DRAGONFLY_PASSWORD")
         .expect("DRAGONFLY_PASSWORD environment variable not set");
 
-    let mut builder =
-        SentinelClientBuilder::new(conn_addr, SENTINEL_SERVICE_NAME.to_string(), SentinelServerType::Master)?;
+    let mut builder = SentinelClientBuilder::new(
+        conn_addr,
+        SENTINEL_SERVICE_NAME.to_string(),
+        SentinelServerType::Master,
+    )?;
 
     builder = builder.set_client_to_sentinel_certificates(tls_certs.clone());
 
@@ -472,8 +475,11 @@ pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>, anyho
     let dragonfly_pass = std::env::var("DRAGONFLY_PASSWORD")
         .expect("DRAGONFLY_PASSWORD environment variable not set");
 
-    let mut builder =
-        SentinelClientBuilder::new(conn_addr, SENTINEL_SERVICE_NAME.to_string(), SentinelServerType::Master)?;
+    let mut builder = SentinelClientBuilder::new(
+        conn_addr,
+        SENTINEL_SERVICE_NAME.to_string(),
+        SentinelServerType::Master,
+    )?;
 
     builder = builder.set_client_to_sentinel_certificates(tls_certs.clone());
     builder = builder.set_client_to_redis_username("default".to_string());
