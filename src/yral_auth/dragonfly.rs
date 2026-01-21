@@ -223,9 +223,9 @@ impl SentinelConnectionManager {
 
         // Log the discovered master for debugging
         let connection_info = client.get_connection_info();
-        let (host, port) = match connection_info.addr {
-            redis::ConnectionAddr::Tcp(h, p) => (h.clone(), p),
-            redis::ConnectionAddr::TcpTls { host, port, .. } => (host.clone(), port),
+        let (host, port) = match &connection_info.addr {
+            redis::ConnectionAddr::Tcp(h, p) => (h.clone(), *p),
+            redis::ConnectionAddr::TcpTls { host, port, .. } => (host.clone(), *port),
             _ => ("unknown".to_string(), 0),
         };
 
