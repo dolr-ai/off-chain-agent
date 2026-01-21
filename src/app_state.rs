@@ -10,7 +10,8 @@ use crate::rewards::RewardsModule;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
 use crate::yral_auth::dragonfly::{
-    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis, DragonflyPool,
+    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis,
+    init_dragonfly_redis_2, DragonflyPool,
 };
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
@@ -107,8 +108,11 @@ impl AppState {
         let leaderboard_redis_pool = init_leaderboard_redis_pool().await;
         let agent = init_agent().await;
 
+        // Initialize Dragonfly cluster 2 for rewards/impressions
         #[cfg(not(feature = "local-bin"))]
-        let rewards_dragonfly_pool = init_dragonfly_redis_pool().await;
+        let rewards_dragonfly_pool = init_dragonfly_redis_2()
+            .await
+            .expect("Failed to initialize Dragonfly cluster 2 for rewards");
 
         #[cfg(not(feature = "local-bin"))]
         let mut rewards_module = RewardsModule::new(rewards_dragonfly_pool, agent.clone()).await;

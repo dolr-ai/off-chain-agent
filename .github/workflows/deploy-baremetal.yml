@@ -274,6 +274,11 @@ jobs:
             DRAGONFLY_CA_CERT='${{ secrets.DRAGONFLY_CA_CERT }}' \
             DRAGONFLY_CLIENT_CERT='${{ secrets.DRAGONFLY_CLIENT_CERT }}' \
             DRAGONFLY_CLIENT_KEY='${{ secrets.DRAGONFLY_CLIENT_KEY }}' \
+            DRAGONFLY_2_PASSWORD='${{ secrets.DRAGONFLY_2_PASSWORD }}' \
+            DRAGONFLY_2_HOSTS='${{ vars.DRAGONFLY_2_HOSTS }}' \
+            DRAGONFLY_2_CA_CERT='${{ secrets.DRAGONFLY_2_CA_CERT }}' \
+            DRAGONFLY_2_CLIENT_CERT='${{ secrets.DRAGONFLY_2_CLIENT_CERT }}' \
+            DRAGONFLY_2_CLIENT_KEY='${{ secrets.DRAGONFLY_2_CLIENT_KEY }}' \
             GCHAT_SENTRY_WEBHOOK_URL='${{ secrets.GCHAT_SENTRY_WEBHOOK_URL }}' \
             SENTRY_CLIENT_SECRET_1='${{ secrets.SENTRY_CLIENT_SECRET_1 }}' \
             SENTRY_CLIENT_SECRET_2='${{ secrets.SENTRY_CLIENT_SECRET_2 }}' \
