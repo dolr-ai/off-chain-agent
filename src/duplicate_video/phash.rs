@@ -114,17 +114,27 @@ impl PHasher {
 
         for (stream, packet) in ictx.packets() {
             if stream.index() == stream_index {
-                decoder
-                    .send_packet(&packet)
-                    .context("Failed to send packet")?;
+                if let Err(e) = decoder.send_packet(&packet) {
+                    log::warn!("Skipping corrupt packet at frame {}: {}", frame_count, e);
+                    continue;
+                }
 
                 while decoder.receive_frame(&mut decoded_frame).is_ok() {
                     if target_indices.contains(&frame_count) {
-                        let rgb_frame = self.convert_to_rgb(&decoded_frame)?;
-                        frames.push(rgb_frame);
-
-                        if frames.len() >= self.num_frames {
-                            return Ok(frames);
+                        match self.convert_to_rgb(&decoded_frame) {
+                            Ok(rgb_frame) => {
+                                frames.push(rgb_frame);
+                                if frames.len() >= self.num_frames {
+                                    return Ok(frames);
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "Failed to convert frame {} to RGB, skipping: {}",
+                                    frame_count,
+                                    e
+                                );
+                            }
                         }
                     }
                     frame_count += 1;
@@ -133,14 +143,25 @@ impl PHasher {
         }
 
         // Flush decoder
-        decoder.send_eof().context("Failed to send EOF")?;
+        if let Err(e) = decoder.send_eof() {
+            log::warn!("Failed to send EOF to decoder: {}", e);
+        }
         while decoder.receive_frame(&mut decoded_frame).is_ok() {
             if target_indices.contains(&frame_count) {
-                let rgb_frame = self.convert_to_rgb(&decoded_frame)?;
-                frames.push(rgb_frame);
-
-                if frames.len() >= self.num_frames {
-                    break;
+                match self.convert_to_rgb(&decoded_frame) {
+                    Ok(rgb_frame) => {
+                        frames.push(rgb_frame);
+                        if frames.len() >= self.num_frames {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to convert frame {} to RGB during flush, skipping: {}",
+                            frame_count,
+                            e
+                        );
+                    }
                 }
             }
             frame_count += 1;
