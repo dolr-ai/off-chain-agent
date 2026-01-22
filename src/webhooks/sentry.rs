@@ -96,9 +96,40 @@ pub struct SentryEvent {
     url: Option<String>,
 }
 
+fn string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+    struct StringOrNumber;
+
+    impl<'de> de::Visitor<'de> for StringOrNumber {
+        type Value = String;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("string or number")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(v.to_string())
+        }
+
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(v.to_string())
+        }
+
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+            Ok(v.to_string())
+        }
+    }
+
+    deserializer.deserialize_any(StringOrNumber)
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct SentryProject {
+    #[serde(deserialize_with = "string_or_number")]
     id: String,
     pub name: String,
     slug: String,
@@ -271,7 +302,14 @@ pub async fn sentry_webhook_handler(
     );
 
     // Handle issue events (created, resolved, assigned, etc.)
-    let dominated_actions = ["triggered", "created", "resolved", "assigned", "unresolved", "ignored"];
+    let dominated_actions = [
+        "triggered",
+        "created",
+        "resolved",
+        "assigned",
+        "unresolved",
+        "ignored",
+    ];
     if !dominated_actions.contains(&payload.action.as_str()) {
         log::debug!("Skipping unhandled action: {}", payload.action);
         return (StatusCode::OK, "OK");
