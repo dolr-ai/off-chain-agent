@@ -167,15 +167,36 @@ pub async fn sentry_webhook_handler(
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
+    log::info!(
+        "=== SENTRY WEBHOOK RECEIVED === body_len={} headers={:?}",
+        body.len(),
+        headers
+            .iter()
+            .filter(|(k, _)| k.as_str().starts_with("sentry") || k.as_str() == "content-type")
+            .map(|(k, v)| format!("{}={:?}", k, v))
+            .collect::<Vec<_>>()
+    );
+
     let signature = headers
         .get("sentry-hook-signature")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    if !verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_1)
-        && !verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_2)
-    {
+    log::info!("Sentry webhook: signature={}", signature);
+
+    let sig_valid_1 = verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_1);
+    let sig_valid_2 = verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_2);
+    log::info!(
+        "Sentry webhook: sig_valid_1={}, sig_valid_2={}",
+        sig_valid_1,
+        sig_valid_2
+    );
+
+    if !sig_valid_1 && !sig_valid_2 {
         log::warn!("Sentry webhook: invalid signature");
+        if let Ok(raw) = String::from_utf8(body.to_vec()) {
+            log::warn!("Raw body (first 200 chars): {}", &raw[..raw.len().min(200)]);
+        }
         return (StatusCode::UNAUTHORIZED, "Invalid signature");
     }
 
