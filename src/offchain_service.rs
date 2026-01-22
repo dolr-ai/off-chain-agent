@@ -178,7 +178,7 @@ pub async fn report_approved_handler(
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     validation.set_issuer(&["chat@system.gserviceaccount.com"]);
-    validation.set_audience(&["82502260393"]);
+    validation.set_audience(&["1035262663512"]);
 
     let mut valid = false;
 
