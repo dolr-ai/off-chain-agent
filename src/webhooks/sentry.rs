@@ -138,96 +138,90 @@ fn get_action_text(action: &str) -> &'static str {
 
 fn build_gchat_message(payload: &SentryWebhookPayload) -> Value {
     let action_text = get_action_text(&payload.action);
+    let issue = payload.data.issue.as_ref().unwrap();
 
-    if let Some(issue) = &payload.data.issue {
-        let level = issue.level.as_deref();
-        let emoji = get_level_emoji(level);
-        let level_text = level.unwrap_or("error").to_uppercase();
+    let level = issue.level.as_deref();
+    let emoji = get_level_emoji(level);
+    let level_text = level.unwrap_or("error").to_uppercase();
 
-        let issue_url = issue.url.as_deref().unwrap_or("#");
-        let short_id = issue.short_id.as_deref().unwrap_or(&issue.id);
-        let culprit = issue.culprit.as_deref().unwrap_or("Unknown");
-        let count = issue.count.as_deref().unwrap_or("1");
-        let first_seen = issue.first_seen.as_deref().unwrap_or("Unknown");
-        let last_seen = issue.last_seen.as_deref().unwrap_or("Unknown");
+    let issue_url = issue.url.as_deref().unwrap_or("#");
+    let short_id = issue.short_id.as_deref().unwrap_or(&issue.id);
+    let culprit = issue.culprit.as_deref().unwrap_or("Unknown");
+    let count = issue.count.as_deref().unwrap_or("1");
+    let first_seen = issue.first_seen.as_deref().unwrap_or("Unknown");
+    let last_seen = issue.last_seen.as_deref().unwrap_or("Unknown");
 
-        // Get environment from event if available
-        let environment = payload
-            .data
-            .event
-            .as_ref()
-            .and_then(|e| e.environment.as_deref())
-            .unwrap_or("production");
+    // Get environment from event if available
+    let environment = payload
+        .data
+        .event
+        .as_ref()
+        .and_then(|e| e.environment.as_deref())
+        .unwrap_or("production");
 
-        json!({
-            "cardsV2": [{
-                "cardId": format!("sentry-{}", issue.id),
-                "card": {
-                    "header": {
-                        "title": format!("{} Sentry Alert", emoji),
-                        "subtitle": format!("{} | {} | {}", action_text, level_text, issue.project.name)
-                    },
-                    "sections": [{
-                        "header": short_id,
-                        "widgets": [
-                            {
-                                "textParagraph": {
-                                    "text": format!("<b>{}</b>", issue.title)
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Culprit",
-                                    "text": culprit
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Environment",
-                                    "text": environment
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Occurrences",
-                                    "text": count
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "First Seen",
-                                    "text": first_seen
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Last Seen",
-                                    "text": last_seen
-                                }
-                            },
-                            {
-                                "buttonList": {
-                                    "buttons": [{
-                                        "text": "View in Sentry",
-                                        "onClick": {
-                                            "openLink": {
-                                                "url": issue_url
-                                            }
-                                        }
-                                    }]
-                                }
+    json!({
+        "cardsV2": [{
+            "cardId": format!("sentry-{}", issue.id),
+            "card": {
+                "header": {
+                    "title": format!("{} Sentry Alert", emoji),
+                    "subtitle": format!("{} | {} | {}", action_text, level_text, issue.project.name)
+                },
+                "sections": [{
+                    "header": short_id,
+                    "widgets": [
+                        {
+                            "textParagraph": {
+                                "text": format!("<b>{}</b>", issue.title)
                             }
-                        ]
-                    }]
-                }
-            }]
-        })
-    } else {
-        // Fallback for events without issue data
-        json!({
-            "text": format!("🔔 Sentry Alert: {}", action_text)
-        })
-    }
+                        },
+                        {
+                            "decoratedText": {
+                                "topLabel": "Culprit",
+                                "text": culprit
+                            }
+                        },
+                        {
+                            "decoratedText": {
+                                "topLabel": "Environment",
+                                "text": environment
+                            }
+                        },
+                        {
+                            "decoratedText": {
+                                "topLabel": "Occurrences",
+                                "text": count
+                            }
+                        },
+                        {
+                            "decoratedText": {
+                                "topLabel": "First Seen",
+                                "text": first_seen
+                            }
+                        },
+                        {
+                            "decoratedText": {
+                                "topLabel": "Last Seen",
+                                "text": last_seen
+                            }
+                        },
+                        {
+                            "buttonList": {
+                                "buttons": [{
+                                    "text": "View in Sentry",
+                                    "onClick": {
+                                        "openLink": {
+                                            "url": issue_url
+                                        }
+                                    }
+                                }]
+                            }
+                        }
+                    ]
+                }]
+            }
+        }]
+    })
 }
 
 /// Sentry webhook handler - forwards alerts to Google Chat
@@ -278,6 +272,11 @@ pub async fn sentry_webhook_handler(
 
     if payload.action != "triggered" {
         log::debug!("Skipping non-triggered action: {}", payload.action);
+        return (StatusCode::OK, "OK");
+    }
+
+    if payload.data.issue.is_none() {
+        log::debug!("Skipping webhook without issue data");
         return (StatusCode::OK, "OK");
     }
 
