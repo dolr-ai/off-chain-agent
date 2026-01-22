@@ -33,84 +33,46 @@ fn verify_sentry_signature(body: &[u8], signature: &str, secret: &str) -> bool {
 
     expected == signature
 }
-
-/// Sentry webhook payload (simplified - Sentry sends more fields)
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct SentryWebhookPayload {
-    pub action: String,
-    pub data: SentryData,
-    #[serde(default)]
-    actor: Option<SentryActor>,
+pub struct AlertRulePayload {
+    pub action: String, // Always "triggered" for alert rules
+    pub data: AlertRuleData,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SentryData {
-    pub issue: Option<SentryIssue>,
-    pub event: Option<SentryEvent>,
-    #[serde(default)]
-    pub error: Option<SentryError>,
+pub struct AlertRuleData {
+    pub event: AlertEvent,
+    pub triggered_rule: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct SentryError {
+pub struct AlertEvent {
     pub event_id: Option<String>,
-    pub project: Option<u64>,
-    pub release: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct SentryIssue {
-    pub id: String,
-    pub title: String,
-    #[serde(default)]
-    pub culprit: Option<String>,
-    #[serde(default, rename = "shortId")]
-    pub short_id: Option<String>,
-    #[serde(rename = "permalink")]
-    pub url: Option<String>,
-    pub project: SentryProject,
+    pub title: Option<String>,
+    pub message: Option<String>,
+    pub web_url: Option<String>,
+    pub issue_url: Option<String>,
+    pub issue_id: Option<String>,
     #[serde(default)]
     pub level: Option<String>,
     #[serde(default)]
-    status: Option<String>,
-    #[serde(rename = "firstSeen")]
-    pub first_seen: Option<String>,
-    #[serde(rename = "lastSeen")]
-    pub last_seen: Option<String>,
-    pub count: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct SentryEvent {
-    event_id: Option<String>,
-    title: Option<String>,
-    message: Option<String>,
-    #[serde(default)]
     pub environment: Option<String>,
     #[serde(default)]
-    release: Option<String>,
-    url: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct SentryProject {
-    id: String,
-    pub name: String,
-    slug: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct SentryActor {
-    #[serde(rename = "type")]
-    actor_type: String,
-    id: Option<String>,
-    name: Option<String>,
+    pub release: Option<String>,
+    #[serde(default)]
+    pub platform: Option<String>,
+    #[serde(default)]
+    pub location: Option<String>,
+    #[serde(default)]
+    pub culprit: Option<String>,
+    #[serde(default)]
+    pub project: Option<i64>,
+    #[serde(default)]
+    pub project_name: Option<String>,
+    #[serde(default)]
+    pub project_slug: Option<String>,
 }
 
 fn get_level_emoji(level: Option<&str>) -> &'static str {
@@ -124,110 +86,79 @@ fn get_level_emoji(level: Option<&str>) -> &'static str {
     }
 }
 
-fn get_action_text(action: &str) -> &'static str {
-    match action {
-        "triggered" => "New Issue Triggered",
-        "resolved" => "Issue Resolved ✅",
-        "assigned" => "Issue Assigned",
-        "archived" => "Issue Archived",
-        "unresolved" => "Issue Unresolved",
-        "ignored" => "Issue Ignored",
-        _ => "Issue Update",
-    }
-}
+fn build_gchat_message_from_alert(payload: &AlertRulePayload) -> Value {
+    let event = &payload.data.event;
 
-fn build_gchat_message(payload: &SentryWebhookPayload) -> Value {
-    let action_text = get_action_text(&payload.action);
+    let level = event.level.as_deref();
+    let emoji = get_level_emoji(level);
+    let level_text = level.unwrap_or("error").to_uppercase();
 
-    if let Some(issue) = &payload.data.issue {
-        let level = issue.level.as_deref();
-        let emoji = get_level_emoji(level);
-        let level_text = level.unwrap_or("error").to_uppercase();
+    let title = event.title.as_deref().unwrap_or("Unknown Error");
+    let web_url = event.web_url.as_deref().unwrap_or("#");
+    let environment = event.environment.as_deref().unwrap_or("production");
+    let culprit = event
+        .culprit
+        .as_deref()
+        .or(event.location.as_deref())
+        .unwrap_or("Unknown");
+    let project_name = event.project_name.as_deref().unwrap_or("Unknown Project");
+    let triggered_rule = payload
+        .data
+        .triggered_rule
+        .as_deref()
+        .unwrap_or("Alert Rule");
+    let event_id = event
+        .event_id
+        .as_deref()
+        .unwrap_or("unknown")
+        .chars()
+        .take(8)
+        .collect::<String>();
 
-        let issue_url = issue.url.as_deref().unwrap_or("#");
-        let short_id = issue.short_id.as_deref().unwrap_or(&issue.id);
-        let culprit = issue.culprit.as_deref().unwrap_or("Unknown");
-        let count = issue.count.as_deref().unwrap_or("1");
-        let first_seen = issue.first_seen.as_deref().unwrap_or("Unknown");
-        let last_seen = issue.last_seen.as_deref().unwrap_or("Unknown");
-
-        // Get environment from event if available
-        let environment = payload
-            .data
-            .event
-            .as_ref()
-            .and_then(|e| e.environment.as_deref())
-            .unwrap_or("production");
-
-        json!({
-            "cardsV2": [{
-                "cardId": format!("sentry-{}", issue.id),
-                "card": {
-                    "header": {
-                        "title": format!("{} Sentry Alert", emoji),
-                        "subtitle": format!("{} | {} | {}", action_text, level_text, issue.project.name)
-                    },
-                    "sections": [{
-                        "header": short_id,
-                        "widgets": [
-                            {
-                                "textParagraph": {
-                                    "text": format!("<b>{}</b>", issue.title)
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Culprit",
-                                    "text": culprit
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Environment",
-                                    "text": environment
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Occurrences",
-                                    "text": count
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "First Seen",
-                                    "text": first_seen
-                                }
-                            },
-                            {
-                                "decoratedText": {
-                                    "topLabel": "Last Seen",
-                                    "text": last_seen
-                                }
-                            },
-                            {
-                                "buttonList": {
-                                    "buttons": [{
-                                        "text": "View in Sentry",
-                                        "onClick": {
-                                            "openLink": {
-                                                "url": issue_url
-                                            }
-                                        }
-                                    }]
-                                }
+    json!({
+        "cardsV2": [{
+            "cardId": format!("sentry-alert-{}", event_id),
+            "card": {
+                "header": {
+                    "title": format!("{} Sentry Alert", emoji),
+                    "subtitle": format!("{} | {} | {}", triggered_rule, level_text, project_name)
+                },
+                "sections": [{
+                    "widgets": [
+                        {
+                            "textParagraph": {
+                                "text": format!("<b>{}</b>", title)
                             }
-                        ]
-                    }]
-                }
-            }]
-        })
-    } else {
-        // Fallback for events without issue data
-        json!({
-            "text": format!("🔔 Sentry Alert: {}", action_text)
-        })
-    }
+                        },
+                        {
+                            "decoratedText": {
+                                "topLabel": "Culprit",
+                                "text": culprit
+                            }
+                        },
+                        {
+                            "decoratedText": {
+                                "topLabel": "Environment",
+                                "text": environment
+                            }
+                        },
+                        {
+                            "buttonList": {
+                                "buttons": [{
+                                    "text": "View in Sentry",
+                                    "onClick": {
+                                        "openLink": {
+                                            "url": web_url
+                                        }
+                                    }
+                                }]
+                            }
+                        }
+                    ]
+                }]
+            }
+        }]
+    })
 }
 
 /// Sentry webhook handler - forwards alerts to Google Chat
@@ -236,52 +167,72 @@ pub async fn sentry_webhook_handler(
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
+    log::info!(
+        "=== SENTRY WEBHOOK RECEIVED === body_len={} headers={:?}",
+        body.len(),
+        headers
+            .iter()
+            .filter(|(k, _)| k.as_str().starts_with("sentry") || k.as_str() == "content-type")
+            .map(|(k, v)| format!("{}={:?}", k, v))
+            .collect::<Vec<_>>()
+    );
+
     let signature = headers
         .get("sentry-hook-signature")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    if !verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_1)
-        && !verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_2)
-    {
+    log::info!("Sentry webhook: signature={}", signature);
+
+    let sig_valid_1 = verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_1);
+    let sig_valid_2 = verify_sentry_signature(&body, signature, &SENTRY_CLIENT_SECRET_2);
+    log::info!(
+        "Sentry webhook: sig_valid_1={}, sig_valid_2={}",
+        sig_valid_1,
+        sig_valid_2
+    );
+
+    if !sig_valid_1 && !sig_valid_2 {
         log::warn!("Sentry webhook: invalid signature");
+        if let Ok(raw) = String::from_utf8(body.to_vec()) {
+            log::warn!("Raw body (first 200 chars): {}", &raw[..raw.len().min(200)]);
+        }
         return (StatusCode::UNAUTHORIZED, "Invalid signature");
     }
 
-    let payload: SentryWebhookPayload = match serde_json::from_slice(&body) {
+    // Check the resource type from header
+    let resource = headers
+        .get("sentry-hook-resource")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    log::info!("Received Sentry webhook: resource={}", resource);
+
+    // Only handle event_alert (from Alert Rules)
+    if resource != "event_alert" {
+        log::debug!("Skipping non-alert webhook: resource={}", resource);
+        return (StatusCode::OK, "OK");
+    }
+
+    let payload: AlertRulePayload = match serde_json::from_slice(&body) {
         Ok(p) => p,
         Err(e) => {
-            log::error!("Failed to parse Sentry webhook payload: {}", e);
+            log::error!("Failed to parse Sentry alert payload: {}", e);
+            // Log the raw body for debugging
+            if let Ok(raw) = String::from_utf8(body.to_vec()) {
+                log::error!("Raw payload: {}", &raw[..raw.len().min(500)]);
+            }
             return (StatusCode::BAD_REQUEST, "Invalid payload");
         }
     };
 
-    let project_info = payload
-        .data
-        .issue
-        .as_ref()
-        .map(|i| i.project.name.clone())
-        .or_else(|| {
-            payload
-                .data
-                .error
-                .as_ref()
-                .and_then(|e| e.project.map(|p| format!("project-{}", p)))
-        })
-        .unwrap_or_else(|| "unknown".to_string());
-
     log::info!(
-        "Received Sentry webhook: action={}, project={}",
-        payload.action,
-        project_info
+        "Sentry alert: rule={}, event={}",
+        payload.data.triggered_rule.as_deref().unwrap_or("unknown"),
+        payload.data.event.title.as_deref().unwrap_or("unknown")
     );
 
-    if payload.action != "triggered" {
-        log::debug!("Skipping non-triggered action: {}", payload.action);
-        return (StatusCode::OK, "OK");
-    }
-
-    let gchat_message = build_gchat_message(&payload);
+    let gchat_message = build_gchat_message_from_alert(&payload);
 
     match send_message_gchat(&GCHAT_SENTRY_WEBHOOK_URL, gchat_message).await {
         Ok(_) => {
