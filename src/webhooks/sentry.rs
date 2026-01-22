@@ -276,6 +276,11 @@ pub async fn sentry_webhook_handler(
         project_info
     );
 
+    if payload.action != "triggered" {
+        log::debug!("Skipping non-triggered action: {}", payload.action);
+        return (StatusCode::OK, "OK");
+    }
+
     let gchat_message = build_gchat_message(&payload);
 
     match send_message_gchat(&GCHAT_SENTRY_WEBHOOK_URL, gchat_message).await {
