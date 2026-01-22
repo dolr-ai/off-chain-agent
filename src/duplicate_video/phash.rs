@@ -37,7 +37,7 @@ impl PHasher {
             anyhow::bail!("No frames extracted from video");
         }
 
-        let hashes: Vec<String> = frames
+        let frame_hashes: Vec<String> = frames
             .iter()
             .map(|frame| {
                 self.compute_image_hash(frame)
@@ -45,7 +45,19 @@ impl PHasher {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // Concatenate all hashes
+        let mut hashes = Vec::with_capacity(self.num_frames);
+        for i in 0..self.num_frames {
+            hashes.push(frame_hashes[i % frame_hashes.len()].clone());
+        }
+
+        if frame_hashes.len() < self.num_frames {
+            log::debug!(
+                "Video has {} frames, repeating cyclically to fill {} slots",
+                frame_hashes.len(),
+                self.num_frames
+            );
+        }
+
         Ok(hashes.join(""))
     }
 
