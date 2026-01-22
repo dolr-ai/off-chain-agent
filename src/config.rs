@@ -17,8 +17,6 @@ pub struct AppConfig {
     pub yral_metadata_token: String,
     pub google_sa_key: String,
     #[cfg(not(feature = "local-bin"))]
-    pub yral_auth_redis_url: String,
-    #[cfg(not(feature = "local-bin"))]
     pub milvus_url: Option<String>,
 }
 
