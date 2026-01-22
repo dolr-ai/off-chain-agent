@@ -355,30 +355,54 @@ async fn update_approval_status(
             escaped_video_id
         );
 
-        let request = QueryRequest {
-            query,
-            ..Default::default()
-        };
+        // Retry with exponential backoff for concurrent update errors
+        let mut attempts = 0;
+        let max_attempts = 3;
 
-        match bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
-            .await
-        {
-            Ok(result) => {
-                let affected = result.num_dml_affected_rows.unwrap_or(0) > 0;
-                log::info!(
-                    "BigQuery approval update for video {}: {}",
-                    video_id_owned,
-                    if affected { "success" } else { "not found" }
-                );
-            }
-            Err(e) => {
-                log::error!(
-                    "Failed to update BigQuery approval for video {}: {}",
-                    video_id_owned,
-                    e
-                );
+        loop {
+            attempts += 1;
+
+            let request = QueryRequest {
+                query: query.clone(),
+                ..Default::default()
+            };
+
+            match bigquery_client
+                .job()
+                .query("hot-or-not-feed-intelligence", &request)
+                .await
+            {
+                Ok(result) => {
+                    let affected = result.num_dml_affected_rows.unwrap_or(0) > 0;
+                    log::info!(
+                        "BigQuery approval update for video {}: {}",
+                        video_id_owned,
+                        if affected { "success" } else { "not found" }
+                    );
+                    break;
+                }
+                Err(e) => {
+                    let error_str = e.to_string();
+                    if error_str.contains("concurrent update") && attempts < max_attempts {
+                        let delay = std::time::Duration::from_millis(100 * (1 << attempts));
+                        log::warn!(
+                            "BigQuery concurrent update error for video {}, retrying in {:?} (attempt {}/{})",
+                            video_id_owned,
+                            delay,
+                            attempts,
+                            max_attempts
+                        );
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    }
+
+                    log::error!(
+                        "Failed to update BigQuery approval for video {}: {}",
+                        video_id_owned,
+                        e
+                    );
+                    break;
+                }
             }
         }
     });
@@ -416,30 +440,54 @@ async fn delete_video(
             escaped_video_id
         );
 
-        let request = QueryRequest {
-            query,
-            ..Default::default()
-        };
+        // Retry with exponential backoff for concurrent update errors
+        let mut attempts = 0;
+        let max_attempts = 3;
 
-        match bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
-            .await
-        {
-            Ok(result) => {
-                let deleted = result.num_dml_affected_rows.unwrap_or(0) > 0;
-                log::info!(
-                    "BigQuery delete for video {}: {}",
-                    video_id_owned,
-                    if deleted { "success" } else { "not found" }
-                );
-            }
-            Err(e) => {
-                log::error!(
-                    "Failed to delete from BigQuery for video {}: {}",
-                    video_id_owned,
-                    e
-                );
+        loop {
+            attempts += 1;
+
+            let request = QueryRequest {
+                query: query.clone(),
+                ..Default::default()
+            };
+
+            match bigquery_client
+                .job()
+                .query("hot-or-not-feed-intelligence", &request)
+                .await
+            {
+                Ok(result) => {
+                    let deleted = result.num_dml_affected_rows.unwrap_or(0) > 0;
+                    log::info!(
+                        "BigQuery delete for video {}: {}",
+                        video_id_owned,
+                        if deleted { "success" } else { "not found" }
+                    );
+                    break;
+                }
+                Err(e) => {
+                    let error_str = e.to_string();
+                    if error_str.contains("concurrent update") && attempts < max_attempts {
+                        let delay = std::time::Duration::from_millis(100 * (1 << attempts));
+                        log::warn!(
+                            "BigQuery concurrent update error for video {}, retrying in {:?} (attempt {}/{})",
+                            video_id_owned,
+                            delay,
+                            attempts,
+                            max_attempts
+                        );
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    }
+
+                    log::error!(
+                        "Failed to delete from BigQuery for video {}: {}",
+                        video_id_owned,
+                        e
+                    );
+                    break;
+                }
             }
         }
     });
