@@ -34,7 +34,8 @@ impl PHasher {
             .context("Failed to extract frames")?;
 
         if frames.is_empty() {
-            anyhow::bail!("No frames extracted from video");
+            log::warn!("No frames extracted from video: {:?}", video_path);
+            return Err(anyhow::anyhow!("No frames extracted from video"));
         }
 
         let frame_hashes: Vec<String> = frames
