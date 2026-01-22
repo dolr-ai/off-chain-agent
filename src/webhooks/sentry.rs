@@ -34,6 +34,7 @@ fn verify_sentry_signature(body: &[u8], signature: &str, secret: &str) -> bool {
     expected == signature
 }
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct AlertRulePayload {
     pub action: String, // Always "triggered" for alert rules
     pub data: AlertRuleData,
@@ -46,6 +47,7 @@ pub struct AlertRuleData {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct AlertEvent {
     pub event_id: Option<String>,
     pub title: Option<String>,
