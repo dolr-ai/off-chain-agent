@@ -48,6 +48,16 @@ pub struct SentryWebhookPayload {
 pub struct SentryData {
     pub issue: Option<SentryIssue>,
     pub event: Option<SentryEvent>,
+    #[serde(default)]
+    pub error: Option<SentryError>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct SentryError {
+    pub event_id: Option<String>,
+    pub project: Option<u64>,
+    pub release: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -246,16 +256,30 @@ pub async fn sentry_webhook_handler(
         }
     };
 
+    let project_info = payload
+        .data
+        .issue
+        .as_ref()
+        .map(|i| i.project.name.clone())
+        .or_else(|| {
+            payload
+                .data
+                .error
+                .as_ref()
+                .and_then(|e| e.project.map(|p| format!("project-{}", p)))
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     log::info!(
         "Received Sentry webhook: action={}, project={}",
         payload.action,
-        payload
-            .data
-            .issue
-            .as_ref()
-            .map(|i| &i.project.name)
-            .unwrap_or(&"unknown".to_string())
+        project_info
     );
+
+    if payload.action != "triggered" {
+        log::debug!("Skipping non-triggered action: {}", payload.action);
+        return (StatusCode::OK, "OK");
+    }
 
     let gchat_message = build_gchat_message(&payload);
 

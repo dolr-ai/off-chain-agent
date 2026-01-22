@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     app_state::AppState,
@@ -18,7 +18,6 @@ use yral_canisters_client::{
     ic::USER_POST_SERVICE_ID,
     user_post_service::{Post, PostStatus, Result2, UserPostService},
 };
-use yup_oauth2::ServiceAccountAuthenticator;
 
 use crate::offchain_service::off_chain::{Empty, ReportPostRequest};
 use off_chain::off_chain_server::OffChain;
@@ -82,33 +81,11 @@ impl OffChain for OffChainService {
     }
 }
 
-pub async fn get_chat_access_token() -> String {
-    let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
-
-    // Load your service account key
-    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
-
-    let auth = ServiceAccountAuthenticator::builder(sa_key)
-        .build()
-        .await
-        .unwrap();
-
-    let scopes = &["https://www.googleapis.com/auth/chat.bot"];
-    let token = auth.token(scopes).await.unwrap();
-
-    match token.token() {
-        Some(t) => t.to_string(),
-        _ => panic!("No access token found"),
-    }
-}
-
 pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
-    let token = get_chat_access_token().await;
     let client = Client::new();
 
     let response = client
         .post(request_url)
-        .bearer_auth(token)
         .header("Content-Type", "application/json")
         .json(&data)
         .send()
@@ -119,7 +96,7 @@ pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
     let body = response.text().await.unwrap_or_default();
 
     if !status.is_success() {
-        log::debug!("Google Chat API error: status={}, body={}", status, body);
+        log::error!("Google Chat API error: status={}, body={}", status, body);
         return Err(anyhow::anyhow!(
             "Google Chat API error: status={}, body={}",
             status,
@@ -201,7 +178,7 @@ pub async fn report_approved_handler(
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     validation.set_issuer(&["chat@system.gserviceaccount.com"]);
-    validation.set_audience(&["82502260393"]);
+    validation.set_audience(&["1035262663512"]);
 
     let mut valid = false;
 

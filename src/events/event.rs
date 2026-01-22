@@ -13,7 +13,7 @@ use crate::{
 };
 use axum::{extract::State, Json};
 use http::header::CONTENT_TYPE;
-use log::error;
+use log::{debug, error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -113,7 +113,11 @@ impl Event {
         let flat_event = match self.to_flat_event() {
             Some(e) => e,
             None => {
-                error!("Failed to parse params for mixpanel {}", self.event.event);
+                log::warn!(
+                    "Skipping mixpanel forward - event: '{}', params: {}",
+                    self.event.event,
+                    self.event.params
+                );
                 return;
             }
         };
@@ -247,7 +251,7 @@ impl Event {
 
                         let percentage_watched = params.percentage_watched as u8;
                         if percentage_watched == 0 || percentage_watched > 100 {
-                            error!("Invalid percentage_watched: {percentage_watched}");
+                            debug!("Invalid percentage_watched: {percentage_watched}");
                             return;
                         }
                         let post_id = params.post_id; // Already a String
@@ -352,7 +356,7 @@ impl Event {
 
                                 let percentage_watched = params.percentage_watched as u8;
                                 if percentage_watched == 0 || percentage_watched > 100 {
-                                    error!("Invalid percentage_watched: {percentage_watched}");
+                                    debug!("Invalid percentage_watched: {percentage_watched}");
                                     return;
                                 }
                                 let post_id = params.post_id.parse::<u64>().unwrap();
