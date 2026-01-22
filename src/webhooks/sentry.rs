@@ -126,7 +126,7 @@ fn get_level_emoji(level: Option<&str>) -> &'static str {
 
 fn get_action_text(action: &str) -> &'static str {
     match action {
-        "triggered" => "New Issue Triggered",
+        "triggered" | "created" => "New Issue",
         "resolved" => "Issue Resolved ✅",
         "assigned" => "Issue Assigned",
         "archived" => "Issue Archived",
@@ -270,8 +270,10 @@ pub async fn sentry_webhook_handler(
         project_info
     );
 
-    if payload.action != "triggered" {
-        log::debug!("Skipping non-triggered action: {}", payload.action);
+    // Handle issue events (created, resolved, assigned, etc.)
+    let dominated_actions = ["triggered", "created", "resolved", "assigned", "unresolved", "ignored"];
+    if !dominated_actions.contains(&payload.action.as_str()) {
+        log::debug!("Skipping unhandled action: {}", payload.action);
         return (StatusCode::OK, "OK");
     }
 
