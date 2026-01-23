@@ -200,10 +200,12 @@ jobs:
         env:
           GOOGLE_SA_KEY: ${{ secrets.YRAL_OFF_CHAIN_AGENT_GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON_KEY }}
           ALLOYDB_SERVICE_ACCOUNT_JSON: ${{ secrets.ALLOYDB_SERVICE_ACCOUNT_JSON_PROD }}
+          YRAL_MOBILE_SERVICE_ACCOUNT_KEY: ${{ secrets.YRAL_MOBILE_SERVICE_ACCOUNT_KEY }}
         run: |
           # Shell-escape JSON secrets
           GOOGLE_SA_KEY_ESCAPED=$(printf '%q' "$GOOGLE_SA_KEY")
           ALLOYDB_SA_JSON_ESCAPED=$(printf '%q' "$ALLOYDB_SERVICE_ACCOUNT_JSON")
+          YRAL_MOBILE_SA_KEY_ESCAPED=$(printf '%q' "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY")
 
           ssh root@${{ matrix.server }} "
             cd /home/offchain-agent
@@ -282,7 +284,7 @@ jobs:
             GCHAT_SENTRY_WEBHOOK_URL='${{ secrets.GCHAT_SENTRY_WEBHOOK_URL }}' \
             SENTRY_CLIENT_SECRET_1='${{ secrets.SENTRY_CLIENT_SECRET_1 }}' \
             SENTRY_CLIENT_SECRET_2='${{ secrets.SENTRY_CLIENT_SECRET_2 }}' \
-            YRAL_MOBILE_SERVICE_ACCOUNT_KEY='${{ secrets.YRAL_MOBILE_SERVICE_ACCOUNT_KEY }}' \
+            YRAL_MOBILE_SERVICE_ACCOUNT_KEY=$YRAL_MOBILE_SA_KEY_ESCAPED \
             docker compose up -d
 
             echo 'Waiting for services to start...'
