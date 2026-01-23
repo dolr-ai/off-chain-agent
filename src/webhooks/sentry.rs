@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use sha2::Sha256;
 use std::sync::Arc;
 
-use crate::{app_state::AppState, offchain_service::send_message_gchat};
+use crate::{app_state::AppState, offchain_service::send_message_gchat_webhook};
 
 static GCHAT_SENTRY_WEBHOOK_URL: Lazy<String> = Lazy::new(|| {
     std::env::var("GCHAT_SENTRY_WEBHOOK_URL").expect("GCHAT_SENTRY_WEBHOOK_URL must be set")
@@ -234,7 +234,7 @@ pub async fn sentry_webhook_handler(
 
     let gchat_message = build_gchat_message_from_alert(&payload);
 
-    match send_message_gchat(&GCHAT_SENTRY_WEBHOOK_URL, gchat_message).await {
+    match send_message_gchat_webhook(&GCHAT_SENTRY_WEBHOOK_URL, gchat_message).await {
         Ok(_) => {
             log::info!("Successfully forwarded Sentry alert to Google Chat");
             (StatusCode::OK, "OK")

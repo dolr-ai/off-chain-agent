@@ -115,6 +115,7 @@ jobs:
           printf '%s' "$DRAGONFLY_2_CA_CERT" | flyctl secrets set DRAGONFLY_2_CA_CERT=- --app "$APP_NAME" --stage
           printf '%s' "$DRAGONFLY_2_CLIENT_CERT" | flyctl secrets set DRAGONFLY_2_CLIENT_CERT=- --app "$APP_NAME" --stage
           printf '%s' "$DRAGONFLY_2_CLIENT_KEY" | flyctl secrets set DRAGONFLY_2_CLIENT_KEY=- --app "$APP_NAME" --stage
+          flyctl secrets set "YRAL_MOBILE_SERVICE_ACCOUNT_KEY=$YRAL_MOBILE_SERVICE_ACCOUNT_KEY" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -180,3 +181,4 @@ jobs:
           DRAGONFLY_2_CA_CERT: ${{ secrets.DRAGONFLY_2_CA_CERT }}
           DRAGONFLY_2_CLIENT_CERT: ${{ secrets.DRAGONFLY_2_CLIENT_CERT }}
           DRAGONFLY_2_CLIENT_KEY: ${{ secrets.DRAGONFLY_2_CLIENT_KEY }}
+          YRAL_MOBILE_SERVICE_ACCOUNT_KEY: ${{ secrets.YRAL_MOBILE_SERVICE_ACCOUNT_KEY }}
