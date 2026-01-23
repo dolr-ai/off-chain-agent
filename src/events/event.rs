@@ -337,9 +337,9 @@ impl Event {
                             }
                             Err(_) => {
                                 let payload = match percentage_watched.cmp(&95) {
-                                    Ordering::Less => UserPostViewDetails::WatchedPartially {
-                                        percentage_watched,
-                                    },
+                                    Ordering::Less => {
+                                        UserPostViewDetails::WatchedPartially { percentage_watched }
+                                    }
                                     _ => UserPostViewDetails::WatchedMultipleTimes {
                                         percentage_watched,
                                         watch_count,
