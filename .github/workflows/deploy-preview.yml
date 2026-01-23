@@ -97,6 +97,7 @@ jobs:
           flyctl secrets set SENTRY_CLIENT_SECRET_1="$SENTRY_CLIENT_SECRET_1" --app "$APP_NAME" --stage
           flyctl secrets set SENTRY_CLIENT_SECRET_2="$SENTRY_CLIENT_SECRET_2" --app "$APP_NAME" --stage
           flyctl secrets set GCHAT_SENTRY_WEBHOOK_URL="$GCHAT_SENTRY_WEBHOOK_URL" --app "$APP_NAME" --stage
+          flyctl secrets set GOOGLE_CHAT_REPORT_SPACE_URL="$GOOGLE_CHAT_REPORT_SPACE_URL" --app "$APP_NAME" --stage
           flyctl secrets set KVROCKS_PASSWORD="$KVROCKS_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set KVROCKS_HOSTS="$KVROCKS_HOSTS" --app "$APP_NAME" --stage
           printf '%s' "$KVROCKS_CA_CERT" | flyctl secrets set KVROCKS_CA_CERT=- --app "$APP_NAME" --stage
@@ -162,6 +163,7 @@ jobs:
           SENTRY_CLIENT_SECRET_1: ${{ secrets.SENTRY_CLIENT_SECRET_1 }}
           SENTRY_CLIENT_SECRET_2: ${{ secrets.SENTRY_CLIENT_SECRET_2 }}
           GCHAT_SENTRY_WEBHOOK_URL: ${{ secrets.GCHAT_SENTRY_WEBHOOK_URL }}
+          GOOGLE_CHAT_REPORT_SPACE_URL: ${{ secrets.GOOGLE_CHAT_REPORT_SPACE_URL }}
           KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
           KVROCKS_HOSTS: ${{ vars.KVROCKS_HOSTS }}
           KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
