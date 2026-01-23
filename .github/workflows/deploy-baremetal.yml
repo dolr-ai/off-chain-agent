@@ -282,7 +282,7 @@ jobs:
             GCHAT_SENTRY_WEBHOOK_URL='${{ secrets.GCHAT_SENTRY_WEBHOOK_URL }}' \
             SENTRY_CLIENT_SECRET_1='${{ secrets.SENTRY_CLIENT_SECRET_1 }}' \
             SENTRY_CLIENT_SECRET_2='${{ secrets.SENTRY_CLIENT_SECRET_2 }}' \
-            GOOGLE_CHAT_REPORT_SPACE_URL='${{ secrets.GOOGLE_CHAT_REPORT_SPACE_URL }}' \
+            YRAL_MOBILE_SERVICE_ACCOUNT_KEY='${{ secrets.YRAL_MOBILE_SERVICE_ACCOUNT_KEY }}' \
             docker compose up -d
 
             echo 'Waiting for services to start...'

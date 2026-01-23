@@ -65,6 +65,9 @@ pub struct AppState {
     pub yral_metadata_client: MetadataClient<true>,
     #[cfg(not(feature = "local-bin"))]
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
+    /// Google Chat App authenticator (for sending messages with interactive buttons)
+    #[cfg(not(feature = "local-bin"))]
+    pub gchat_auth: Authenticator<HttpsConnector<HttpConnector>>,
     pub qstash: QStashState,
     #[cfg(not(feature = "local-bin"))]
     pub bigquery_client: Client,
@@ -137,6 +140,8 @@ impl AppState {
             agent,
             #[cfg(not(feature = "local-bin"))]
             auth: init_auth().await,
+            #[cfg(not(feature = "local-bin"))]
+            gchat_auth: init_gchat_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
             qstash: init_qstash(),
             #[cfg(not(feature = "local-bin"))]
@@ -192,6 +197,28 @@ impl AppState {
             match token.token() {
                 Some(t) => t.to_string(),
                 _ => panic!("No access token found"),
+            }
+        }
+    }
+
+    /// Get access token for Google Chat API using the yral-mobile service account
+    pub async fn get_gchat_access_token(&self) -> String {
+        #[cfg(feature = "local-bin")]
+        {
+            "localtoken".into()
+        }
+
+        #[cfg(not(feature = "local-bin"))]
+        {
+            let auth = &self.gchat_auth;
+            let token = auth
+                .token(&["https://www.googleapis.com/auth/chat.bot"])
+                .await
+                .expect("Failed to get Google Chat access token");
+
+            match token.token() {
+                Some(t) => t.to_string(),
+                _ => panic!("No Google Chat access token found"),
             }
         }
     }
@@ -323,6 +350,21 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
         .build()
         .await
         .unwrap()
+}
+
+/// Initialize Google Chat App authenticator using YRAL_MOBILE_SERVICE_ACCOUNT_KEY
+/// This is needed to send messages as the Chat App (so interactive buttons work)
+pub async fn init_gchat_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
+    let sa_key_file = env::var("YRAL_MOBILE_SERVICE_ACCOUNT_KEY")
+        .expect("YRAL_MOBILE_SERVICE_ACCOUNT_KEY is required");
+
+    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file)
+        .expect("Invalid YRAL_MOBILE_SERVICE_ACCOUNT_KEY");
+
+    ServiceAccountAuthenticator::builder(sa_key)
+        .build()
+        .await
+        .expect("Failed to build Google Chat authenticator")
 }
 
 pub fn init_qstash() -> QStashState {
