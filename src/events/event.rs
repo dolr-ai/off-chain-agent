@@ -335,8 +335,26 @@ impl Event {
                                     }
                                 }
                             }
-                            Err(e) => {
-                                error!("Failed to get publisher canister for user {publisher_user_id}: {e:?}");
+                            Err(_) => {
+                                let payload = match percentage_watched.cmp(&95) {
+                                    Ordering::Less => UserPostViewDetails::WatchedPartially {
+                                        percentage_watched,
+                                    },
+                                    _ => UserPostViewDetails::WatchedMultipleTimes {
+                                        percentage_watched,
+                                        watch_count,
+                                    },
+                                };
+
+                                let user_post_service = UserPostService(
+                                    *USER_POST_SERVICE_CANISTER_ID,
+                                    &app_state.agent,
+                                );
+
+                                let _ = user_post_service
+                                    .update_post_add_view_details(post_id.clone(), payload)
+                                    .await
+                                    .map_err(|e| error!("Failed to update view details for post {post_id} in UserPostService canister (fallback): {e:?}"));
                             }
                         }
                     });
