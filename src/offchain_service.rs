@@ -271,7 +271,7 @@ pub async fn report_approved_handler(
     let confirmation_msg = json!({
         "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
     });
-    send_message_gchat(&state, GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+    send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
     let params = json!({
         "video_id": video_uid,
         "publisher_user_id": creator_principal,

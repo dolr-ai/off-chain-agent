@@ -266,7 +266,7 @@ pub async fn repost_post_common_impl(
         ]
     });
 
-    let res = send_message_gchat(&state, GOOGLE_CHAT_REPORT_SPACE_URL, data).await;
+    let res = send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, data).await;
     if res.is_err() {
         log::error!("Error sending data to Google Chat: {res:?}");
     }
