@@ -83,7 +83,11 @@ impl OffChain for OffChainService {
 
 /// Send a message to Google Chat as the Chat App (with OAuth authentication)
 /// This allows interactive buttons (like "Ban Post") to work
-pub async fn send_message_gchat(app_state: &AppState, request_url: &str, data: Value) -> Result<()> {
+pub async fn send_message_gchat(
+    app_state: &AppState,
+    request_url: &str,
+    data: Value,
+) -> Result<()> {
     let client = Client::new();
 
     let token = app_state.get_gchat_access_token().await;

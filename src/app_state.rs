@@ -355,8 +355,8 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
 /// Initialize Google Chat App authenticator using YRAL_MOBILE_SERVICE_ACCOUNT_KEY
 /// This is needed to send messages as the Chat App (so interactive buttons work)
 pub async fn init_gchat_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
-    let sa_key_file =
-        env::var("YRAL_MOBILE_SERVICE_ACCOUNT_KEY").expect("YRAL_MOBILE_SERVICE_ACCOUNT_KEY is required");
+    let sa_key_file = env::var("YRAL_MOBILE_SERVICE_ACCOUNT_KEY")
+        .expect("YRAL_MOBILE_SERVICE_ACCOUNT_KEY is required");
 
     let sa_key = yup_oauth2::parse_service_account_key(sa_key_file)
         .expect("Invalid YRAL_MOBILE_SERVICE_ACCOUNT_KEY");
