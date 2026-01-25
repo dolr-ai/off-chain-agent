@@ -396,8 +396,7 @@ pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
     let tls_config = ClientTlsConfig::new().with_webpki_roots();
     let channel = Channel::from_static(NSFW_SERVER_URL)
-        .tls_config(tls_config)
-        .expect("Couldn't update TLS config for nsfw agent")
+        .tls_config(tls_config)?
         .connect()
         .await?;
 
