@@ -399,8 +399,7 @@ pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
         .tls_config(tls_config)
         .expect("Couldn't update TLS config for nsfw agent")
         .connect()
-        .await
-        .expect("Couldn't connect to nsfw agent");
+        .await?;
 
     let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
     let token: MetadataValue<_> = format!("Bearer {nsfw_grpc_auth_token}").parse()?;
