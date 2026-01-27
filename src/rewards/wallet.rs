@@ -1,20 +1,9 @@
+use crate::rewards::config::RewardTokenType;
 use anyhow::Result;
 use candid::Principal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use yral_canisters_common::utils::token::{CkBtcOperations, TokenOperations};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BtcTransaction {
-    pub creator_id: Principal,
-    pub video_id: String,
-    pub milestone: u64,
-    pub amount_btc: f64,
-    pub amount_inr: f64,
-    pub timestamp: i64,
-    pub tx_id: Option<String>,
-    pub status: TransactionStatus,
-}
+use yral_canisters_common::utils::token::{CkBtcOperations, DolrOperations, TokenOperations};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TransactionStatus {
@@ -26,37 +15,46 @@ pub enum TransactionStatus {
 
 #[derive(Clone)]
 pub struct WalletIntegration {
-    ckbtc_ops: CkBtcOperations,
+    dolr_ops: DolrOperations,
+    btc_ops: CkBtcOperations,
 }
 
-const MAX_AMOUNT_SATS_BTC_VIEWS: u64 = 4000;
+const MAX_AMOUNT_E8S_VIEWS: u64 = 10_000_000_000; // 10 tokens max
 
 impl WalletIntegration {
     pub fn new(admin_agent: ic_agent::Agent) -> Self {
         Self {
-            ckbtc_ops: CkBtcOperations::new(admin_agent),
+            dolr_ops: DolrOperations::new(admin_agent.clone()),
+            btc_ops: CkBtcOperations::new(admin_agent),
         }
     }
 
-    /// Queue a BTC reward transaction for processing
-    pub async fn queue_btc_reward(
+    /// Queue a reward transaction for processing (supports both BTC and DOLR)
+    pub async fn queue_reward(
         &self,
         creator_id: Principal,
-        amount_btc: f64,
+        token_amount: f64,
         amount_inr: f64,
         video_id: &str,
         milestone: u64,
+        token_type: RewardTokenType,
     ) -> Result<String> {
-        // Convert BTC to satoshis (1 BTC = 100,000,000 sats)
-        let amount_sats = (amount_btc * 100_000_000.0) as u64;
+        // Convert to e8s (1 token = 100,000,000 e8s)
+        let amount_e8s = (token_amount * 100_000_000.0) as u64;
 
-        if amount_sats > MAX_AMOUNT_SATS_BTC_VIEWS {
+        if amount_e8s > MAX_AMOUNT_E8S_VIEWS {
             return Err(anyhow::anyhow!("Amount exceeds maximum allowed"));
         }
+
+        let (token_name, memo_tag) = match token_type {
+            RewardTokenType::Btc => ("BTC", "BTC_VIEWS"),
+            RewardTokenType::Dolr => ("DOLR", "DOLR_VIEWS"),
+        };
 
         // Create transaction memo as JSON string
         let _memo_json = json!({
             "type": "video_view_reward",
+            "token": token_name,
             "video_id": video_id,
             "milestone": milestone,
             "amount_inr": amount_inr,
@@ -64,31 +62,51 @@ impl WalletIntegration {
         });
 
         // Convert memo to bytes for the transaction
-        let memo_bytes = "BTC_VIEWS".to_string().into_bytes();
+        let memo_bytes = memo_tag.to_string().into_bytes();
 
         log::info!(
-            "Transferring {} sats ({} BTC, ₹{}) to creator {} for video {} milestone {}",
-            amount_sats,
-            amount_btc,
+            "Transferring {} e8s ({} {}, ₹{}) to creator {} for video {} milestone {}",
+            amount_e8s,
+            token_amount,
+            token_name,
             amount_inr,
             creator_id,
             video_id,
             milestone
         );
 
-        // Transfer ckBTC using add_balance_with_memo (which transfers from admin to user)
-        match self
-            .ckbtc_ops
-            .add_balance_with_memo(creator_id, amount_sats, Some(memo_bytes))
-            .await
-        {
+        // Transfer using appropriate token operations
+        let transfer_result = match token_type {
+            RewardTokenType::Btc => {
+                self.btc_ops
+                    .add_balance_with_memo(creator_id, amount_e8s, Some(memo_bytes))
+                    .await
+            }
+            RewardTokenType::Dolr => {
+                self.dolr_ops
+                    .add_balance_with_memo(creator_id, amount_e8s, Some(memo_bytes))
+                    .await
+            }
+        };
+
+        match transfer_result {
             Ok(_) => {
                 // Generate transaction ID based on current timestamp
-                let tx_id = format!("ckbtc_tx_{}_{}", creator_id, chrono::Utc::now().timestamp());
+                let tx_prefix = match token_type {
+                    RewardTokenType::Btc => "btc_tx",
+                    RewardTokenType::Dolr => "dolr_tx",
+                };
+                let tx_id = format!(
+                    "{}_{}_{}",
+                    tx_prefix,
+                    creator_id,
+                    chrono::Utc::now().timestamp()
+                );
 
                 log::info!(
-                    "Successfully transferred {} sats to creator {} (tx_id: {})",
-                    amount_sats,
+                    "Successfully transferred {} e8s {} to creator {} (tx_id: {})",
+                    amount_e8s,
+                    token_name,
                     creator_id,
                     tx_id
                 );
@@ -97,12 +115,13 @@ impl WalletIntegration {
             }
             Err(e) => {
                 log::error!(
-                    "Failed to transfer {} sats to creator {}: {}",
-                    amount_sats,
+                    "Failed to transfer {} e8s {} to creator {}: {}",
+                    amount_e8s,
+                    token_name,
                     creator_id,
                     e
                 );
-                Err(anyhow::anyhow!("ckBTC transfer failed: {}", e))
+                Err(anyhow::anyhow!("Token transfer failed: {}", e))
             }
         }
     }

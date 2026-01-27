@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 const CACHE_DURATION_SECS: i64 = 300; // 5 minutes
 const BLOCKCHAIN_API_URL: &str = "https://blockchain.info/ticker";
 const DEFAULT_BTC_INR_RATE: f64 = 5000000.0; // Fallback rate: 1 BTC = 50 lakh INR
+const DEFAULT_DOLR_INR_RATE: f64 = 1.0; // 1 DOLR = 1 INR
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CurrencyInfo {
@@ -52,11 +53,30 @@ impl BtcConverter {
         Self { client }
     }
 
-    /// Convert INR amount to BTC
+    /// Convert INR amount to BTC using live exchange rate
     pub async fn convert_inr_to_btc(&self, inr_amount: f64) -> Result<f64> {
         let rate = self.get_btc_inr_rate().await?;
         let btc_amount = inr_amount / rate;
         Ok(btc_amount)
+    }
+
+    /// Convert INR amount to DOLR using hardcoded rate
+    /// 1 DOLR ≈ 1 USD ≈ 84 INR
+    pub fn convert_inr_to_dolr(&self, inr_amount: f64, dolr_inr_rate: Option<f64>) -> f64 {
+        let rate = dolr_inr_rate.unwrap_or(DEFAULT_DOLR_INR_RATE);
+        let dolr_amount = inr_amount / rate;
+        log::debug!(
+            "Converting ₹{} INR to {} DOLR (rate: {} INR/DOLR)",
+            inr_amount,
+            dolr_amount,
+            rate
+        );
+        dolr_amount
+    }
+
+    /// Get default DOLR/INR rate
+    pub fn get_dolr_inr_rate(&self) -> f64 {
+        DEFAULT_DOLR_INR_RATE
     }
 
     /// Get current BTC/INR exchange rate

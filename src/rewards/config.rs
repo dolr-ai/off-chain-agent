@@ -5,7 +5,16 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RewardTokenType {
+    #[default]
+    Btc,
+    Dolr,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
 pub struct RewardConfig {
     pub reward_amount_inr: f64,
     pub view_milestone: u64,
@@ -13,6 +22,10 @@ pub struct RewardConfig {
     pub fraud_threshold: usize,
     pub shadow_ban_duration: u64,
     pub config_version: u64,
+    /// Token type for rewards: "btc" (default) or "dolr"
+    pub reward_token: RewardTokenType,
+    /// Custom DOLR/INR exchange rate (optional, defaults to 1.0)
+    pub dolr_inr_rate: Option<f64>,
 }
 
 impl Default for RewardConfig {
@@ -24,6 +37,8 @@ impl Default for RewardConfig {
             fraud_threshold: 5,
             shadow_ban_duration: 3600,
             config_version: 1,
+            reward_token: RewardTokenType::default(),
+            dolr_inr_rate: None,
         }
     }
 }
