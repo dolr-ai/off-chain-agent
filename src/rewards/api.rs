@@ -1,7 +1,7 @@
 use crate::{
     app_state::AppState,
     rewards::{
-        config::RewardConfig,
+        config::{RewardConfig, RewardTokenType},
         history::{HistoryTracker, RewardRecord, ViewRecord},
     },
 };
@@ -158,6 +158,32 @@ pub struct VideoStatsV2 {
 
 pub type BulkVideoStatsResponseV2 = Vec<VideoStatsV2>;
 
+/// Request body for testing reward calculation
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct TestRewardRequest {
+    /// The config to use for calculation (not from Redis)
+    pub config: RewardConfig,
+    /// Number of views to simulate
+    pub views: u64,
+}
+
+/// Response for test reward calculation
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TestRewardResponse {
+    /// Number of milestones reached
+    pub milestones_reached: u64,
+    /// Total INR amount
+    pub total_inr: f64,
+    /// Token amount per milestone
+    pub tokens_per_milestone: f64,
+    /// Total tokens rewarded
+    pub total_tokens: f64,
+    /// Total in e8s
+    pub total_e8s: u64,
+    /// Token type used
+    pub token_type: String,
+}
+
 #[cfg(not(feature = "local-bin"))]
 pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
     OpenApiRouter::new()
@@ -169,6 +195,7 @@ pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
         .routes(routes!(get_reward_config_v2))
         .routes(routes!(bulk_get_video_stats))
         .routes(routes!(bulk_get_video_stats_v2))
+        .routes(routes!(test_reward_calculation))
         .with_state(state)
 }
 
@@ -499,4 +526,71 @@ async fn bulk_get_video_stats_v2(
         .collect();
 
     Ok(Json(response))
+}
+
+/// Test endpoint to calculate rewards with arbitrary config (no auth, no Redis lookup)
+#[cfg(not(feature = "local-bin"))]
+#[utoipa::path(
+    post,
+    path = "/test/calculate",
+    request_body = TestRewardRequest,
+    tag = "rewards",
+    responses(
+        (status = 200, description = "Reward calculation result", body = TestRewardResponse),
+    )
+)]
+async fn test_reward_calculation(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<TestRewardRequest>,
+) -> Result<Json<TestRewardResponse>, (StatusCode, String)> {
+    let config = request.config;
+    let views = request.views;
+
+    // Calculate milestones reached
+    let milestones_reached = views / config.view_milestone;
+
+    if milestones_reached == 0 {
+        return Ok(Json(TestRewardResponse {
+            milestones_reached: 0,
+            total_inr: 0.0,
+            tokens_per_milestone: 0.0,
+            total_tokens: 0.0,
+            total_e8s: 0,
+            token_type: format!("{:?}", config.reward_token),
+        }));
+    }
+
+    // Total INR per milestone
+    let inr_per_milestone = config.reward_amount_inr * config.view_milestone as f64;
+    let total_inr = inr_per_milestone * milestones_reached as f64;
+
+    // Convert to tokens based on token type
+    let tokens_per_milestone = match config.reward_token {
+        RewardTokenType::Btc => {
+            // Use live BTC rate
+            state
+                .rewards_module
+                .btc_converter
+                .convert_inr_to_btc(inr_per_milestone)
+                .await
+                .unwrap_or(0.0)
+        }
+        RewardTokenType::Dolr => {
+            // Use hardcoded DOLR rate (1 DOLR = 1 INR, or custom rate)
+            let rate = config.dolr_inr_rate.unwrap_or(1.0);
+            inr_per_milestone / rate
+        }
+    };
+
+    let total_tokens = tokens_per_milestone * milestones_reached as f64;
+    let total_e8s = (total_tokens * 100_000_000.0) as u64;
+
+    Ok(Json(TestRewardResponse {
+        milestones_reached,
+        total_inr,
+        tokens_per_milestone,
+        total_tokens,
+        total_e8s,
+        token_type: format!("{:?}", config.reward_token),
+    }))
 }
