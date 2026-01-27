@@ -125,7 +125,9 @@ pub struct VideoWatchedV3 {
     pub video_category: String,
     pub creator_category: String,
     pub hashtag_count: u32,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     pub feed_type: String,
     pub view_count: u32,
@@ -294,7 +296,9 @@ pub struct LikeVideoPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     #[serde(rename = "feed_type")]
     pub feed_type: String,
@@ -325,7 +329,9 @@ pub struct LikeVideoPayloadV2 {
     pub video_category: String,
     pub creator_category: String,
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     pub feed_type: String,
     pub view_count: u64,
@@ -356,7 +362,9 @@ pub struct ShareVideoPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     #[serde(rename = "feed_type")]
     pub feed_type: String,
@@ -398,7 +406,9 @@ pub struct VideoUploadUploadButtonClickedPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
 }
 
@@ -426,7 +436,9 @@ pub struct VideoUploadUnsuccessfulPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     #[serde(rename = "fail_reason")]
     pub fail_reason: String,
@@ -446,7 +458,9 @@ pub struct VideoUploadSuccessfulPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     #[serde(rename = "is_filter_used")]
     pub is_filter_used: bool,
