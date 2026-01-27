@@ -93,6 +93,10 @@ jobs:
           flyctl secrets set "ANALYTICS_SERVER_TOKEN=$ANALYTICS_SERVER_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set "MILVUS_URL=$MILVUS_URL" --app "$APP_NAME" --stage
           flyctl secrets set REPLICATE_WEBHOOK_SIGNING_SECRET="$REPLICATE_WEBHOOK_SIGNING_SECRET" --app "$APP_NAME" --stage
+          flyctl secrets set SENTRY_CLIENT_SECRET_1="$SENTRY_CLIENT_SECRET_1" --app "$APP_NAME" --stage
+          flyctl secrets set SENTRY_CLIENT_SECRET_2="$SENTRY_CLIENT_SECRET_2" --app "$APP_NAME" --stage
+          flyctl secrets set GCHAT_SENTRY_WEBHOOK_URL="$GCHAT_SENTRY_WEBHOOK_URL" --app "$APP_NAME" --stage
+          flyctl secrets set GOOGLE_CHAT_REPORT_SPACE_URL="$GOOGLE_CHAT_REPORT_SPACE_URL" --app "$APP_NAME" --stage
           flyctl secrets set KVROCKS_PASSWORD="$KVROCKS_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set KVROCKS_HOSTS="$KVROCKS_HOSTS" --app "$APP_NAME" --stage
           printf '%s' "$KVROCKS_CA_CERT" | flyctl secrets set KVROCKS_CA_CERT=- --app "$APP_NAME" --stage
@@ -111,6 +115,7 @@ jobs:
           printf '%s' "$DRAGONFLY_2_CA_CERT" | flyctl secrets set DRAGONFLY_2_CA_CERT=- --app "$APP_NAME" --stage
           printf '%s' "$DRAGONFLY_2_CLIENT_CERT" | flyctl secrets set DRAGONFLY_2_CLIENT_CERT=- --app "$APP_NAME" --stage
           printf '%s' "$DRAGONFLY_2_CLIENT_KEY" | flyctl secrets set DRAGONFLY_2_CLIENT_KEY=- --app "$APP_NAME" --stage
+          flyctl secrets set "YRAL_MOBILE_SERVICE_ACCOUNT_KEY=$YRAL_MOBILE_SERVICE_ACCOUNT_KEY" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -154,6 +159,10 @@ jobs:
           ANALYTICS_SERVER_TOKEN: ${{ secrets.ANALYTICS_SERVER_TOKEN }}
           MILVUS_URL: ${{ secrets.MILVUS_URL }}
           REPLICATE_WEBHOOK_SIGNING_SECRET: ${{ secrets.REPLICATE_WEBHOOK_SIGNING_SECRET }}
+          SENTRY_CLIENT_SECRET_1: ${{ secrets.SENTRY_CLIENT_SECRET_1 }}
+          SENTRY_CLIENT_SECRET_2: ${{ secrets.SENTRY_CLIENT_SECRET_2 }}
+          GCHAT_SENTRY_WEBHOOK_URL: ${{ secrets.GCHAT_SENTRY_WEBHOOK_URL }}
+          GOOGLE_CHAT_REPORT_SPACE_URL: ${{ secrets.GOOGLE_CHAT_REPORT_SPACE_URL }}
           KVROCKS_PASSWORD: ${{ secrets.KVROCKS_PASSWORD }}
           KVROCKS_HOSTS: ${{ vars.KVROCKS_HOSTS }}
           KVROCKS_CA_CERT: ${{ secrets.KVROCKS_CA_CERT }}
@@ -172,3 +181,4 @@ jobs:
           DRAGONFLY_2_CA_CERT: ${{ secrets.DRAGONFLY_2_CA_CERT }}
           DRAGONFLY_2_CLIENT_CERT: ${{ secrets.DRAGONFLY_2_CLIENT_CERT }}
           DRAGONFLY_2_CLIENT_KEY: ${{ secrets.DRAGONFLY_2_CLIENT_KEY }}
+          YRAL_MOBILE_SERVICE_ACCOUNT_KEY: ${{ secrets.YRAL_MOBILE_SERVICE_ACCOUNT_KEY }}

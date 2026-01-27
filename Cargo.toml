@@ -68,7 +68,6 @@ image = "0.25"
 rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
 storj-interface = { git = "https://github.com/yral-dapp/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
-# yral-metrics = { path = "../yral-common/metrics" }
 yral-metadata-types = { git = "https://github.com/yral-dapp/yral-metadata", branch = "master", version = "0.1.0" }
 sentry = { version = "0.37.0", default-features = false, features = [
     "rustls",
@@ -141,7 +140,6 @@ yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", branch =
 # ] }
 # yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
 # yral-qstash-types = { path = "../yral-common/qstash-types" }
-# yral-metrics = { path = "../yral-common/metrics" }
 # videogen-common = { path = "../yral-common/videogen-common", features = [
 #     "ic",
 #     "server",

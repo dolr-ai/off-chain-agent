@@ -81,7 +81,45 @@ impl OffChain for OffChainService {
     }
 }
 
-pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
+/// Send a message to Google Chat as the Chat App (with OAuth authentication)
+/// This allows interactive buttons (like "Ban Post") to work
+pub async fn send_message_gchat(
+    app_state: &AppState,
+    request_url: &str,
+    data: Value,
+) -> Result<()> {
+    let client = Client::new();
+
+    let token = app_state.get_gchat_access_token().await;
+
+    let response = client
+        .post(request_url)
+        .header("Content-Type", "application/json")
+        .bearer_auth(token)
+        .json(&data)
+        .send()
+        .await
+        .context("Failed to send request to Google Chat")?;
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        log::error!("Google Chat API error: status={}, body={}", status, body);
+        return Err(anyhow::anyhow!(
+            "Google Chat API error: status={}, body={}",
+            status,
+            body
+        ));
+    }
+
+    log::debug!("Google Chat response: {}", body);
+    Ok(())
+}
+
+/// Send a message to Google Chat via webhook (no OAuth, but interactive buttons won't work)
+/// Use this for simple notifications like Sentry alerts
+pub async fn send_message_gchat_webhook(request_url: &str, data: Value) -> Result<()> {
     let client = Client::new();
 
     let response = client
@@ -233,7 +271,7 @@ pub async fn report_approved_handler(
     let confirmation_msg = json!({
         "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
     });
-    send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+    send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
     let params = json!({
         "video_id": video_uid,
         "publisher_user_id": creator_principal,

@@ -27,8 +27,9 @@ pub static YRAL_METADATA_URL: Lazy<Url> =
 #[allow(dead_code)]
 pub const RECYCLE_THRESHOLD_SECS: u64 = 15 * 24 * 60 * 60; // 15 days
 
-pub const GOOGLE_CHAT_REPORT_SPACE_URL: &str =
-    "https://chat.googleapis.com/v1/spaces/AAAA1yDLYO4/messages";
+pub static GOOGLE_CHAT_REPORT_SPACE_URL: Lazy<String> = Lazy::new(|| {
+    std::env::var("GOOGLE_CHAT_REPORT_SPACE_URL").expect("GOOGLE_CHAT_REPORT_SPACE_URL must be set")
+});
 
 #[allow(dead_code)]
 pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";

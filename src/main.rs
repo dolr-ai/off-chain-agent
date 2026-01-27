@@ -43,7 +43,6 @@ mod error;
 mod events;
 pub mod kvrocks;
 pub mod leaderboard;
-pub mod metrics;
 mod middleware;
 #[cfg(not(feature = "local-bin"))]
 mod milvus;
