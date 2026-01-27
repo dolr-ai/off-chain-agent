@@ -147,7 +147,7 @@ pub struct VideoDurationWatchedPayload {
     pub publisher_user_id: Option<Principal>,
     #[serde(rename = "user_id")]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_logged_in: Option<bool>,
     #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -161,10 +161,10 @@ pub struct VideoDurationWatchedPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count", skip_serializing_if = "Option::is_none")]
     pub hashtag_count: Option<usize>,
-    #[serde(rename = "is_NSFW", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_nsfw: Option<bool>,
-    #[serde(rename = "is_hotorNot", skip_serializing_if = "Option::is_none")]
-    pub is_hotor_not: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_hot_or_not: Option<bool>,
     #[serde(rename = "feed_type")]
     pub feed_type: String,
     #[serde(rename = "view_count", skip_serializing_if = "Option::is_none")]
@@ -196,7 +196,7 @@ pub struct VideoDurationWatchedPayloadV2 {
     pub publisher_user_id: Option<Principal>,
     #[schema(value_type = String)]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_logged_in: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -206,10 +206,10 @@ pub struct VideoDurationWatchedPayloadV2 {
     pub creator_category: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hashtag_count: Option<usize>,
-    #[serde(rename = "is_NSFW", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_nsfw: Option<bool>,
-    #[serde(rename = "is_hotorNot", skip_serializing_if = "Option::is_none")]
-    pub is_hotor_not: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_hot_or_not: Option<bool>,
     pub feed_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub view_count: Option<u64>,
@@ -235,7 +235,6 @@ pub struct VideoViewedPayload {
     pub publisher_user_id: Option<Principal>,
     #[serde(rename = "user_id")]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
     #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -249,10 +248,10 @@ pub struct VideoViewedPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count", skip_serializing_if = "Option::is_none")]
     pub hashtag_count: Option<usize>,
-    #[serde(rename = "is_NSFW", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_nsfw: Option<bool>,
-    #[serde(rename = "is_hotorNot", skip_serializing_if = "Option::is_none")]
-    pub is_hotor_not: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_hot_or_not: Option<bool>,
     #[serde(rename = "feed_type")]
     pub feed_type: String,
     #[serde(rename = "view_count", skip_serializing_if = "Option::is_none")]
@@ -282,7 +281,6 @@ pub struct LikeVideoPayload {
     pub publisher_user_id: Principal,
     #[serde(rename = "user_id")]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
     #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -296,10 +294,8 @@ pub struct LikeVideoPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
-    #[serde(rename = "is_NSFW")]
     pub is_nsfw: bool,
-    #[serde(rename = "is_hotorNot")]
-    pub is_hotor_not: bool,
+    pub is_hot_or_not: bool,
     #[serde(rename = "feed_type")]
     pub feed_type: String,
     #[serde(rename = "view_count")]
@@ -322,7 +318,6 @@ pub struct LikeVideoPayloadV2 {
     pub publisher_user_id: Principal,
     #[schema(value_type = String)]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -330,10 +325,8 @@ pub struct LikeVideoPayloadV2 {
     pub video_category: String,
     pub creator_category: String,
     pub hashtag_count: usize,
-    #[serde(rename = "is_NSFW")]
     pub is_nsfw: bool,
-    #[serde(rename = "is_hotorNot")]
-    pub is_hotor_not: bool,
+    pub is_hot_or_not: bool,
     pub feed_type: String,
     pub view_count: u64,
     pub like_count: u64,
@@ -350,7 +343,6 @@ pub struct ShareVideoPayload {
     pub publisher_user_id: Principal,
     #[serde(rename = "user_id")]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
     #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -364,10 +356,8 @@ pub struct ShareVideoPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
-    #[serde(rename = "is_NSFW")]
     pub is_nsfw: bool,
-    #[serde(rename = "is_hotorNot")]
-    pub is_hotor_not: bool,
+    pub is_hot_or_not: bool,
     #[serde(rename = "feed_type")]
     pub feed_type: String,
     #[serde(rename = "view_count")]
@@ -408,10 +398,8 @@ pub struct VideoUploadUploadButtonClickedPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
-    #[serde(rename = "is_NSFW")]
     pub is_nsfw: bool,
-    #[serde(rename = "is_hotorNot")]
-    pub is_hotor_not: bool,
+    pub is_hot_or_not: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -438,10 +426,8 @@ pub struct VideoUploadUnsuccessfulPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
-    #[serde(rename = "is_NSFW")]
     pub is_nsfw: bool,
-    #[serde(rename = "is_hotorNot")]
-    pub is_hotor_not: bool,
+    pub is_hot_or_not: bool,
     #[serde(rename = "fail_reason")]
     pub fail_reason: String,
 }
@@ -460,10 +446,8 @@ pub struct VideoUploadSuccessfulPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
-    #[serde(rename = "is_NSFW")]
     pub is_nsfw: bool,
-    #[serde(rename = "is_hotorNot")]
-    pub is_hotor_not: bool,
+    pub is_hot_or_not: bool,
     #[serde(rename = "is_filter_used")]
     pub is_filter_used: bool,
     #[serde(rename = "video_id")]
@@ -484,7 +468,6 @@ pub struct VideoUploadSuccessfulPayload {
 pub struct ReferPayload {
     #[serde(rename = "user_id")]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
     #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -576,7 +559,6 @@ pub struct ProfileViewVideoPayload {
     pub publisher_user_id: Principal,
     #[serde(rename = "user_id")]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
     #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -618,7 +600,6 @@ pub struct TokensTransferredPayload {
 pub struct PageVisitPayload {
     #[serde(rename = "user_id")]
     pub user_id: Principal,
-    #[serde(rename = "is_loggedIn")]
     pub is_logged_in: bool,
     #[serde(rename = "pathname")]
     pub pathname: String,
@@ -828,7 +809,7 @@ where
         modified_payload.creator_category,
         modified_payload.hashtag_count,
         modified_payload.is_nsfw,
-        modified_payload.is_hotor_not,
+        modified_payload.is_hot_or_not,
         modified_payload.is_filter_used
     );
 
@@ -857,10 +838,8 @@ where
         creator_category: String,
         #[serde(rename = "hashtag_count")]
         hashtag_count: usize,
-        #[serde(rename = "is_NSFW")]
         is_nsfw: bool,
-        #[serde(rename = "is_hotorNot")]
-        is_hotor_not: bool,
+        is_hot_or_not: bool,
         #[serde(rename = "is_filter_used")]
         is_filter_used: bool,
         #[serde(rename = "video_id")]
@@ -880,7 +859,7 @@ where
         creator_category: modified_payload.creator_category,
         hashtag_count: modified_payload.hashtag_count,
         is_nsfw: modified_payload.is_nsfw,
-        is_hotor_not: modified_payload.is_hotor_not,
+        is_hot_or_not: modified_payload.is_hot_or_not,
         is_filter_used: modified_payload.is_filter_used,
         video_id: modified_payload.video_id,
         post_id: modified_payload.post_id,
@@ -1460,7 +1439,7 @@ fn test_data_payload_serialization() {
         creator_category: "test".to_string(),
         hashtag_count: 0,
         is_nsfw: false,
-        is_hotor_not: false,
+        is_hot_or_not: false,
         is_filter_used: false,
         video_id: "test".to_string(),
         country: None,
