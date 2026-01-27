@@ -202,6 +202,135 @@ pub async fn qstash_report_post(
     Ok((StatusCode::OK, "Report post success".to_string()))
 }
 
+/// Test endpoint for Google Chat report functionality
+/// Returns detailed diagnostic information including errors
+#[utoipa::path(
+    get,
+    path = "/test-gchat-report",
+    tag = "posts",
+    params(
+        ("video_id" = Option<String>, Query, description = "Optional video ID to test with (defaults to test-video-123)")
+    ),
+    responses(
+        (status = 200, description = "Test results with diagnostics"),
+        (status = 500, description = "Test failed with error details"),
+    )
+)]
+pub async fn test_gchat_report(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Use test data
+    let test_canister_id = "4c4fd-caaaa-aaaaq-aaa3a-cai";
+    let test_post_id = "123";
+    let test_video_id = "test-video-456";
+    let test_publisher = "aaaaa-aa";
+    let test_reporter = "bbbbb-bb";
+
+    let video_url = format!(
+        "https://yral.com/hot-or-not/{}/{}",
+        test_canister_id, test_post_id
+    );
+
+    let text_str = format!(
+        "reporter_id: {} \n publisher_id: {} \n publisher_canister_id: {} \n post_id: {} \n video_id: {} \n reason: {} \n video_url: {} \n report_mode: {}",
+        test_reporter, test_publisher, test_canister_id, test_post_id, test_video_id, "TEST REPORT", video_url, "Web"
+    );
+
+    let data = json!({
+        "cardsV2": [
+        {
+            "cardId": "unique-card-id-test",
+            "card": {
+                "sections": [
+                {
+                    "header": "Report Post (TEST)",
+                    "widgets": [
+                    {
+                        "textParagraph": {
+                            "text": text_str
+                        }
+                    },
+                    {
+                        "buttonList": {
+                            "buttons": [
+                                {
+                                "text": "View video",
+                                "onClick": {
+                                    "openLink": {
+                                    "url": video_url
+                                    }
+                                }
+                                },
+                                {
+                                "text": "Ban Post",
+                                "onClick": {
+                                    "action": {
+                                    "function": "goToView",
+                                    "parameters": [
+                                        {
+                                        "key": "viewType",
+                                        "value": format!("{} {}", test_canister_id, test_post_id),
+                                        }
+                                    ]
+                                    }
+                                }
+                                }
+                            ]
+                        }
+                    }
+                    ]
+                }
+                ]
+            }
+        }
+        ]
+    });
+
+    // Check if URL is set
+    let gchat_url = GOOGLE_CHAT_REPORT_SPACE_URL.clone();
+    let url_status = if gchat_url.is_empty() {
+        "ERROR: GOOGLE_CHAT_REPORT_SPACE_URL is empty"
+    } else if !gchat_url.starts_with("http") {
+        "ERROR: GOOGLE_CHAT_REPORT_SPACE_URL does not start with http"
+    } else {
+        "OK"
+    };
+
+    // Try to send
+    let send_result = send_message_gchat(&state, &gchat_url, data.clone()).await;
+
+    // Build diagnostic response
+    let diagnostics = json!({
+        "test_info": {
+            "endpoint": "/test-gchat-report",
+            "description": "Test endpoint for Google Chat report webhook"
+        },
+        "environment": {
+            "gchat_url": gchat_url,
+            "url_status": url_status,
+            "url_length": gchat_url.len(),
+        },
+        "test_data": {
+            "canister_id": test_canister_id,
+            "post_id": test_post_id,
+            "video_id": test_video_id,
+            "video_url": video_url,
+        },
+        "request_payload": data,
+        "result": {
+            "success": send_result.is_ok(),
+            "error": send_result.as_ref().err().map(|e| format!("{:#?}", e)),
+            "error_display": send_result.as_ref().err().map(|e| e.to_string()),
+        }
+    });
+
+    if send_result.is_ok() {
+        Ok((StatusCode::OK, Json(diagnostics)))
+    } else {
+        Ok((StatusCode::INTERNAL_SERVER_ERROR, Json(diagnostics)))
+    }
+}
+
 pub async fn repost_post_common_impl(
     state: Arc<AppState>,
     payload: ReportPostRequestV3,

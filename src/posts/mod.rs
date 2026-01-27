@@ -14,10 +14,10 @@ use utoipa_axum::{
 };
 use verify::verify_post_request;
 
-use crate::posts::report_post::{__path_handle_report_post_v2, __path_handle_report_post_v3};
+use crate::posts::report_post::{__path_handle_report_post_v2, __path_handle_report_post_v3, __path_test_gchat_report};
 use crate::posts::{
     delete_post::{__path_handle_delete_post, __path_handle_delete_post_v2},
-    report_post::handle_report_post_v3,
+    report_post::{handle_report_post_v3, test_gchat_report},
 };
 use crate::{app_state::AppState, posts::report_post::ReportPostRequestV3};
 
@@ -58,6 +58,7 @@ pub fn posts_router_v2(state: Arc<AppState>) -> OpenApiRouter {
 
     router
         .routes(routes!(nsfw_query::get_nsfw_data))
+        .routes(routes!(test_gchat_report))
         .with_state(state)
 }
 
