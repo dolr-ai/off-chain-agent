@@ -3,7 +3,6 @@ use crate::consts::{ANALYTICS_SERVER_URL, NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
-use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
@@ -75,7 +74,6 @@ pub struct AppState {
     pub qstash_client: QStashClient,
     #[cfg(not(feature = "local-bin"))]
     pub gcs_client: Arc<cloud_storage::Client>,
-    pub metrics: CfMetricTx,
     #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     pub alloydb_client: AlloyDbInstance,
     #[cfg(not(feature = "local-bin"))]
@@ -150,7 +148,6 @@ impl AppState {
             qstash_client: init_qstash_client().await,
             #[cfg(not(feature = "local-bin"))]
             gcs_client: Arc::new(cloud_storage::Client::default()),
-            metrics: init_metrics(),
             #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
             alloydb_client: init_alloydb_client().await,
             #[cfg(not(feature = "local-bin"))]

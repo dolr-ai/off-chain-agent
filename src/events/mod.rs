@@ -235,26 +235,15 @@ async fn handle_bulk_events(
     State(state): State<Arc<AppState>>,
     Json(request): Json<VerifiedEventBulkRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let mut metric_events = Vec::new();
     for req_event in request.events {
         let event = Event::new(WarehouseEvent {
             event: req_event.tag(),
             params: req_event.params().to_string(),
         });
 
-        metric_events.push(req_event);
-
         if let Err(e) = process_event_impl(event, state.clone()).await {
             log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
-    }
-
-    if let Err(e) = state
-        .metrics
-        .push_list("metrics_list".into(), metric_events)
-        .await
-    {
-        log::error!("Failed to push metrics to vector: {e}");
     }
 
     Ok((StatusCode::OK, "Events processed".to_string()))
