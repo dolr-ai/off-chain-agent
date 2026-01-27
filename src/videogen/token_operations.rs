@@ -5,7 +5,8 @@ use std::str::FromStr;
 use videogen_common::{TokenType, VideoGenError, TOKEN_COST_CONFIG};
 use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequestKey};
 use yral_canisters_common::utils::token::{
-    DolrOperations, SatsOperations, TokenOperations, TokenOperationsProvider,
+    types::YralProSubscription as YralProSubscriptionOperation, DolrOperations, SatsOperations,
+    TokenOperations, TokenOperationsProvider,
 };
 
 /// Get the appropriate token operations based on token type
@@ -31,6 +32,26 @@ pub fn get_token_operations(
             };
 
             Ok(TokenOperationsProvider::Dolr(dolr_ops))
+        }
+        TokenType::YralProSubscription => {
+            let admin = admin_agent.ok_or_else(|| {
+                VideoGenError::InvalidInput(
+                    "Admin agent required for YralProSubscription operations".to_string(),
+                )
+            })?;
+
+            let user_principal = user_agent
+                .ok_or(VideoGenError::InvalidInput(
+                    "User principal required".to_owned(),
+                ))?
+                .get_principal()
+                .map_err(|e| VideoGenError::InvalidInput(format!("Invalid user principal {e}")))?;
+            Ok(TokenOperationsProvider::YralProSubscription(
+                YralProSubscriptionOperation {
+                    admin_agent: admin,
+                    user_principal,
+                },
+            ))
         }
         TokenType::Free => Err(VideoGenError::InvalidInput(
             "No token operations for Free token type".to_string(),
@@ -144,12 +165,14 @@ pub async fn deduct_balance_with_cleanup(
     // Prepare auth based on token type
     let jwt_opt = match token_type {
         TokenType::Sats => Some(jwt_token),
+        TokenType::YralProSubscription => None,
         TokenType::Dolr => None,
         TokenType::Free => None, // Should not reach here
     };
 
     // Get agents for operations
-    let admin_agent_opt = if matches!(token_type, TokenType::Dolr) {
+    let admin_agent_opt = if matches!(token_type, TokenType::Dolr | TokenType::YralProSubscription)
+    {
         Some(agent.clone())
     } else {
         None

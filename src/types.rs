@@ -7,6 +7,7 @@ pub type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
 pub use yral_types::delegated_identity::DelegatedIdentityWire;
 
 #[derive(Serialize, Deserialize, Clone, Copy, CandidType, Debug, PartialEq)]
+#[allow(dead_code)]
 pub enum SessionType {
     AnonymousSession,
     RegisteredSession,

@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 axum = { version = "0.8.0", features = ["macros", "json"] }
 candid = "0.10.6"
-chrono = { version = "=0.4.38", features = ["serde"] }
+chrono = { version = "=0.4.39", features = ["serde"] }
 chrono-tz = "0.10"
 futures = "0.3.30"
 ic-agent = "0.41.0"
@@ -34,7 +34,7 @@ reqwest = { version = "0.12.3", features = [
 once_cell = "1.19.0"
 yup-oauth2 = "11.0.0"
 log = "0.4.21"
-yral-metadata-client = { git = "https://github.com/yral-dapp/yral-metadata.git", branch = "master", features = [
+yral-metadata-client = { git = "https://github.com/dolr-ai/yral-metadata.git", branch = "master", features = [
     "rustls-tls",
 ], default-features = false }
 config = { version = "0.14.0", features = ["toml"] }
@@ -50,7 +50,7 @@ k256 = { version = "0.13.3", features = ["jwk"] }
 time = "0.3.36"
 firestore = "0.43.1"
 base64 = "0.22.1"
-google-cloud-bigquery = { version = "0.13.1", default-features = false, features = [
+google-cloud-bigquery = { version = "0.15.0", default-features = false, features = [
     "auth",
     "rustls-tls",
 ] }
@@ -67,9 +67,9 @@ tower-http = { version = "0.6.2", features = ["cors", "limit"] }
 image = "0.25"
 rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
-storj-interface = { git = "https://github.com/yral-dapp/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
+storj-interface = { git = "https://github.com/dolr-ai/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
 # yral-metrics = { path = "../yral-common/metrics" }
-yral-metadata-types = { git = "https://github.com/yral-dapp/yral-metadata", branch = "master", version = "0.1.0" }
+yral-metadata-types = { git = "https://github.com/dolr-ai/yral-metadata", branch = "master", version = "0.1.0" }
 sentry = { version = "0.37.0", default-features = false, features = [
     "rustls",
     "sentry-anyhow",
@@ -114,21 +114,14 @@ milvus-sdk-rust = "0.1.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
-    "full",
-    "user-post-service",
-] }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-videogen-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master", features = [
-    "ic",
-    "server",
-] }
-yral-identity = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-yral-canisters-common = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-yral-types = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
-yral-username-gen = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
+yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master", features = [ "full" ] }
+yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", branch = "master", package = "alloydb-client"}
+yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master" }
+yral-metrics = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master", features = ["server"] }
+yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-types = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
 
 
 # Local (Path) - uncomment to use local development versions

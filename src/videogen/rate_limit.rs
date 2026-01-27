@@ -73,10 +73,10 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
     };
 
     match result {
-        yral_canisters_client::user_info_service::Result6::Ok(session_type) => {
+        yral_canisters_client::user_info_service::Result7::Ok(session_type) => {
             matches!(session_type, SessionType::RegisteredSession)
         }
-        yral_canisters_client::user_info_service::Result6::Err(e) => {
+        yral_canisters_client::user_info_service::Result7::Err(e) => {
             if e.contains("User not found") {
                 log::info!(
                     "User {user_principal} not found in user info service, checking individual canister"
@@ -182,6 +182,7 @@ pub async fn verify_rate_limit_and_create_request_v1(
         TokenType::Free => CanisterTokenType::Free,
         TokenType::Sats => CanisterTokenType::Sats,
         TokenType::Dolr => CanisterTokenType::Dolr,
+        TokenType::YralProSubscription => CanisterTokenType::YralProSubscription,
     };
 
     // Use the v2 method that handles both rate limit check and request creation

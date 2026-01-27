@@ -19,6 +19,8 @@
           rustup
           openssl
           protobuf_21
+          pkgconf
+          ffmpeg
         ] ++ (if pkgs.stdenv.isDarwin then [
             darwin.apple_sdk.frameworks.Foundation
             pkgs.darwin.libiconv

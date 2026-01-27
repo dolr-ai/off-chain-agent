@@ -249,13 +249,6 @@ pub struct SyncPostToPostServiceRequest {
     post_id: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
-pub struct TransferPostRequest {
-    post_id: u64,
-    canister_id: Principal,
-    user_principal: Principal,
-}
-
 pub async fn process_post_for_transfer(
     post_id: u64,
     canister_id: Principal,
