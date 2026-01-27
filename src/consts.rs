@@ -22,13 +22,14 @@ pub static YRAL_UPLOAD_VIDEO_WORKER_URL: Lazy<Url> =
 pub const PLATFORM_ORCHESTRATOR_ID: &str = "74zq4-iqaaa-aaaam-ab53a-cai";
 
 pub static YRAL_METADATA_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://yral-metadata.fly.dev/").unwrap());
+    Lazy::new(|| Url::parse("https://metadata.yral.com/").unwrap());
 
 #[allow(dead_code)]
 pub const RECYCLE_THRESHOLD_SECS: u64 = 15 * 24 * 60 * 60; // 15 days
 
-pub const GOOGLE_CHAT_REPORT_SPACE_URL: &str =
-    "https://chat.googleapis.com/v1/spaces/AAAA1yDLYO4/messages";
+pub static GOOGLE_CHAT_REPORT_SPACE_URL: Lazy<String> = Lazy::new(|| {
+    std::env::var("GOOGLE_CHAT_REPORT_SPACE_URL").expect("GOOGLE_CHAT_REPORT_SPACE_URL must be set")
+});
 
 #[allow(dead_code)]
 pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
@@ -135,6 +136,12 @@ pub static MODERATOR_PRINCIPALS: Lazy<Vec<Principal>> = Lazy::new(|| {
             .parse()
             .unwrap(),
         "7vovb-nk3ke-4cptr-p57qb-wtcrl-rlc2f-4kweo-tksld-pfq2p-ptkiw-pqe"
+            .parse()
+            .unwrap(),
+        "l4eip-toa2d-bsauv-gew7y-62oie-lhoka-vb2xf-e2wrw-g6ltk-rpgvf-vae"
+            .parse()
+            .unwrap(),
+        "k23zg-uy5z7-m7cji-tseis-j5soz-zy6f5-bixo5-sicn3-zhwc6-qdkrt-lae"
             .parse()
             .unwrap(),
     ]

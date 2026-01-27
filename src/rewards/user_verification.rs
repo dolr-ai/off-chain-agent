@@ -1,4 +1,6 @@
-use crate::{app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, types::RedisPool};
+use crate::{
+    app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, yral_auth::dragonfly::DragonflyPool,
+};
 use anyhow::Result;
 use candid::Principal;
 use redis::AsyncCommands;
@@ -10,12 +12,12 @@ use yral_canisters_client::{
 
 #[derive(Clone)]
 pub struct UserVerification {
-    redis_pool: RedisPool,
+    dragonfly_pool: Arc<DragonflyPool>,
 }
 
 impl UserVerification {
-    pub fn new(redis_pool: RedisPool) -> Self {
-        Self { redis_pool }
+    pub fn new(dragonfly_pool: Arc<DragonflyPool>) -> Self {
+        Self { dragonfly_pool }
     }
 
     pub async fn is_registered_user(
@@ -23,10 +25,10 @@ impl UserVerification {
         principal: Principal,
         app_state: &Arc<AppState>,
     ) -> Result<bool> {
-        let cache_key = format!("user:registered:{}", principal);
+        let cache_key = format!("impressions:user:registered:{}", principal);
 
-        // Check Redis cache first
-        let mut conn = self.redis_pool.get().await?;
+        // Check Dragonfly cache first
+        let mut conn = self.dragonfly_pool.get().await?;
         let cached: Option<String> = conn.get(&cache_key).await?;
 
         if let Some(cached_value) = cached {
@@ -38,11 +40,11 @@ impl UserVerification {
 
         // Cache the result (fire and forget)
         let cache_key_clone = cache_key.clone();
-        let redis_pool = self.redis_pool.clone();
+        let dragonfly_pool = self.dragonfly_pool.clone();
         tokio::spawn(async move {
-            if let Ok(mut conn) = redis_pool.get().await {
+            if let Ok(mut conn) = dragonfly_pool.get().await {
                 let value = if is_registered { "true" } else { "false" };
-                // Set with 1 hour TTL (60 seconds)
+                // Set with 1 minute TTL (60 seconds)
                 log::info!(
                     "Caching user registration status for {}: {}",
                     principal.to_text(),

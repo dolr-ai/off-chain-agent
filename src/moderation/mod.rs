@@ -332,46 +332,82 @@ async fn update_approval_status(
     kvrocks_client: &KvrocksClient,
     video_id: &str,
 ) -> Result<bool, anyhow::Error> {
-    // Escape video ID for SQL
-    let escaped_video_id = video_id.replace('\'', "''");
-
-    let query = format!(
-        "UPDATE `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-         SET is_approved = TRUE
-         WHERE video_id = '{}'",
-        escaped_video_id
-    );
-
-    let request = QueryRequest {
-        query,
-        ..Default::default()
-    };
-
-    let result = bigquery_client
-        .job()
-        .query("hot-or-not-feed-intelligence", &request)
-        .await?;
-
-    // BigQuery returns num_dml_affected_rows for DML statements
-    let affected = result.num_dml_affected_rows.unwrap_or(0) > 0;
-
-    log::info!(
-        "Updated approval status for video {}: {}",
-        video_id,
-        if affected { "success" } else { "not found" }
-    );
-
-    // Also update in kvrocks
-    if affected {
-        if let Err(e) = kvrocks_client
-            .update_user_uploaded_content_approval_status(video_id, true)
-            .await
-        {
-            log::error!("Error updating approval status in kvrocks: {}", e);
-        }
+    if let Err(e) = kvrocks_client
+        .update_user_uploaded_content_approval_status(video_id, true)
+        .await
+    {
+        log::error!("Error updating approval status in kvrocks: {}", e);
+        return Err(anyhow::anyhow!("Failed to update kvrocks: {}", e));
     }
 
-    Ok(affected)
+    log::info!("Updated approval status in kvrocks for video {}", video_id);
+
+    let video_id_owned = video_id.to_string();
+    let bigquery_client = bigquery_client.clone();
+
+    tokio::spawn(async move {
+        let escaped_video_id = video_id_owned.replace('\'', "''");
+
+        let query = format!(
+            "UPDATE `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+             SET is_approved = TRUE
+             WHERE video_id = '{}'",
+            escaped_video_id
+        );
+
+        // Retry with exponential backoff for concurrent update errors
+        let mut attempts = 0;
+        let max_attempts = 3;
+
+        loop {
+            attempts += 1;
+
+            let request = QueryRequest {
+                query: query.clone(),
+                ..Default::default()
+            };
+
+            match bigquery_client
+                .job()
+                .query("hot-or-not-feed-intelligence", &request)
+                .await
+            {
+                Ok(result) => {
+                    let affected = result.num_dml_affected_rows.unwrap_or(0) > 0;
+                    log::info!(
+                        "BigQuery approval update for video {}: {}",
+                        video_id_owned,
+                        if affected { "success" } else { "not found" }
+                    );
+                    break;
+                }
+                Err(e) => {
+                    let error_str = e.to_string();
+                    if error_str.contains("concurrent update") && attempts < max_attempts {
+                        let delay = std::time::Duration::from_millis(100 * (1 << attempts));
+                        log::warn!(
+                            "BigQuery concurrent update error for video {}, retrying in {:?} (attempt {}/{})",
+                            video_id_owned,
+                            delay,
+                            attempts,
+                            max_attempts
+                        );
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    }
+
+                    log::error!(
+                        "Failed to update BigQuery approval for video {}: {}",
+                        video_id_owned,
+                        e
+                    );
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(true)
 }
 
 #[instrument(skip(bigquery_client, kvrocks_client))]
@@ -380,45 +416,83 @@ async fn delete_video(
     kvrocks_client: &KvrocksClient,
     video_id: &str,
 ) -> Result<bool, anyhow::Error> {
-    // Escape video ID for SQL
-    let escaped_video_id = video_id.replace('\'', "''");
-
-    let query = format!(
-        "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-         WHERE video_id = '{}'",
-        escaped_video_id
-    );
-
-    let request = QueryRequest {
-        query,
-        ..Default::default()
-    };
-
-    let result = bigquery_client
-        .job()
-        .query("hot-or-not-feed-intelligence", &request)
-        .await?;
-
-    // BigQuery returns num_dml_affected_rows for DML statements
-    let deleted = result.num_dml_affected_rows.unwrap_or(0) > 0;
-
-    log::info!(
-        "Deleted video {} from ugc_content_approval: {}",
-        video_id,
-        if deleted { "success" } else { "not found" }
-    );
-
-    // Also delete from kvrocks
-    if deleted {
-        if let Err(e) = kvrocks_client
-            .delete_user_uploaded_content_approval(video_id)
-            .await
-        {
-            log::error!("Error deleting approval from kvrocks: {}", e);
-        }
+    // First delete from kvrocks (fast, synchronous)
+    if let Err(e) = kvrocks_client
+        .delete_user_uploaded_content_approval(video_id)
+        .await
+    {
+        log::error!("Error deleting approval from kvrocks: {}", e);
+        return Err(anyhow::anyhow!("Failed to delete from kvrocks: {}", e));
     }
 
-    Ok(deleted)
+    log::info!("Deleted approval from kvrocks for video {}", video_id);
+
+    // Then delete from BigQuery in the background
+    let video_id_owned = video_id.to_string();
+    let bigquery_client = bigquery_client.clone();
+
+    tokio::spawn(async move {
+        let escaped_video_id = video_id_owned.replace('\'', "''");
+
+        let query = format!(
+            "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+             WHERE video_id = '{}'",
+            escaped_video_id
+        );
+
+        // Retry with exponential backoff for concurrent update errors
+        let mut attempts = 0;
+        let max_attempts = 3;
+
+        loop {
+            attempts += 1;
+
+            let request = QueryRequest {
+                query: query.clone(),
+                ..Default::default()
+            };
+
+            match bigquery_client
+                .job()
+                .query("hot-or-not-feed-intelligence", &request)
+                .await
+            {
+                Ok(result) => {
+                    let deleted = result.num_dml_affected_rows.unwrap_or(0) > 0;
+                    log::info!(
+                        "BigQuery delete for video {}: {}",
+                        video_id_owned,
+                        if deleted { "success" } else { "not found" }
+                    );
+                    break;
+                }
+                Err(e) => {
+                    let error_str = e.to_string();
+                    if error_str.contains("concurrent update") && attempts < max_attempts {
+                        let delay = std::time::Duration::from_millis(100 * (1 << attempts));
+                        log::warn!(
+                            "BigQuery concurrent update error for video {}, retrying in {:?} (attempt {}/{})",
+                            video_id_owned,
+                            delay,
+                            attempts,
+                            max_attempts
+                        );
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    }
+
+                    log::error!(
+                        "Failed to delete from BigQuery for video {}: {}",
+                        video_id_owned,
+                        e
+                    );
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(true)
 }
 
 /// Video info needed for sending notifications

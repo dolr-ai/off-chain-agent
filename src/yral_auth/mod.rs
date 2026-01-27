@@ -2,6 +2,7 @@ use candid::Principal;
 use redis::AsyncCommands;
 
 use crate::{config::AppConfig, types::RedisPool};
+pub mod dragonfly;
 
 #[derive(Clone)]
 pub struct YralAuthRedis {
@@ -20,7 +21,11 @@ impl YralAuthRedis {
     }
 
     pub async fn delete_principal(&self, principal: Principal) -> Result<(), anyhow::Error> {
-        let mut conn = self.pool.get().await.unwrap();
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get Redis connection: {}", e))?;
         let key = principal.to_string();
 
         conn.del::<String, ()>(key).await?;

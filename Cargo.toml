@@ -13,7 +13,7 @@ chrono-tz = "0.10"
 futures = "0.3.30"
 ic-agent = "0.41.0"
 serde = "=1.0.219"
-serde_json = { version = "1.0.114", default-features = false }
+serde_json = { version = "=1.0.143", default-features = false }
 stringreader = "0.1.1"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
@@ -91,15 +91,18 @@ regex = "1.11.1"
 google-cloud-alloydb-v1 = "0.2.0"
 google-cloud-auth = "0.19.0"
 rand = "0.9.1"
-redis = { version = "0.29.1", features = [
+redis = { version = "0.32.7", features = [
     "tokio-rustls-comp",
     "tls-rustls-webpki-roots",
+    "aio",
     "json",
     "cluster",
     "cluster-async",
+    "acl",
+    "sentinel"
 ] }
-bb8 = "0.9.0"
-bb8-redis = "0.21.0"
+bb8 = "=0.9.0"
+bb8-redis = "=0.24.0"
 aws-sdk-s3 = { version = "1.65", features = ["behavior-version-latest"] }
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 rustls = { version = "0.23", features = ["ring"] }
@@ -131,7 +134,6 @@ yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "
 # ] }
 # yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
 # yral-qstash-types = { path = "../yral-common/qstash-types" }
-# yral-metrics = { path = "../yral-common/metrics" }
 # videogen-common = { path = "../yral-common/videogen-common", features = [
 #     "ic",
 #     "server",

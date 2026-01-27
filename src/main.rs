@@ -6,6 +6,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
+use canister::canister_health_handler;
 use config::AppConfig;
 use events::event::storj::enqueue_storj_backfill_item;
 use http::header::CONTENT_TYPE;
@@ -23,6 +24,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
+use webhooks::sentry_webhook_handler;
 
 use crate::auth::check_auth_grpc;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
@@ -41,7 +43,6 @@ mod error;
 mod events;
 pub mod kvrocks;
 pub mod leaderboard;
-pub mod metrics;
 mod middleware;
 #[cfg(not(feature = "local-bin"))]
 mod milvus;
@@ -56,6 +57,7 @@ mod types;
 pub mod user;
 pub mod utils;
 pub mod videogen;
+mod webhooks;
 pub mod yral_auth;
 
 use app_state::AppState;
@@ -134,7 +136,9 @@ async fn main_impl() -> Result<()> {
 
     let http = Router::new()
         .route("/healthz", get(health_handler))
+        .route("/canister-health", get(canister_health_handler))
         .route("/report-approved", post(report_approved_handler))
+        .route("/webhooks/sentry", post(sentry_webhook_handler))
         .route(
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),

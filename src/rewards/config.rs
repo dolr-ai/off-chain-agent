@@ -1,7 +1,8 @@
-use crate::types::RedisPool;
+use crate::yral_auth::dragonfly::DragonflyPool;
 use anyhow::{Context, Result};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -27,32 +28,39 @@ impl Default for RewardConfig {
     }
 }
 
-/// Get the current reward configuration from Redis
-pub async fn get_config(redis_pool: &RedisPool) -> Result<RewardConfig> {
-    let mut conn = redis_pool.get().await?;
+/// Get the current reward configuration from Dragonfly
+pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardConfig> {
+    let mut conn = dragonfly_pool.get().await?;
+    let config_key = "impressions:rewards:config".to_string();
     let config_str: Option<String> = conn
-        .get("rewards:config")
+        .get(&config_key)
         .await
-        .context("Failed to get config from Redis")?;
+        .context("Failed to get config from Dragonfly")?;
 
     match config_str {
         Some(s) => serde_json::from_str(&s).context("Failed to deserialize config"),
         None => {
             // If no config exists, initialize with default
             let default_config = RewardConfig::default();
-            initialize_config(redis_pool, &default_config).await?;
+            initialize_config(dragonfly_pool, &default_config).await?;
             Ok(default_config)
         }
     }
 }
 
-/// Update the reward configuration in Redis
-pub async fn update_config(redis_pool: &RedisPool, new_config: RewardConfig) -> Result<()> {
-    let mut conn = redis_pool.get().await?;
+/// Update the reward configuration in Dragonfly
+pub async fn update_config(
+    dragonfly_pool: &Arc<DragonflyPool>,
+    new_config: RewardConfig,
+) -> Result<()> {
+    let mut conn = dragonfly_pool.get().await?;
+
+    let config_version_key = "impressions:rewards:config:version".to_string();
+    let config_key = "impressions:rewards:config".to_string();
 
     // Atomically increment the global config version
     let version: u64 = conn
-        .incr("rewards:config:version", 1)
+        .incr(&config_version_key, 1)
         .await
         .context("Failed to increment config version")?;
 
@@ -61,39 +69,46 @@ pub async fn update_config(redis_pool: &RedisPool, new_config: RewardConfig) -> 
     config.config_version = version;
 
     let config_json = serde_json::to_string(&config)?;
-    conn.set::<_, _, ()>("rewards:config", config_json)
+    conn.set::<_, _, ()>(&config_key, config_json)
         .await
-        .context("Failed to store config in Redis")?;
+        .context("Failed to store config in Dragonfly")?;
 
     log::info!("Updated reward config to version {}: {:?}", version, config);
     Ok(())
 }
 
-/// Get the current config version from Redis
+/// Get the current config version from Dragonfly
 #[cfg(test)]
-pub async fn get_config_version(redis_pool: &RedisPool) -> Result<u64> {
-    let mut conn = redis_pool.get().await?;
+pub async fn get_config_version(dragonfly_pool: &Arc<DragonflyPool>) -> Result<u64> {
+    let mut conn = dragonfly_pool.get().await?;
+    let config_version_key = "impressions:rewards:config:version".to_string();
     let version: Option<u64> = conn
-        .get("rewards:config:version")
+        .get(&config_version_key)
         .await
         .context("Failed to get config version")?;
     Ok(version.unwrap_or(1))
 }
 
-/// Initialize config in Redis if it doesn't exist
-async fn initialize_config(redis_pool: &RedisPool, config: &RewardConfig) -> Result<()> {
-    let mut conn = redis_pool.get().await?;
+/// Initialize config in Dragonfly if it doesn't exist
+async fn initialize_config(
+    dragonfly_pool: &Arc<DragonflyPool>,
+    config: &RewardConfig,
+) -> Result<()> {
+    let mut conn = dragonfly_pool.get().await?;
+
+    let config_version_key = "impressions:rewards:config:version".to_string();
+    let config_key = "impressions:rewards:config".to_string();
 
     // Set initial version if not exists
     let _: bool = conn
-        .set_nx("rewards:config:version", config.config_version)
+        .set_nx(&config_version_key, config.config_version)
         .await
         .context("Failed to initialize config version")?;
 
     // Set config
     let config_json = serde_json::to_string(config)?;
     let _: bool = conn
-        .set_nx("rewards:config", config_json)
+        .set_nx(&config_key, config_json)
         .await
         .context("Failed to initialize config")?;
 

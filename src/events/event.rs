@@ -13,7 +13,7 @@ use crate::{
 };
 use axum::{extract::State, Json};
 use http::header::CONTENT_TYPE;
-use log::error;
+use log::{debug, error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -41,15 +41,34 @@ impl Event {
     }
 
     /// Convert to flat event (for Mixpanel)
+    /// Returns None if no principal can be determined (analytics server requires it)
     fn to_flat_event(&self) -> Option<FlatEvent> {
         let mut params: Value = serde_json::from_str(&self.event.params).ok()?;
 
         // Remove "event" from params if present (avoid duplication)
         if let Value::Object(ref mut map) = params {
             map.remove("event");
-            // Add "principal" field from "user_id" if present (analytics server expects this)
-            if let Some(user_id) = map.get("user_id").cloned() {
-                map.insert("principal".to_string(), user_id);
+
+            // Analytics server requires "principal" field
+            // Check multiple possible sources in priority order
+            if !map.contains_key("principal") {
+                let principal_value = map
+                    .get("user_id")
+                    .or_else(|| map.get("publisher_user_id"))
+                    .or_else(|| map.get("creator_id"))
+                    .or_else(|| map.get("viewer_id"))
+                    .cloned();
+
+                if let Some(value) = principal_value {
+                    map.insert("principal".to_string(), value);
+                } else {
+                    // No principal found - skip this event for Mixpanel
+                    log::debug!(
+                        "Skipping event '{}' for Mixpanel - no principal field found",
+                        self.event.event
+                    );
+                    return None;
+                }
             }
         }
 
@@ -94,7 +113,11 @@ impl Event {
         let flat_event = match self.to_flat_event() {
             Some(e) => e,
             None => {
-                error!("Failed to parse params for mixpanel");
+                log::warn!(
+                    "Skipping mixpanel forward - event: '{}', params: {}",
+                    self.event.event,
+                    self.event.params
+                );
                 return;
             }
         };
@@ -228,7 +251,7 @@ impl Event {
 
                         let percentage_watched = params.percentage_watched as u8;
                         if percentage_watched == 0 || percentage_watched > 100 {
-                            error!("Invalid percentage_watched: {percentage_watched}");
+                            debug!("Invalid percentage_watched: {percentage_watched}");
                             return;
                         }
                         let post_id = params.post_id; // Already a String
@@ -312,8 +335,26 @@ impl Event {
                                     }
                                 }
                             }
-                            Err(e) => {
-                                error!("Failed to get publisher canister for user {publisher_user_id}: {e:?}");
+                            Err(_) => {
+                                let payload = match percentage_watched.cmp(&95) {
+                                    Ordering::Less => {
+                                        UserPostViewDetails::WatchedPartially { percentage_watched }
+                                    }
+                                    _ => UserPostViewDetails::WatchedMultipleTimes {
+                                        percentage_watched,
+                                        watch_count,
+                                    },
+                                };
+
+                                let user_post_service = UserPostService(
+                                    *USER_POST_SERVICE_CANISTER_ID,
+                                    &app_state.agent,
+                                );
+
+                                let _ = user_post_service
+                                    .update_post_add_view_details(post_id.clone(), payload)
+                                    .await
+                                    .map_err(|e| error!("Failed to update view details for post {post_id} in UserPostService canister (fallback): {e:?}"));
                             }
                         }
                     });
@@ -333,7 +374,7 @@ impl Event {
 
                                 let percentage_watched = params.percentage_watched as u8;
                                 if percentage_watched == 0 || percentage_watched > 100 {
-                                    error!("Invalid percentage_watched: {percentage_watched}");
+                                    debug!("Invalid percentage_watched: {percentage_watched}");
                                     return;
                                 }
                                 let post_id = params.post_id.parse::<u64>().unwrap();

@@ -3,12 +3,15 @@ use crate::consts::{ANALYTICS_SERVER_URL, NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
-use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
+use crate::yral_auth::dragonfly::{
+    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis,
+    init_dragonfly_redis_2, DragonflyPool,
+};
 use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -61,6 +64,9 @@ pub struct AppState {
     pub yral_metadata_client: MetadataClient<true>,
     #[cfg(not(feature = "local-bin"))]
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
+    /// Google Chat App authenticator (for sending messages with interactive buttons)
+    #[cfg(not(feature = "local-bin"))]
+    pub gchat_auth: Authenticator<HttpsConnector<HttpConnector>>,
     pub qstash: QStashState,
     #[cfg(not(feature = "local-bin"))]
     pub bigquery_client: Client,
@@ -68,7 +74,6 @@ pub struct AppState {
     pub qstash_client: QStashClient,
     #[cfg(not(feature = "local-bin"))]
     pub gcs_client: Arc<cloud_storage::Client>,
-    pub metrics: CfMetricTx,
     #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     pub alloydb_client: AlloyDbInstance,
     #[cfg(not(feature = "local-bin"))]
@@ -78,7 +83,10 @@ pub struct AppState {
     pub notification_client: NotificationClient,
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_redis: YralAuthRedis,
+    #[cfg(not(feature = "local-bin"))]
+    pub yral_auth_dragonfly: Arc<DragonflyPool>,
     pub leaderboard_redis_pool: RedisPool,
+    #[cfg(not(feature = "local-bin"))]
     pub rewards_module: RewardsModule,
     pub service_cansister_migration_redis_pool: RedisPool,
     pub config: AppConfig,
@@ -100,10 +108,18 @@ impl AppState {
     pub async fn new(app_config: AppConfig) -> Self {
         let leaderboard_redis_pool = init_leaderboard_redis_pool().await;
         let agent = init_agent().await;
-        let mut rewards_module =
-            RewardsModule::new(leaderboard_redis_pool.clone(), agent.clone()).await;
+
+        // Initialize Dragonfly cluster 2 for rewards/impressions
+        #[cfg(not(feature = "local-bin"))]
+        let rewards_dragonfly_pool = init_dragonfly_redis_2()
+            .await
+            .expect("Failed to initialize Dragonfly cluster 2 for rewards");
+
+        #[cfg(not(feature = "local-bin"))]
+        let mut rewards_module = RewardsModule::new(rewards_dragonfly_pool, agent.clone()).await;
 
         // Initialize the rewards module (loads Lua scripts)
+        #[cfg(not(feature = "local-bin"))]
         if let Err(e) = rewards_module.initialize().await {
             log::error!("Failed to initialize rewards module: {}", e);
         }
@@ -122,6 +138,8 @@ impl AppState {
             agent,
             #[cfg(not(feature = "local-bin"))]
             auth: init_auth().await,
+            #[cfg(not(feature = "local-bin"))]
+            gchat_auth: init_gchat_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
             qstash: init_qstash(),
             #[cfg(not(feature = "local-bin"))]
@@ -130,7 +148,6 @@ impl AppState {
             qstash_client: init_qstash_client().await,
             #[cfg(not(feature = "local-bin"))]
             gcs_client: Arc::new(cloud_storage::Client::default()),
-            metrics: init_metrics(),
             #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
             alloydb_client: init_alloydb_client().await,
             #[cfg(not(feature = "local-bin"))]
@@ -142,7 +159,10 @@ impl AppState {
             ),
             #[cfg(not(feature = "local-bin"))]
             yral_auth_redis: YralAuthRedis::init(&app_config).await,
+            #[cfg(not(feature = "local-bin"))]
+            yral_auth_dragonfly: init_dragonfly_redis_pool().await,
             leaderboard_redis_pool,
+            #[cfg(not(feature = "local-bin"))]
             rewards_module,
             config: app_config,
             service_cansister_migration_redis_pool: init_service_canister_migration_redis_pool()
@@ -174,6 +194,28 @@ impl AppState {
             match token.token() {
                 Some(t) => t.to_string(),
                 _ => panic!("No access token found"),
+            }
+        }
+    }
+
+    /// Get access token for Google Chat API using the yral-mobile service account
+    pub async fn get_gchat_access_token(&self) -> String {
+        #[cfg(feature = "local-bin")]
+        {
+            "localtoken".into()
+        }
+
+        #[cfg(not(feature = "local-bin"))]
+        {
+            let auth = &self.gchat_auth;
+            let token = auth
+                .token(&["https://www.googleapis.com/auth/chat.bot"])
+                .await
+                .expect("Failed to get Google Chat access token");
+
+            match token.token() {
+                Some(t) => t.to_string(),
+                _ => panic!("No Google Chat access token found"),
             }
         }
     }
@@ -307,6 +349,21 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
         .unwrap()
 }
 
+/// Initialize Google Chat App authenticator using YRAL_MOBILE_SERVICE_ACCOUNT_KEY
+/// This is needed to send messages as the Chat App (so interactive buttons work)
+pub async fn init_gchat_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
+    let sa_key_file = env::var("YRAL_MOBILE_SERVICE_ACCOUNT_KEY")
+        .expect("YRAL_MOBILE_SERVICE_ACCOUNT_KEY is required");
+
+    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file)
+        .expect("Invalid YRAL_MOBILE_SERVICE_ACCOUNT_KEY");
+
+    ServiceAccountAuthenticator::builder(sa_key)
+        .build()
+        .await
+        .expect("Failed to build Google Chat authenticator")
+}
+
 pub fn init_qstash() -> QStashState {
     let qstash_key =
         env::var("QSTASH_CURRENT_SIGNING_KEY").expect("QSTASH_CURRENT_SIGNING_KEY is required");
@@ -382,6 +439,18 @@ async fn init_service_canister_migration_redis_pool() -> RedisPool {
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
     RedisPool::builder().build(manager).await.unwrap()
+}
+
+async fn init_dragonfly_redis_pool() -> Arc<DragonflyPool> {
+    let ca_cert_bytes = get_ca_cert_pem().expect("Failed to read DRAGONFLY_CA_CERT");
+    let client_cert_bytes = get_client_cert_pem().expect("Failed to read DRAGONFLY_CLIENT_CERT");
+    let client_key_bytes = get_client_key_pem().expect("Failed to read DRAGONFLY_CLIENT_KEY");
+    let dragonfly_pool: Arc<DragonflyPool> =
+        init_dragonfly_redis(ca_cert_bytes, client_cert_bytes, client_key_bytes)
+            .await
+            .expect("failed to initalize DragonflyPool");
+
+    dragonfly_pool
 }
 
 #[cfg(not(feature = "local-bin"))]

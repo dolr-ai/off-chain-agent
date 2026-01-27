@@ -1,8 +1,11 @@
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    app_state::AppState, consts::GOOGLE_CHAT_REPORT_SPACE_URL,
-    posts::report_post::repost_post_common_impl, AppError,
+    app_state::AppState,
+    consts::GOOGLE_CHAT_REPORT_SPACE_URL,
+    events::{event::Event, warehouse_events::WarehouseEvent},
+    posts::report_post::repost_post_common_impl,
+    AppError,
 };
 use anyhow::{Context, Result};
 use axum::extract::State;
@@ -12,9 +15,9 @@ use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
 use yral_canisters_client::{
-    ic::USER_POST_SERVICE_ID, user_post_service::PostStatus, user_post_service::UserPostService,
+    ic::USER_POST_SERVICE_ID,
+    user_post_service::{Post, PostStatus, Result2, UserPostService},
 };
-use yup_oauth2::ServiceAccountAuthenticator;
 
 use crate::offchain_service::off_chain::{Empty, ReportPostRequest};
 use off_chain::off_chain_server::OffChain;
@@ -78,45 +81,68 @@ impl OffChain for OffChainService {
     }
 }
 
-pub async fn get_chat_access_token() -> String {
-    let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
+/// Send a message to Google Chat as the Chat App (with OAuth authentication)
+/// This allows interactive buttons (like "Ban Post") to work
+pub async fn send_message_gchat(
+    app_state: &AppState,
+    request_url: &str,
+    data: Value,
+) -> Result<()> {
+    let client = Client::new();
 
-    // Load your service account key
-    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
+    let token = app_state.get_gchat_access_token().await;
 
-    let auth = ServiceAccountAuthenticator::builder(sa_key)
-        .build()
+    let response = client
+        .post(request_url)
+        .header("Content-Type", "application/json")
+        .bearer_auth(token)
+        .json(&data)
+        .send()
         .await
-        .unwrap();
+        .context("Failed to send request to Google Chat")?;
 
-    let scopes = &["https://www.googleapis.com/auth/chat.bot"];
-    let token = auth.token(scopes).await.unwrap();
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
 
-    match token.token() {
-        Some(t) => t.to_string(),
-        _ => panic!("No access token found"),
+    if !status.is_success() {
+        log::error!("Google Chat API error: status={}, body={}", status, body);
+        return Err(anyhow::anyhow!(
+            "Google Chat API error: status={}, body={}",
+            status,
+            body
+        ));
     }
+
+    log::debug!("Google Chat response: {}", body);
+    Ok(())
 }
 
-pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
-    let token = get_chat_access_token().await;
+/// Send a message to Google Chat via webhook (no OAuth, but interactive buttons won't work)
+/// Use this for simple notifications like Sentry alerts
+pub async fn send_message_gchat_webhook(request_url: &str, data: Value) -> Result<()> {
     let client = Client::new();
 
     let response = client
         .post(request_url)
-        .bearer_auth(token)
         .header("Content-Type", "application/json")
         .json(&data)
         .send()
-        .await;
+        .await
+        .context("Failed to send request to Google Chat")?;
 
-    if response.is_err() {
-        log::error!("Error sending data to Google Chat: {response:?}");
-        return Err(anyhow::anyhow!("Error sending data to Google Chat"));
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        log::error!("Google Chat API error: status={}, body={}", status, body);
+        return Err(anyhow::anyhow!(
+            "Google Chat API error: status={}, body={}",
+            status,
+            body
+        ));
     }
 
-    let _body = response.unwrap().text().await.unwrap();
-
+    log::debug!("Google Chat response: {}", body);
     Ok(())
 }
 
@@ -190,7 +216,7 @@ pub async fn report_approved_handler(
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     validation.set_issuer(&["chat@system.gserviceaccount.com"]);
-    validation.set_audience(&["82502260393"]);
+    validation.set_audience(&["1035262663512"]);
 
     let mut valid = false;
 
@@ -221,6 +247,22 @@ pub async fn report_approved_handler(
 
     let user_post_service = UserPostService(USER_POST_SERVICE_ID, &state.agent);
 
+    let Result2::Ok(Post {
+        video_uid,
+        creator_principal,
+        ..
+    }) = user_post_service
+        .get_individual_post_details_by_id(post_id.to_string())
+        .await?
+    else {
+        return Err(anyhow::anyhow!(
+            "Failed to fetch post details for {}/{}",
+            canister_id,
+            post_id
+        )
+        .into());
+    };
+
     user_post_service
         .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
         .await?;
@@ -229,7 +271,19 @@ pub async fn report_approved_handler(
     let confirmation_msg = json!({
         "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
     });
-    send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+    send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+    let params = json!({
+        "video_id": video_uid,
+        "publisher_user_id": creator_principal,
+        "canister_id": canister_id,
+        "post_id": post_id
+    });
+
+    let event = Event::new(WarehouseEvent {
+        event: "video_report_banned".to_string(),
+        params: params.to_string(),
+    });
+    event.stream_to_bigquery(&state);
 
     Ok(())
 }
