@@ -10,9 +10,9 @@ const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     -- Atomic operation for view counting with config change handling
     -- This script only runs for logged-in users
     -- Using HSET to store both count and config_version in single hash
-    local views_set = KEYS[1]  -- impressions:rewards:views:{video_id} (set of user IDs)
-    local video_hash = KEYS[2]  -- impressions:rewards:video:{video_id} (hash with count & config_version)
-    local config_version_key = KEYS[3]  -- impressions:rewards:config:version
+    local views_set = KEYS[1]  -- impressions:test:rewards:views:{video_id} (set of user IDs)
+    local video_hash = KEYS[2]  -- impressions:test:rewards:video:{video_id} (hash with count & config_version)
+    local config_version_key = KEYS[3]  -- impressions:test:rewards:config:version
 
     local user_id = ARGV[1]
 
@@ -99,16 +99,16 @@ impl ViewTracker {
 
         // Fast path for non-logged-in: just increment total_count_all
         if !is_logged_in {
-            let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+            let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
             conn.hincr::<_, _, _, ()>(&video_hash_key, "total_count_all", 1)
                 .await?;
             return Ok(None);
         }
 
         // Logged-in path: use Lua script for atomic duplicate checking
-        let views_set_key = format!("impressions:rewards:views:{}", video_id);
-        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
-        let config_version_key = "impressions:rewards:config:version".to_string();
+        let views_set_key = format!("impressions:test:rewards:views:{}", video_id);
+        let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
+        let config_version_key = "impressions:test:rewards:config:version".to_string();
 
         // Try to use the loaded script SHA, fallback to EVAL if not loaded
         let result: Option<u64> = if let Some(sha) = &self.script_sha {
@@ -159,21 +159,21 @@ impl ViewTracker {
 
     pub async fn get_view_count(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
         let count: Option<String> = conn.hget(&video_hash_key, "count").await?;
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn get_last_milestone(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
         let milestone: Option<String> = conn.hget(&video_hash_key, "last_milestone").await?;
         Ok(milestone.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn set_last_milestone(&self, video_id: &str, milestone: u64) -> Result<()> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
         conn.hset::<_, _, _, ()>(&video_hash_key, "last_milestone", milestone)
             .await?;
         Ok(())
@@ -181,14 +181,14 @@ impl ViewTracker {
 
     pub async fn get_total_count_loggedin(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
         let count: Option<String> = conn.hget(&video_hash_key, "total_count_loggedin").await?;
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn get_total_count_all(&self, video_id: &str) -> Result<u64> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
         let count: Option<String> = conn.hget(&video_hash_key, "total_count_all").await?;
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
@@ -196,7 +196,7 @@ impl ViewTracker {
     /// Get all video stats in a single Redis call
     pub async fn get_all_video_stats(&self, video_id: &str) -> Result<(u64, u64, u64, u64)> {
         let mut conn = self.pool.get().await?;
-        let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+        let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
 
         // Get all fields in one call
         let data: std::collections::HashMap<String, String> = conn.hgetall(&video_hash_key).await?;
@@ -232,7 +232,7 @@ impl ViewTracker {
         // Build pipeline with HGETALL for each video
         let mut pipe = redis::pipe();
         for video_id in video_ids {
-            let video_hash_key = format!("impressions:rewards:video:{}", video_id);
+            let video_hash_key = format!("impressions:test:rewards:video:{}", video_id);
             pipe.hgetall(&video_hash_key);
         }
 
@@ -323,9 +323,9 @@ mod tests {
             let mut conn = self.tracker.pool.get().await?;
 
             let patterns = vec![
-                format!("rewards:video:{}*", self.key_prefix),
-                format!("rewards:views:{}*", self.key_prefix),
-                "rewards:config:version".to_string(),
+                format!("impressions:test:rewards:video:{}*", self.key_prefix),
+                format!("impressions:test:rewards:views:{}*", self.key_prefix),
+                "impressions:test:rewards:config:version".to_string(),
             ];
 
             for pattern in patterns {
@@ -465,7 +465,7 @@ mod tests {
 
         let mut conn = test_tracker.tracker.pool.get().await.unwrap();
         let _: () = conn
-            .set::<_, _, ()>("rewards:config:version", "2")
+            .set::<_, _, ()>("impressions:test:rewards:config:version", "2")
             .await
             .unwrap();
 
@@ -631,7 +631,7 @@ mod tests {
         // Change config version
         let mut conn = test_tracker.tracker.pool.get().await.unwrap();
         let _: () = conn
-            .set::<_, _, ()>("rewards:config:version", "2")
+            .set::<_, _, ()>("impressions:test:rewards:config:version", "2")
             .await
             .unwrap();
 

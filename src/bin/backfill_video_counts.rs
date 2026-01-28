@@ -189,7 +189,7 @@ async fn main() -> Result<()> {
             let mut before_map = std::collections::HashMap::new();
             for post in &result.posts {
                 if post.view_stats.total_view_count > 0 {
-                    let key = format!("rewards:video:{}", post.video_uid);
+                    let key = format!("impressions:test:rewards:video:{}", post.video_uid);
                     let current: Option<String> =
                         conn.hget(&key, "total_count_all").await.ok().flatten();
                     let current_val = current.and_then(|s| s.parse().ok()).unwrap_or(0);
@@ -244,7 +244,7 @@ async fn main() -> Result<()> {
                 continue; // Skip Redis update for 0 views
             }
 
-            let key = format!("rewards:video:{}", video_uid);
+            let key = format!("impressions:test:rewards:video:{}", video_uid);
             pipe.cmd("EVALSHA")
                 .arg(&script_sha)
                 .arg(1) // number of keys
@@ -274,7 +274,7 @@ async fn main() -> Result<()> {
                 for post in &result.posts {
                     if post.view_stats.total_view_count > 0 {
                         let before = before_values.get(&post.video_uid).copied().unwrap_or(0);
-                        let key = format!("rewards:video:{}", post.video_uid);
+                        let key = format!("impressions:test:rewards:video:{}", post.video_uid);
                         let after: Option<String> =
                             conn.hget(&key, "total_count_all").await.ok().flatten();
                         let after_val = after.and_then(|s| s.parse().ok()).unwrap_or(0);

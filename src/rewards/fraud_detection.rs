@@ -52,7 +52,7 @@ impl FraudDetector {
 
     /// Check for fraud patterns and shadow ban if necessary
     pub async fn check_fraud_patterns(&self, creator_id: Principal) -> FraudCheck {
-        let key = format!("impressions:rewards:user:{}:recent", creator_id);
+        let key = format!("impressions:test:rewards:user:{}:recent", creator_id);
         let current_timestamp = Utc::now().timestamp();
 
         let dragonfly_pool = self.dragonfly_pool.clone();
@@ -83,7 +83,7 @@ impl FraudDetector {
 
                     if recent_count > threshold {
                         // Shadow ban the creator
-                        let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id_str);
+                        let ban_key = format!("impressions:test:rewards:shadow_ban:{}", creator_id_str);
                         if let Err(e) = conn
                             .set_ex::<_, _, ()>(&ban_key, "1", shadow_ban_duration)
                             .await
@@ -108,7 +108,7 @@ impl FraudDetector {
 
         // For the immediate check, we need to check if already shadow banned
         if let Ok(mut conn) = self.dragonfly_pool.get().await {
-            let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
+            let ban_key = format!("impressions:test:rewards:shadow_ban:{}", creator_id);
             if let Ok(is_banned) = conn.exists::<_, bool>(&ban_key).await {
                 if is_banned {
                     return FraudCheck::Suspicious;
@@ -122,7 +122,7 @@ impl FraudDetector {
     /// Check if a creator is currently shadow banned
     pub async fn is_shadow_banned(&self, creator_id: &Principal) -> Result<bool> {
         let mut conn = self.dragonfly_pool.get().await?;
-        let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
+        let ban_key = format!("impressions:test:rewards:shadow_ban:{}", creator_id);
         let is_banned: bool = conn.exists(&ban_key).await?;
         Ok(is_banned)
     }
@@ -217,8 +217,8 @@ mod tests {
             let mut conn = self.detector.redis_pool.get().await?;
 
             let patterns = vec![
-                format!("rewards:user:*:recent"),
-                format!("rewards:shadow_ban:*"),
+                format!("impressions:test:rewards:user:*:recent"),
+                format!("impressions:test:rewards:shadow_ban:*"),
             ];
 
             for pattern in patterns {
