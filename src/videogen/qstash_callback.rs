@@ -192,6 +192,7 @@ pub async fn handle_video_gen_callback_internal(
                         &callback.token_type,
                         jwt_token,
                         &state.agent,
+                        None,
                     )
                     .await
                     {

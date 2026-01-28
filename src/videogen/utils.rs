@@ -81,7 +81,7 @@ pub fn create_user_agent_if_dolr(
     identity: DelegatedIdentity,
     token_type: &TokenType,
 ) -> Result<Option<Agent>, (StatusCode, Json<VideoGenError>)> {
-    if matches!(token_type, TokenType::Dolr) {
+    if matches!(token_type, TokenType::Dolr | TokenType::YralProSubscription) {
         let agent = Agent::builder()
             .with_identity(identity)
             .with_url("https://ic0.app")
@@ -119,6 +119,7 @@ pub async fn rollback_balance_on_failure(
     token_type: &TokenType,
     jwt_token: String,
     admin_agent: &Agent,
+    user_agent: Option<&Agent>,
 ) -> Result<(), VideoGenError> {
     // Only rollback if there was a deduction
     if let Some(amount) = deducted_amount {
@@ -136,7 +137,9 @@ pub async fn rollback_balance_on_failure(
                 None
             };
 
-        add_token_balance(user_principal, amount, token_type, jwt_opt, admin_agent_opt)
+        let user_agent_opt = user_agent.cloned();
+
+        add_token_balance(user_principal, amount, token_type, jwt_opt, admin_agent_opt, user_agent_opt)
             .await
             .map_err(|e| {
                 log::error!(
@@ -154,6 +157,7 @@ pub async fn queue_to_qstash_with_rollback(
     qstash_request: QstashVideoGenRequest,
     jwt_token: String,
     user_principal: Principal,
+    user_agent: Option<&Agent>,
 ) -> Result<(), (StatusCode, Json<VideoGenError>)> {
     let uses_webhook = qstash_request.input.supports_webhook_callbacks();
 
@@ -192,6 +196,7 @@ pub async fn queue_to_qstash_with_rollback(
             &qstash_request.token_type,
             jwt_token,
             &app_state.agent,
+            user_agent,
         )
         .await
         {
@@ -309,7 +314,7 @@ pub async fn process_video_generation(
     };
 
     // Queue to Qstash with automatic rollback on failure
-    queue_to_qstash_with_rollback(app_state, qstash_request, jwt_token, user_principal).await?;
+    queue_to_qstash_with_rollback(app_state, qstash_request, jwt_token, user_principal, user_agent.as_ref()).await?;
 
     Ok(request_key)
 }

@@ -15,6 +15,7 @@ pub fn get_token_operations(
     jwt_token: Option<String>,
     admin_agent: Option<ic_agent::Agent>,
     user_agent: Option<ic_agent::Agent>,
+    user_principal: Option<Principal>,
 ) -> Result<TokenOperationsProvider, VideoGenError> {
     match token_type {
         TokenType::Sats => Ok(TokenOperationsProvider::Sats(SatsOperations::new(
@@ -40,16 +41,21 @@ pub fn get_token_operations(
                 )
             })?;
 
-            let user_principal = user_agent
-                .ok_or(VideoGenError::InvalidInput(
-                    "User principal required".to_owned(),
-                ))?
-                .get_principal()
-                .map_err(|e| VideoGenError::InvalidInput(format!("Invalid user principal {e}")))?;
+            let principal = if let Some(agent) = user_agent {
+                agent.get_principal()
+                    .map_err(|e| VideoGenError::InvalidInput(format!("Invalid user principal {e}")))?
+            } else if let Some(principal) = user_principal {
+                principal
+            } else {
+                return Err(VideoGenError::InvalidInput(
+                    "User agent or user principal required for YralProSubscription".to_owned(),
+                ));
+            };
+            
             Ok(TokenOperationsProvider::YralProSubscription(
                 YralProSubscriptionOperation {
                     admin_agent: admin,
-                    user_principal,
+                    user_principal: principal,
                 },
             ))
         }
@@ -67,7 +73,7 @@ pub async fn load_token_balance(
     admin_agent: Option<ic_agent::Agent>,
     user_agent: Option<ic_agent::Agent>,
 ) -> Result<BigUint, VideoGenError> {
-    let ops = get_token_operations(token_type, jwt_token, admin_agent, user_agent)?;
+    let ops = get_token_operations(token_type, jwt_token, admin_agent, user_agent, Some(user_principal))?;
     let balance = ops
         .load_balance(user_principal)
         .await
@@ -97,6 +103,7 @@ pub async fn deduct_token_balance(
         jwt_token.clone(),
         admin_agent.clone(),
         user_agent.clone(),
+        Some(user_principal),
     )?;
 
     // Check balance first
@@ -126,14 +133,15 @@ pub async fn add_token_balance(
     token_type: &TokenType,
     jwt_token: Option<String>,
     admin_agent: Option<ic_agent::Agent>,
+    user_agent: Option<ic_agent::Agent>,
 ) -> Result<(), VideoGenError> {
     // For Free token type, no operation needed
     if matches!(token_type, TokenType::Free) {
         return Ok(());
     }
 
-    // For add operations, we don't need user agent - always use admin
-    let ops = get_token_operations(token_type, jwt_token, admin_agent, None)?;
+    // For add operations, pass user_agent for YralProSubscription
+    let ops = get_token_operations(token_type, jwt_token, admin_agent, user_agent, Some(user_principal))?;
 
     ops.add_balance(user_principal, amount)
         .await
