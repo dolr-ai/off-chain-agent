@@ -2,7 +2,7 @@ use crate::rewards::config::RewardTokenType;
 use anyhow::Result;
 use candid::Principal;
 use serde_json::json;
-use yral_canisters_common::utils::token::{CkBtcOperations, TokenOperations};
+use yral_canisters_common::utils::token::{CkBtcOperations, DolrOperations, TokenOperations};
 
 #[derive(Clone)]
 pub struct WalletIntegration {
