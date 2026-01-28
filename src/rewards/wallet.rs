@@ -1,28 +1,7 @@
 use anyhow::Result;
 use candid::Principal;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use yral_canisters_common::utils::token::{CkBtcOperations, TokenOperations};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BtcTransaction {
-    pub creator_id: Principal,
-    pub video_id: String,
-    pub milestone: u64,
-    pub amount_btc: f64,
-    pub amount_inr: f64,
-    pub timestamp: i64,
-    pub tx_id: Option<String>,
-    pub status: TransactionStatus,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum TransactionStatus {
-    Pending,
-    Processing,
-    Completed,
-    Failed,
-}
 
 #[derive(Clone)]
 pub struct WalletIntegration {

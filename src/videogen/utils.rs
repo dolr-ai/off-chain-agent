@@ -126,13 +126,15 @@ pub async fn rollback_balance_on_failure(
             TokenType::Sats => Some(jwt_token),
             TokenType::Dolr => None,
             TokenType::Free => None,
+            TokenType::YralProSubscription => None,
         };
 
-        let admin_agent_opt = if matches!(token_type, TokenType::Dolr) {
-            Some(admin_agent.clone())
-        } else {
-            None
-        };
+        let admin_agent_opt =
+            if matches!(token_type, TokenType::Dolr | TokenType::YralProSubscription) {
+                Some(admin_agent.clone())
+            } else {
+                None
+            };
 
         add_token_balance(user_principal, amount, token_type, jwt_opt, admin_agent_opt)
             .await

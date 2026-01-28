@@ -171,6 +171,7 @@ pub async fn handle_replicate_webhook(
                     CanisterTokenType::Free => TokenType::Free,
                     CanisterTokenType::Sats => TokenType::Sats,
                     CanisterTokenType::Dolr => TokenType::Dolr,
+                    CanisterTokenType::YralProSubscription => TokenType::YralProSubscription,
                 },
                 None => TokenType::Free,
             };
