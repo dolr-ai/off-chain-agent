@@ -1,17 +1,8 @@
 use crate::rewards::config::RewardTokenType;
 use anyhow::Result;
 use candid::Principal;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
-use yral_canisters_common::utils::token::{CkBtcOperations, DolrOperations, TokenOperations};
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum TransactionStatus {
-    Pending,
-    Processing,
-    Completed,
-    Failed,
-}
+use yral_canisters_common::utils::token::{CkBtcOperations, TokenOperations};
 
 #[derive(Clone)]
 pub struct WalletIntegration {

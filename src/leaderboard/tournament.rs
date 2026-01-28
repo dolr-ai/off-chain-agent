@@ -92,10 +92,10 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
     };
 
     match result {
-        yral_canisters_client::user_info_service::Result6::Ok(session_type) => {
+        yral_canisters_client::user_info_service::Result7::Ok(session_type) => {
             matches!(session_type, SessionType::RegisteredSession)
         }
-        yral_canisters_client::user_info_service::Result6::Err(e) => {
+        yral_canisters_client::user_info_service::Result7::Err(e) => {
             if e.contains("User not found") {
                 log::debug!(
                     "User {user_principal} not found in user info service, checking individual canister"
@@ -650,7 +650,7 @@ async fn send_tournament_start_broadcast(
                 let count = sent.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
 
                 // Log progress every 100 notifications
-                if count % 100 == 0 {
+                if count.is_multiple_of(100) {
                     log::info!("Notification progress: {}/{} sent", count, total_users);
                 }
             }

@@ -12,7 +12,6 @@ use crate::yral_auth::dragonfly::{
     get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis,
     init_dragonfly_redis_2, DragonflyPool,
 };
-use crate::yral_auth::YralAuthRedis;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use google_cloud_alloydb_v1::client::AlloyDBAdmin;
@@ -81,8 +80,6 @@ pub struct AppState {
     pub canister_backup_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
     pub notification_client: NotificationClient,
-    #[cfg(not(feature = "local-bin"))]
-    pub yral_auth_redis: YralAuthRedis,
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_dragonfly: Arc<DragonflyPool>,
     pub leaderboard_redis_pool: RedisPool,
@@ -157,8 +154,6 @@ impl AppState {
             notification_client: NotificationClient::new(
                 env::var("YRAL_METADATA_NOTIFICATION_API_KEY").unwrap_or_default(),
             ),
-            #[cfg(not(feature = "local-bin"))]
-            yral_auth_redis: YralAuthRedis::init(&app_config).await,
             #[cfg(not(feature = "local-bin"))]
             yral_auth_dragonfly: init_dragonfly_redis_pool().await,
             leaderboard_redis_pool,

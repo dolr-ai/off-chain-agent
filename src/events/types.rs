@@ -111,32 +111,6 @@ impl AnalyticsEvent {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
-pub struct VideoWatchedV3 {
-    #[schema(value_type = String)]
-    pub publisher_user_id: Principal,
-    #[schema(value_type = String)]
-    pub user_id: Principal,
-    pub is_logged_in: bool,
-    pub display_name: String,
-    #[schema(value_type = String)]
-    pub canister_id: Principal,
-    pub video_id: String,
-    pub video_category: String,
-    pub creator_category: String,
-    pub hashtag_count: u32,
-    pub is_nsfw: bool,
-    pub is_hot_or_not: bool,
-    pub feed_type: String,
-    pub view_count: u32,
-    pub like_count: u32,
-    pub share_count: u32,
-    #[serde(deserialize_with = "string_or_number")]
-    pub post_id: String,
-    pub publisher_canister_id: String,
-    pub nsfw_probability: f64,
-}
-
 // --------------------------------------------------
 // VideoWatched
 // --------------------------------------------------
@@ -275,43 +249,6 @@ pub struct VideoViewedPayload {
 // Like / Share
 // --------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LikeVideoPayload {
-    #[serde(rename = "publisher_user_id")]
-    pub publisher_user_id: Principal,
-    #[serde(rename = "user_id")]
-    pub user_id: Principal,
-    pub is_logged_in: bool,
-    #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
-    #[serde(rename = "canister_id")]
-    pub canister_id: Principal,
-    #[serde(rename = "video_id")]
-    pub video_id: String,
-    #[serde(rename = "video_category")]
-    pub video_category: String,
-    #[serde(rename = "creator_category")]
-    pub creator_category: String,
-    #[serde(rename = "hashtag_count")]
-    pub hashtag_count: usize,
-    pub is_nsfw: bool,
-    pub is_hot_or_not: bool,
-    #[serde(rename = "feed_type")]
-    pub feed_type: String,
-    #[serde(rename = "view_count")]
-    pub view_count: u64,
-    #[serde(rename = "like_count")]
-    pub like_count: u64,
-    #[serde(rename = "share_count")]
-    pub share_count: u64,
-    #[serde(deserialize_with = "string_or_number")]
-    pub post_id: String,
-    #[serde(rename = "publisher_canister_id")]
-    pub publisher_canister_id: Principal,
-    #[serde(rename = "nsfw_probability", skip_serializing_if = "Option::is_none")]
-    pub nsfw_probability: Option<f64>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct LikeVideoPayloadV2 {
     #[schema(value_type = String)]
@@ -325,7 +262,9 @@ pub struct LikeVideoPayloadV2 {
     pub video_category: String,
     pub creator_category: String,
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     pub feed_type: String,
     pub view_count: u64,
@@ -356,7 +295,9 @@ pub struct ShareVideoPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     #[serde(rename = "feed_type")]
     pub feed_type: String,
@@ -398,7 +339,9 @@ pub struct VideoUploadUploadButtonClickedPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
 }
 
@@ -426,7 +369,9 @@ pub struct VideoUploadUnsuccessfulPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     #[serde(rename = "fail_reason")]
     pub fail_reason: String,
@@ -446,7 +391,9 @@ pub struct VideoUploadSuccessfulPayload {
     pub creator_category: String,
     #[serde(rename = "hashtag_count")]
     pub hashtag_count: usize,
+    #[serde(default)]
     pub is_nsfw: bool,
+    #[serde(default)]
     pub is_hot_or_not: bool,
     #[serde(rename = "is_filter_used")]
     pub is_filter_used: bool,

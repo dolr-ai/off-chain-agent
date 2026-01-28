@@ -103,15 +103,6 @@ pub struct RewardHistoryResponse {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct VideoStatsResponse {
-    pub video_id: String,
-    pub view_count: u64,
-    pub last_milestone: u64,
-    pub next_milestone: u64,
-    pub views_to_next_milestone: u64,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
 pub struct ConfigResponse {
     pub config: Option<RewardConfig>,
 }
