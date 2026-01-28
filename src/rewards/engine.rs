@@ -359,9 +359,8 @@ impl RewardEngine {
                 self.btc_converter.convert_inr_to_btc(total_inr).await?
             }
             RewardTokenType::Dolr => {
-                // Use hardcoded DOLR/INR rate (or custom rate from config)
-                self.btc_converter
-                    .convert_inr_to_dolr(total_inr, config.dolr_inr_rate)
+                // Use live DOLR/USD rate from CoinGecko
+                self.btc_converter.convert_inr_to_dolr(total_inr).await?
             }
         };
 

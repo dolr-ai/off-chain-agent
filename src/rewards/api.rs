@@ -567,7 +567,7 @@ async fn test_reward_calculation(
     // Convert to tokens based on token type
     let tokens_per_milestone = match config.reward_token {
         RewardTokenType::Btc => {
-            // Use live BTC rate
+            // Use live BTC rate from blockchain.info
             state
                 .rewards_module
                 .btc_converter
@@ -576,9 +576,13 @@ async fn test_reward_calculation(
                 .unwrap_or(0.0)
         }
         RewardTokenType::Dolr => {
-            // Use hardcoded DOLR rate (1 DOLR = 1 INR, or custom rate)
-            let rate = config.dolr_inr_rate.unwrap_or(1.0);
-            inr_per_milestone / rate
+            // Use live DOLR rate from CoinGecko
+            state
+                .rewards_module
+                .btc_converter
+                .convert_inr_to_dolr(inr_per_milestone)
+                .await
+                .unwrap_or(0.0)
         }
     };
 
