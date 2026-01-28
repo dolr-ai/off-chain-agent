@@ -56,11 +56,6 @@ pub async fn delete_canister_data(
     #[cfg(not(feature = "local-bin"))]
     {
         state
-            .yral_auth_redis
-            .delete_principal(user_principal)
-            .await?;
-
-        state
             .yral_auth_dragonfly
             .delete_principal(user_principal)
             .await?;
