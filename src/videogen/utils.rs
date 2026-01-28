@@ -77,7 +77,7 @@ pub fn extract_request_metadata(request: &VideoGenRequest) -> RequestMetadata {
 }
 
 /// Creates a user agent for DOLR operations if needed
-pub fn create_user_agent_if_dolr(
+pub fn create_user_agent_if_needed(
     identity: DelegatedIdentity,
     token_type: &TokenType,
 ) -> Result<Option<Agent>, (StatusCode, Json<VideoGenError>)> {
@@ -283,8 +283,8 @@ pub async fn process_video_generation(
                 (StatusCode::UNAUTHORIZED, Json(VideoGenError::AuthError))
             })?;
 
-    // Create user agent if needed for DOLR operations
-    let user_agent = create_user_agent_if_dolr(identity, &token_type)?;
+    // Create user agent if needed for token operations
+    let user_agent = create_user_agent_if_needed(identity, &token_type)?;
 
     // Get JWT token
     let jwt_token = get_hon_worker_jwt_token()?;

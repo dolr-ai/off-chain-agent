@@ -51,7 +51,7 @@ pub fn get_token_operations(
                     "User agent or user principal required for YralProSubscription".to_owned(),
                 ));
             };
-            
+
             Ok(TokenOperationsProvider::YralProSubscription(
                 YralProSubscriptionOperation {
                     admin_agent: admin,
@@ -140,7 +140,7 @@ pub async fn add_token_balance(
         return Ok(());
     }
 
-    // For add operations, pass user_agent for YralProSubscription
+    // For add operations, pass user_agent when available for token types that require it
     let ops = get_token_operations(token_type, jwt_token, admin_agent, user_agent, Some(user_principal))?;
 
     ops.add_balance(user_principal, amount)
