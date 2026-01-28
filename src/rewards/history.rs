@@ -39,9 +39,14 @@ impl HistoryTracker {
 
     /// Record a view in history (non-atomic, best effort)
     pub async fn record_view(&self, record: ViewRecord) {
-        let video_history_key =
-            format!("impressions:rewards:video:{}:view_history", record.video_id);
-        let user_history_key = format!("impressions:rewards:user:{}:view_history", record.user_id);
+        let video_history_key = format!(
+            "impressions:test:rewards:video:{}:view_history",
+            record.video_id
+        );
+        let user_history_key = format!(
+            "impressions:test:rewards:user:{}:view_history",
+            record.user_id
+        );
 
         let dragonfly_pool = self.dragonfly_pool.clone();
         let record_clone = record.clone();
@@ -88,9 +93,12 @@ impl HistoryTracker {
     /// Record a reward in history (non-atomic, best effort)
     pub async fn record_reward(&self, creator_id: &Principal, record: RewardRecord) {
         let creator_id_str = creator_id.to_string();
-        let user_key = format!("impressions:rewards:user:{}:reward_history", creator_id_str);
+        let user_key = format!(
+            "impressions:test:rewards:user:{}:reward_history",
+            creator_id_str
+        );
         let creator_key = format!(
-            "impressions:rewards:creator:{}:reward_history",
+            "impressions:test:rewards:creator:{}:reward_history",
             creator_id_str
         );
 
@@ -120,7 +128,7 @@ impl HistoryTracker {
     /// Get video view history
     pub async fn get_video_views(&self, video_id: &str, limit: usize) -> Result<Vec<ViewRecord>> {
         let mut conn = self.dragonfly_pool.get().await?;
-        let key = format!("impressions:rewards:video:{}:view_history", video_id);
+        let key = format!("impressions:test:rewards:video:{}:view_history", video_id);
 
         let history: Vec<String> = conn.lrange(&key, 0, limit as isize - 1).await?;
 
@@ -145,7 +153,7 @@ impl HistoryTracker {
         limit: usize,
     ) -> Result<Vec<ViewRecord>> {
         let mut conn = self.dragonfly_pool.get().await?;
-        let key = format!("impressions:rewards:user:{}:view_history", user_id);
+        let key = format!("impressions:test:rewards:user:{}:view_history", user_id);
 
         let history: Vec<String> = conn.lrange(&key, 0, limit as isize - 1).await?;
 
@@ -170,7 +178,7 @@ impl HistoryTracker {
         limit: usize,
     ) -> Result<Vec<RewardRecord>> {
         let mut conn = self.dragonfly_pool.get().await?;
-        let key = format!("impressions:rewards:user:{}:reward_history", user_id);
+        let key = format!("impressions:test:rewards:user:{}:reward_history", user_id);
 
         let history: Vec<String> = conn.lrange(&key, 0, limit as isize - 1).await?;
 
@@ -191,7 +199,10 @@ impl HistoryTracker {
         limit: usize,
     ) -> Result<Vec<RewardRecord>> {
         let mut conn = self.dragonfly_pool.get().await?;
-        let key = format!("impressions:rewards:creator:{}:reward_history", creator_id);
+        let key = format!(
+            "impressions:test:rewards:creator:{}:reward_history",
+            creator_id
+        );
 
         let history: Vec<String> = conn.lrange(&key, 0, limit as isize - 1).await?;
 
