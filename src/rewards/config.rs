@@ -43,7 +43,7 @@ impl Default for RewardConfig {
 /// Get the current reward configuration from Dragonfly
 pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardConfig> {
     let mut conn = dragonfly_pool.get().await?;
-    let config_key = "impressions:test:rewards:config".to_string();
+    let config_key = "impressions:rewards:config".to_string();
     let config_str: Option<String> = conn
         .get(&config_key)
         .await
@@ -67,8 +67,8 @@ pub async fn update_config(
 ) -> Result<()> {
     let mut conn = dragonfly_pool.get().await?;
 
-    let config_version_key = "impressions:test:rewards:config:version".to_string();
-    let config_key = "impressions:test:rewards:config".to_string();
+    let config_version_key = "impressions:rewards:config:version".to_string();
+    let config_key = "impressions:rewards:config".to_string();
 
     // Atomically increment the global config version
     let version: u64 = conn
@@ -93,7 +93,7 @@ pub async fn update_config(
 #[cfg(test)]
 pub async fn get_config_version(dragonfly_pool: &Arc<DragonflyPool>) -> Result<u64> {
     let mut conn = dragonfly_pool.get().await?;
-    let config_version_key = "impressions:test:rewards:config:version".to_string();
+    let config_version_key = "impressions:rewards:config:version".to_string();
     let version: Option<u64> = conn
         .get(&config_version_key)
         .await
@@ -108,8 +108,8 @@ async fn initialize_config(
 ) -> Result<()> {
     let mut conn = dragonfly_pool.get().await?;
 
-    let config_version_key = "impressions:test:rewards:config:version".to_string();
-    let config_key = "impressions:test:rewards:config".to_string();
+    let config_version_key = "impressions:rewards:config:version".to_string();
+    let config_key = "impressions:rewards:config".to_string();
 
     // Set initial version if not exists
     let _: bool = conn
@@ -152,8 +152,8 @@ mod tests {
             Self {
                 redis_pool: pool,
                 cleanup_keys: vec![
-                    "impressions:test:rewards:config".to_string(),
-                    "impressions:test:rewards:config:version".to_string(),
+                    "impressions:rewards:config".to_string(),
+                    "impressions:rewards:config:version".to_string(),
                 ],
             }
         }
