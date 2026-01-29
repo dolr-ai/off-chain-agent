@@ -35,6 +35,7 @@ where
 pub enum AnalyticsEvent {
     VideoWatched(VideoWatched),
     VideoDurationWatched(VideoDurationWatched),
+    VideoStarted(VideoStarted),
     LikeVideo(LikeVideo),
 }
 
@@ -59,6 +60,11 @@ impl<'de> Deserialize<'de> for AnalyticsEvent {
                     serde_json::from_value(value).map_err(serde::de::Error::custom)?;
                 Ok(AnalyticsEvent::VideoDurationWatched(video_duration_watched))
             }
+            Some("VideoStarted") => {
+                let video_started: VideoStarted =
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+                Ok(AnalyticsEvent::VideoStarted(video_started))
+            }
             Some("LikeVideo") => {
                 let like_video: LikeVideo =
                     serde_json::from_value(value).map_err(serde::de::Error::custom)?;
@@ -77,6 +83,7 @@ macro_rules! delegate_metric_method {
         match $self {
             AnalyticsEvent::VideoWatched(event) => event.$method(),
             AnalyticsEvent::VideoDurationWatched(event) => event.$method(),
+            AnalyticsEvent::VideoStarted(event) => event.$method(),
             AnalyticsEvent::LikeVideo(event) => event.$method(),
         }
     };
@@ -85,6 +92,7 @@ macro_rules! delegate_metric_method {
         match $self {
             AnalyticsEvent::VideoWatched(event) => serde_json::to_value(event).unwrap(),
             AnalyticsEvent::VideoDurationWatched(event) => serde_json::to_value(event).unwrap(),
+            AnalyticsEvent::VideoStarted(event) => serde_json::to_value(event).unwrap(),
             AnalyticsEvent::LikeVideo(event) => serde_json::to_value(event).unwrap(),
         }
     };
@@ -201,6 +209,44 @@ pub struct VideoDurationWatchedPayloadV2 {
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct VideoStartedPayload {
+    #[schema(value_type = String)]
+    pub user_id: Principal,
+    pub video_id: String,
+    #[schema(value_type = String)]
+    pub publisher_user_id: Principal,
+    #[serde(deserialize_with = "string_or_number")]
+    pub post_id: String,
+    pub feature_name: String,
+    pub like_count: u64,
+    pub share_count: u64,
+    pub view_count: u64,
+    pub is_game_enabled: bool,
+    pub game_type: String,
+    pub is_nsfw: bool,
+}
+
+// Wrapper type for VideoStarted that implements SealedMetric
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct VideoStarted {
+    payload: VideoStartedPayload,
+}
+
+impl SealedMetric for VideoStarted {
+    fn tag(&self) -> String {
+        "video_started".to_string()
+    }
+
+    fn user_id(&self) -> Option<String> {
+        Some(self.payload.user_id.to_string())
+    }
+
+    fn user_canister(&self) -> Option<Principal> {
+        Some(self.payload.user_id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
