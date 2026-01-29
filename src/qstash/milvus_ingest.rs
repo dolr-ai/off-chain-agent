@@ -679,7 +679,8 @@ async fn process_single_video(
     // TIER 1: Check Redis for exact match (FAST - <1ms)
     log::debug!("Tier 1: Checking Redis for exact phash match");
     let start = Instant::now();
-    let redis_result = check_exact_duplicate_in_redis(&state.rewards_module.dragonfly_pool, phash).await?;
+    let redis_result =
+        check_exact_duplicate_in_redis(&state.rewards_module.dragonfly_pool, phash).await?;
     metrics.record_redis_check(start.elapsed().as_micros());
 
     if let Some(existing_video_id) = redis_result {
