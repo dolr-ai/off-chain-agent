@@ -94,7 +94,7 @@ async fn video_deduplication_handler(
             &state.agent,
             &state.bigquery_client,
             &state.milvus_client,
-            &state.leaderboard_redis_pool,
+            &state.rewards_module.dragonfly_pool,
             &state.kvrocks_client,
             &req.video_id,
             &req.video_url,

@@ -8,6 +8,7 @@ use google_cloud_bigquery::http::job::get_query_results::GetQueryResultsRequest;
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use google_cloud_bigquery::http::tabledata::list::Value;
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -205,11 +206,6 @@ fn default_hamming_distance() -> u32 {
 /// Get BigQuery table name for given hamming distance threshold
 fn get_bigquery_table(hamming_distance: u32) -> String {
     format!("video_dedup_status_HAM{}", hamming_distance)
-}
-
-/// Get Redis key for phash (same for all thresholds)
-fn get_redis_key(phash: &str) -> String {
-    format!("video_phash:{}", phash)
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -634,18 +630,17 @@ async fn has_any_processed_videos(state: &AppState) -> Result<bool> {
 
 #[cfg(not(feature = "local-bin"))]
 async fn check_exact_duplicate_in_redis(
-    redis_pool: &bb8::Pool<bb8_redis::RedisConnectionManager>,
+    dragonfly_pool: &Arc<crate::yral_auth::dragonfly::DragonflyPool>,
     phash: &str,
 ) -> Result<Option<String>> {
-    let mut conn = redis_pool
+    let mut conn = dragonfly_pool
         .get()
         .await
-        .context("Failed to get Redis connection")?;
+        .context("Failed to get Dragonfly connection")?;
 
-    let key = format!("video_phash:{}", phash);
-    let result: Option<String> = redis::cmd("GET")
-        .arg(&key)
-        .query_async(&mut *conn)
+    let key = format!("impressions:video_phash:{}", phash);
+    let result: Option<String> = conn
+        .get(&key)
         .await
         .context("Failed to query Redis for phash")?;
 
@@ -654,20 +649,17 @@ async fn check_exact_duplicate_in_redis(
 
 #[cfg(not(feature = "local-bin"))]
 async fn store_unique_phash_in_redis(
-    redis_pool: &bb8::Pool<bb8_redis::RedisConnectionManager>,
+    dragonfly_pool: &Arc<crate::yral_auth::dragonfly::DragonflyPool>,
     phash: &str,
     video_id: &str,
 ) -> Result<()> {
-    let mut conn = redis_pool
+    let mut conn = dragonfly_pool
         .get()
         .await
-        .context("Failed to get Redis connection")?;
+        .context("Failed to get Dragonfly connection")?;
 
-    let key = format!("video_phash:{}", phash);
-    redis::cmd("SET")
-        .arg(&key)
-        .arg(video_id)
-        .query_async::<()>(&mut *conn)
+    let key = format!("impressions:video_phash:{}", phash);
+    conn.set::<_, _, ()>(&key, video_id)
         .await
         .context("Failed to store phash in Redis")?;
 
@@ -687,7 +679,7 @@ async fn process_single_video(
     // TIER 1: Check Redis for exact match (FAST - <1ms)
     log::debug!("Tier 1: Checking Redis for exact phash match");
     let start = Instant::now();
-    let redis_result = check_exact_duplicate_in_redis(&state.leaderboard_redis_pool, phash).await?;
+    let redis_result = check_exact_duplicate_in_redis(&state.rewards_module.dragonfly_pool, phash).await?;
     metrics.record_redis_check(start.elapsed().as_micros());
 
     if let Some(existing_video_id) = redis_result {
@@ -776,7 +768,7 @@ async fn process_single_video(
 
         // Store in Redis (only unique hashes)
         let start = Instant::now();
-        store_unique_phash_in_redis(&state.leaderboard_redis_pool, phash, video_id)
+        store_unique_phash_in_redis(&state.rewards_module.dragonfly_pool, phash, video_id)
             .await
             .context("Failed to store phash in Redis")?;
         metrics.record_redis_insert(start.elapsed().as_micros());
@@ -1154,19 +1146,20 @@ async fn bulk_insert_to_milvus_and_redis(
 
     // Insert into Redis using pipeline (for exact match caching)
     let mut conn = state
-        .leaderboard_redis_pool
+        .rewards_module
+        .dragonfly_pool
         .get()
         .await
-        .context("Failed to get Redis connection")?;
+        .context("Failed to get Dragonfly connection")?;
 
     // Use Redis pipeline for batch SET operations (much faster than individual SETs)
     let mut pipe = redis::pipe();
     for (video_id, phash) in videos {
-        let redis_key = get_redis_key(phash);
+        let redis_key = format!("impressions:video_phash:{}", phash);
         pipe.set(&redis_key, video_id);
     }
 
-    pipe.query_async::<()>(&mut *conn)
+    pipe.query_async::<()>(&mut conn)
         .await
         .context("Failed to store phashes in Redis")?;
 
