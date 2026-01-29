@@ -5,12 +5,14 @@ pub mod config;
 pub mod engine;
 pub mod fraud_detection;
 pub mod history;
+pub mod icpswap;
 pub mod user_verification;
 pub mod view_tracking;
 pub mod wallet;
 
 pub use btc_conversion::BtcConverter;
 pub use engine::RewardEngine;
+pub use icpswap::IcpSwapClient;
 pub use view_tracking::ViewTracker;
 
 use crate::yral_auth::dragonfly::DragonflyPool;
@@ -22,6 +24,7 @@ pub struct RewardsModule {
     pub view_tracker: ViewTracker,
     pub reward_engine: RewardEngine,
     pub btc_converter: BtcConverter,
+    pub icpswap_client: Option<IcpSwapClient>,
     pub dragonfly_pool: Arc<DragonflyPool>,
 }
 
@@ -40,10 +43,22 @@ impl RewardsModule {
         let reward_engine = RewardEngine::with_config(dragonfly_pool.clone(), admin_agent, config);
         let btc_converter = BtcConverter::new();
 
+        let icpswap_client = match IcpSwapClient::new().await {
+            Ok(client) => {
+                log::info!("ICPSwap client initialized successfully");
+                Some(client)
+            }
+            Err(e) => {
+                log::error!("Failed to initialize ICPSwap client: {}", e);
+                None
+            }
+        };
+
         Self {
             view_tracker,
             reward_engine,
             btc_converter,
+            icpswap_client,
             dragonfly_pool,
         }
     }
