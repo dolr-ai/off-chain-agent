@@ -5,7 +5,16 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RewardTokenType {
+    #[default]
+    Btc,
+    Dolr,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
 pub struct RewardConfig {
     pub reward_amount_inr: f64,
     pub view_milestone: u64,
@@ -13,6 +22,8 @@ pub struct RewardConfig {
     pub fraud_threshold: usize,
     pub shadow_ban_duration: u64,
     pub config_version: u64,
+    /// Token type for rewards: "btc" (default) or "dolr"
+    pub reward_token: RewardTokenType,
 }
 
 impl Default for RewardConfig {
@@ -24,6 +35,7 @@ impl Default for RewardConfig {
             fraud_threshold: 5,
             shadow_ban_duration: 3600,
             config_version: 1,
+            reward_token: RewardTokenType::default(),
         }
     }
 }
@@ -140,8 +152,8 @@ mod tests {
             Self {
                 redis_pool: pool,
                 cleanup_keys: vec![
-                    "rewards:config".to_string(),
-                    "rewards:config:version".to_string(),
+                    "impressions:rewards:config".to_string(),
+                    "impressions:rewards:config:version".to_string(),
                 ],
             }
         }

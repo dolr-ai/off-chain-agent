@@ -217,8 +217,8 @@ mod tests {
             let mut conn = self.detector.redis_pool.get().await?;
 
             let patterns = vec![
-                format!("rewards:user:*:recent"),
-                format!("rewards:shadow_ban:*"),
+                format!("impressions:rewards:user:*:recent"),
+                format!("impressions:rewards:shadow_ban:*"),
             ];
 
             for pattern in patterns {

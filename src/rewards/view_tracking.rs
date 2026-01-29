@@ -323,9 +323,9 @@ mod tests {
             let mut conn = self.tracker.pool.get().await?;
 
             let patterns = vec![
-                format!("rewards:video:{}*", self.key_prefix),
-                format!("rewards:views:{}*", self.key_prefix),
-                "rewards:config:version".to_string(),
+                format!("impressions:rewards:video:{}*", self.key_prefix),
+                format!("impressions:rewards:views:{}*", self.key_prefix),
+                "impressions:rewards:config:version".to_string(),
             ];
 
             for pattern in patterns {
@@ -465,7 +465,7 @@ mod tests {
 
         let mut conn = test_tracker.tracker.pool.get().await.unwrap();
         let _: () = conn
-            .set::<_, _, ()>("rewards:config:version", "2")
+            .set::<_, _, ()>("impressions:rewards:config:version", "2")
             .await
             .unwrap();
 
@@ -631,7 +631,7 @@ mod tests {
         // Change config version
         let mut conn = test_tracker.tracker.pool.get().await.unwrap();
         let _: () = conn
-            .set::<_, _, ()>("rewards:config:version", "2")
+            .set::<_, _, ()>("impressions:rewards:config:version", "2")
             .await
             .unwrap();
 

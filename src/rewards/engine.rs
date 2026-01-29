@@ -347,17 +347,34 @@ impl RewardEngine {
         config: &RewardConfig,
         app_state: &Arc<AppState>,
     ) -> Result<()> {
-        // Convert INR to BTC
-        let btc_amount = self
-            .btc_converter
-            .convert_inr_to_btc(config.reward_amount_inr)
-            .await?;
+        use crate::rewards::config::RewardTokenType;
+
+        // Total INR reward for this milestone
+        let total_inr = config.reward_amount_inr * config.view_milestone as f64;
+
+        // Convert INR to token amount based on reward_token type
+        let token_amount = match config.reward_token {
+            RewardTokenType::Btc => {
+                // Use live BTC/INR rate from blockchain.info
+                self.btc_converter.convert_inr_to_btc(total_inr).await?
+            }
+            RewardTokenType::Dolr => {
+                // Use live DOLR/USD rate from CoinGecko
+                self.btc_converter.convert_inr_to_dolr(total_inr).await?
+            }
+        };
+
+        let token_name = match config.reward_token {
+            RewardTokenType::Btc => "BTC",
+            RewardTokenType::Dolr => "DOLR",
+        };
 
         log::info!(
-            "Processing reward for creator {}: {} BTC (₹{}) for video {} milestone {}",
+            "Processing reward for creator {}: {} {} (₹{}) for video {} milestone {}",
             creator_id,
-            btc_amount,
-            config.reward_amount_inr,
+            token_amount,
+            token_name,
+            total_inr,
             video_id,
             milestone_number
         );
@@ -366,8 +383,8 @@ impl RewardEngine {
         let reward_record = RewardRecord {
             video_id: video_id.to_string(),
             milestone: milestone_number,
-            reward_btc: btc_amount,
-            reward_inr: config.reward_amount_inr,
+            reward_btc: token_amount,
+            reward_inr: total_inr,
             timestamp: Utc::now().timestamp(),
             tx_id: None,
             view_count,
@@ -378,21 +395,23 @@ impl RewardEngine {
             .record_reward(creator_id, reward_record.clone())
             .await;
 
-        // Queue BTC transaction
+        // Queue token transaction
         match self
             .wallet
-            .queue_btc_reward(
+            .queue_reward(
                 *creator_id,
-                btc_amount,
-                config.reward_amount_inr,
+                token_amount,
+                total_inr,
                 video_id,
                 milestone_number,
+                config.reward_token,
             )
             .await
         {
             Ok(tx_id) => {
                 log::info!(
-                    "BTC reward queued successfully for creator {} with tx_id: {}",
+                    "{} reward queued successfully for creator {} with tx_id: {}",
+                    token_name,
                     creator_id,
                     tx_id
                 );
@@ -408,8 +427,8 @@ impl RewardEngine {
                         creator_id,
                         video_id,
                         milestone: milestone_number,
-                        reward_btc: btc_amount,
-                        reward_inr: config.reward_amount_inr,
+                        reward_btc: token_amount,
+                        reward_inr: total_inr,
                         view_count,
                         tx_id: Some(tx_id.clone()),
                     },
@@ -422,8 +441,8 @@ impl RewardEngine {
                     creator_id,
                     video_id,
                     milestone_number,
-                    btc_amount,
-                    config.reward_amount_inr,
+                    token_amount,
+                    total_inr,
                     view_count,
                     app_state,
                 )
@@ -431,7 +450,8 @@ impl RewardEngine {
             }
             Err(e) => {
                 log::error!(
-                    "Failed to queue BTC reward for creator {}: {}",
+                    "Failed to queue {} reward for creator {}: {}",
+                    token_name,
                     creator_id,
                     e
                 );
