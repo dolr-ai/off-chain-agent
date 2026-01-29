@@ -295,10 +295,11 @@ impl VideoHashDuplication {
     ) -> Result<(), anyhow::Error> {
         log::info!("Processing content approval for video_id: {}", video_id);
 
-        // Query both country and canister_id from the video_upload_successful event
+        // Query country, canister_id, and type_ext from the video_upload_successful event
         let event_query = format!(
             "SELECT JSON_EXTRACT_SCALAR(params, '$.country') AS country,
-                    JSON_EXTRACT_SCALAR(params, '$.canister_id') AS canister_id
+                    JSON_EXTRACT_SCALAR(params, '$.canister_id') AS canister_id,
+                    JSON_EXTRACT_SCALAR(params, '$.event_data.type_ext') AS type_ext
              FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
              WHERE event = 'video_upload_successful'
                AND JSON_EXTRACT_SCALAR(params, '$.video_id') = '{}'
@@ -320,7 +321,7 @@ impl VideoHashDuplication {
             Ok(response) => {
                 if let Some(rows) = response.rows {
                     if let Some(row) = rows.first() {
-                        let is_bot = row.f.first().is_some_and(|cell| match &cell.v {
+                        let is_bot_country = row.f.first().is_some_and(|cell| match &cell.v {
                             google_cloud_bigquery::http::tabledata::list::Value::String(
                                 country,
                             ) => {
@@ -342,6 +343,24 @@ impl VideoHashDuplication {
                             }
                             _ => None,
                         });
+
+                        let is_ai_video = row.f.get(2).is_some_and(|cell| match &cell.v {
+                            google_cloud_bigquery::http::tabledata::list::Value::String(
+                                type_ext,
+                            ) => {
+                                let is_ai = type_ext == "ai_video";
+                                log::debug!(
+                                    "Video {} has type_ext '{}', is_ai_video: {}",
+                                    video_id,
+                                    type_ext,
+                                    is_ai
+                                );
+                                is_ai
+                            }
+                            _ => false,
+                        });
+
+                        let is_bot = is_bot_country || is_ai_video;
 
                         (is_bot, canister_id)
                     } else {
