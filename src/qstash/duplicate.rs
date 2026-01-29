@@ -13,11 +13,10 @@ use crate::{
 use anyhow::Context;
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use yral_canisters_client::dedup_index::{DedupIndex, SystemTime as CanisterSystemTime};
-
-type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VideoPublisherDataV2 {
@@ -469,18 +468,17 @@ impl VideoHashDuplication {
 
     /// Check Redis for exact phash match (tier-1 caching)
     async fn check_exact_duplicate_in_redis(
-        redis_pool: &RedisPool,
+        dragonfly_pool: &std::sync::Arc<crate::yral_auth::dragonfly::DragonflyPool>,
         phash: &str,
     ) -> Result<Option<String>, anyhow::Error> {
-        let mut conn = redis_pool
+        let mut conn = dragonfly_pool
             .get()
             .await
-            .context("Failed to get Redis connection")?;
+            .context("Failed to get Dragonfly connection")?;
 
-        let key = format!("video_phash:{}", phash);
-        let result: Option<String> = redis::cmd("GET")
-            .arg(&key)
-            .query_async(&mut *conn)
+        let key = format!("impressions:video_phash:{}", phash);
+        let result: Option<String> = conn
+            .get(&key)
             .await
             .context("Failed to query Redis for phash")?;
 
@@ -489,20 +487,17 @@ impl VideoHashDuplication {
 
     /// Store unique phash in Redis for fast exact match lookups
     async fn store_unique_phash_in_redis(
-        redis_pool: &RedisPool,
+        dragonfly_pool: &std::sync::Arc<crate::yral_auth::dragonfly::DragonflyPool>,
         phash: &str,
         video_id: &str,
     ) -> Result<(), anyhow::Error> {
-        let mut conn = redis_pool
+        let mut conn = dragonfly_pool
             .get()
             .await
-            .context("Failed to get Redis connection")?;
+            .context("Failed to get Dragonfly connection")?;
 
-        let key = format!("video_phash:{}", phash);
-        redis::cmd("SET")
-            .arg(&key)
-            .arg(video_id)
-            .query_async::<()>(&mut *conn)
+        let key = format!("impressions:video_phash:{}", phash);
+        conn.set::<_, _, ()>(&key, video_id)
             .await
             .context("Failed to store phash in Redis")?;
 
@@ -518,7 +513,7 @@ impl VideoHashDuplication {
         agent: &ic_agent::Agent,
         bigquery_client: &google_cloud_bigquery::client::Client,
         milvus_client: &Option<crate::milvus::Client>,
-        redis_pool: &RedisPool,
+        dragonfly_pool: &std::sync::Arc<crate::yral_auth::dragonfly::DragonflyPool>,
         kvrocks_client: &KvrocksClient,
         video_id: &str,
         _video_url: &str,
@@ -544,7 +539,7 @@ impl VideoHashDuplication {
         // TIER 1: Check Redis for exact match (FAST - <1ms)
         log::debug!("Tier 1: Checking Redis for exact phash match");
         if let Ok(Some(existing_video_id)) =
-            Self::check_exact_duplicate_in_redis(redis_pool, &phash).await
+            Self::check_exact_duplicate_in_redis(dragonfly_pool, &phash).await
         {
             log::info!(
                 "⚡ EXACT DUPLICATE (Redis): Video {} has identical phash to {}",
@@ -662,7 +657,7 @@ impl VideoHashDuplication {
 
                 // Insert into Redis for fast exact match caching
                 if let Err(e) =
-                    Self::store_unique_phash_in_redis(redis_pool, &phash, video_id).await
+                    Self::store_unique_phash_in_redis(dragonfly_pool, &phash, video_id).await
                 {
                     log::error!("Failed to insert video {} into Redis: {}", video_id, e);
                 }
