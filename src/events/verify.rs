@@ -141,6 +141,7 @@ pub async fn verify_event_bulk_request_v3(
 
     let verified_request = VerifiedEventBulkRequestV2 {
         events: event_bulk_request.events,
+        user_id: user_principal.to_string(),
     };
 
     let request_body = serde_json::to_string(&verified_request).unwrap();
