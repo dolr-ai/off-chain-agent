@@ -342,8 +342,7 @@ impl RewardEngine {
     /// Process a video started event (for profile normal view tracking only)
     pub async fn process_video_started(&self, event: VideoStartedPayload) -> Result<()> {
         if let Some(user_id_str) = &event.user_id {
-            let user_id = Principal::from_text(user_id_str)
-                .context("Invalid user_id format")?;
+            let user_id = Principal::from_text(user_id_str).context("Invalid user_id format")?;
 
             // Only track if feature_name is "profile"
             if event.feature_name == "profile" {

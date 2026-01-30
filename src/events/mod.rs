@@ -306,7 +306,10 @@ async fn handle_bulk_events_v2(
         if event_name == "video_started" {
             if let Value::Object(ref mut map) = payload {
                 if !map.contains_key("user_id") {
-                    map.insert("user_id".to_string(), Value::String(request.user_id.clone()));
+                    map.insert(
+                        "user_id".to_string(),
+                        Value::String(request.user_id.clone()),
+                    );
                 }
             }
         }
