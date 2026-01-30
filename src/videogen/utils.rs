@@ -81,7 +81,7 @@ pub fn create_user_agent_if_dolr(
     identity: DelegatedIdentity,
     token_type: &TokenType,
 ) -> Result<Option<Agent>, (StatusCode, Json<VideoGenError>)> {
-    if matches!(token_type, TokenType::Dolr) {
+    if matches!(token_type, TokenType::Dolr | TokenType::YralProSubscription) {
         let agent = Agent::builder()
             .with_identity(identity)
             .with_url("https://ic0.app")
