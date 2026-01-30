@@ -9,11 +9,16 @@ use tokio::sync::RwLock;
 const DOLR_ICP_POOL: &str = "rxwy2-zaaaa-aaaag-qcfna-cai"; // DOLR/ICP pool
 const ICP_CKUSDT_POOL: &str = "hkstf-6iaaa-aaaag-qkcoq-cai"; // ICP/ckUSDT pool
 
+// Token ledger canister IDs
+const DOLR_LEDGER: &str = "uuikl-viaaa-aaaap-ahfyq-cai"; // DOLR token ledger
+const ICP_LEDGER: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai"; // ICP ledger
+const CKUSDT_LEDGER: &str = "cngnf-vqaaa-aaaar-qag4q-cai"; // ckUSDT ledger
+
 // Cache duration: 30 minutes
 const PRICE_CACHE_DURATION_SECS: i64 = 1800;
 
-// Default fallback rate if ICPSwap fails
-const DEFAULT_DOLR_USD_RATE: f64 = 0.000413;
+// Default fallback rate if ICPSwap fails (matches CoinGecko)
+const DEFAULT_DOLR_USD_RATE: f64 = 0.00041;
 
 #[derive(Debug, Clone)]
 struct CachedPrice {
@@ -105,15 +110,22 @@ impl IcpSwapClient {
 
         let icp_per_dolr = dolr_icp_quote as f64 / 100_000_000.0;
 
+        log::debug!("DOLR/ICP raw quote: {} e8s", dolr_icp_quote);
         log::debug!("DOLR/ICP rate: 1 DOLR = {} ICP", icp_per_dolr);
 
         let icp_amount = dolr_icp_quote.to_string();
         let icp_ckusdt_quote = self
-            .query_pool_quote(ICP_CKUSDT_POOL, &icp_amount, true)
+            .query_pool_quote(ICP_CKUSDT_POOL, &icp_amount, false) // Use false for ICP→ckUSDT
             .await
             .context("Failed to query ICP/ckUSDT pool")?;
 
+        log::debug!(
+            "ICP/ckUSDT raw quote: {} (for {} ICP e8s)",
+            icp_ckusdt_quote,
+            dolr_icp_quote
+        );
         let ckusdt_amount = icp_ckusdt_quote as f64 / 1_000_000.0;
+        log::debug!("ckUSDT amount: {}", ckusdt_amount);
 
         log::debug!("{} ICP = {} ckUSDT", icp_per_dolr, ckusdt_amount);
 
@@ -221,6 +233,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_pool_quote_directions() {
+        println!("\n🔧 Testing both quote directions...");
+        let client = IcpSwapClient::new().await.expect("Failed to create client");
+
+        let dolr_amount = "100000000"; // 1 DOLR
+
+        println!("\n📊 DOLR/ICP Pool - Testing both directions:");
+        match client
+            .query_pool_quote(DOLR_ICP_POOL, dolr_amount, true)
+            .await
+        {
+            Ok(result) => println!(
+                "   zero_for_one=true:  {} (= {} ICP)",
+                result,
+                result as f64 / 100_000_000.0
+            ),
+            Err(e) => println!("   zero_for_one=true:  ❌ {}", e),
+        }
+        match client
+            .query_pool_quote(DOLR_ICP_POOL, dolr_amount, false)
+            .await
+        {
+            Ok(result) => println!(
+                "   zero_for_one=false: {} (= {} ICP)",
+                result,
+                result as f64 / 100_000_000.0
+            ),
+            Err(e) => println!("   zero_for_one=false: ❌ {}", e),
+        }
+
+        let icp_amount = "10000000"; // 0.1 ICP
+        println!("\n📊 ICP/ckUSDT Pool - Testing both directions:");
+        match client
+            .query_pool_quote(ICP_CKUSDT_POOL, icp_amount, true)
+            .await
+        {
+            Ok(result) => println!(
+                "   zero_for_one=true:  {} (= {} ckUSDT)",
+                result,
+                result as f64 / 1_000_000.0
+            ),
+            Err(e) => println!("   zero_for_one=true:  ❌ {}", e),
+        }
+        match client
+            .query_pool_quote(ICP_CKUSDT_POOL, icp_amount, false)
+            .await
+        {
+            Ok(result) => println!(
+                "   zero_for_one=false: {} (= {} ckUSDT)",
+                result,
+                result as f64 / 1_000_000.0
+            ),
+            Err(e) => println!("   zero_for_one=false: ❌ {}", e),
+        }
+    }
+
+    #[tokio::test]
     #[ignore] // Requires network access to ICP - ACTUAL CANISTER CALLS
     async fn test_live_query_dolr_icp_pool() {
         println!("\n🔧 Testing DOLR/ICP pool query...");
@@ -298,10 +367,10 @@ mod tests {
                 println!("   1 DOLR = ${:.10} USD", r);
                 println!("   1 USD = {:.2} DOLR", 1.0 / r);
 
-                // Sanity checks
+                // Sanity checks - DOLR should be around $0.0004
                 assert!(r > 0.0, "Rate should be positive");
-                assert!(r < 2.0, "Rate seems too large (> $2 per DOLR)");
-                assert!(r > 0.01, "Rate seems too small (< $0.01 per DOLR)");
+                assert!(r < 0.001, "Rate seems too large (> $0.001 per DOLR)");
+                assert!(r > 0.0001, "Rate seems too small (< $0.0001 per DOLR)");
             }
             Err(e) => {
                 panic!("❌ Failed to fetch DOLR/USD rate: {}", e);
@@ -323,8 +392,10 @@ mod tests {
                 let dolr_e8s = (dolr_amount * 100_000_000.0) as u64;
                 println!("   In e8s: {}", dolr_e8s);
 
-                assert!(dolr_amount > 0.0001, "Should be at least 0.0001 DOLR");
-                assert!(dolr_amount < 0.1, "Should be less than 0.1 DOLR");
+                // For 0.04 INR at 92 INR/USD and DOLR at ~$0.00041:
+                // Expected: ~1.06 DOLR
+                assert!(dolr_amount > 0.5, "Should be at least 0.5 DOLR");
+                assert!(dolr_amount < 2.0, "Should be less than 2.0 DOLR");
 
                 // Compare with old bug
                 let old_bug_usd = inr_amount / inr_usd_rate;
