@@ -1,6 +1,8 @@
 use crate::{
     app_state::AppState,
-    events::types::{EventPayload, RewardEarnedPayload, VideoDurationWatchedPayloadV2},
+    events::types::{
+        EventPayload, RewardEarnedPayload, VideoDurationWatchedPayloadV2, VideoStartedPayload,
+    },
     rewards::{
         analytics,
         btc_conversion::BtcConverter,
@@ -332,6 +334,26 @@ impl RewardEngine {
                 )
                 .await;
             }
+        }
+
+        Ok(())
+    }
+
+    /// Process a video started event (for profile normal view tracking only)
+    pub async fn process_video_started(&self, event: VideoStartedPayload) -> Result<()> {
+        // Only track if feature_name is "profile"
+        if event.feature_name == "profile" {
+            log::info!(
+                "Recording profile normal view for video {} by user {}",
+                event.video_id,
+                event.user_id
+            );
+
+            // Track as normal view (increments total_count_all only, no deduplication)
+            let _ = self
+                .view_tracker
+                .track_view(&event.video_id, &event.user_id, false)
+                .await?;
         }
 
         Ok(())

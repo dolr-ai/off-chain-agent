@@ -169,6 +169,13 @@ async fn process_event_impl(
         event.process_btc_rewards(&shared_state.clone()).await;
     }
 
+    // Process video started events for profile normal views
+    if event.event.event == "video_started" {
+        event
+            .process_video_started_event(&shared_state.clone())
+            .await;
+    }
+
     Ok(())
 }
 
@@ -203,6 +210,13 @@ async fn process_event_impl_v2(
     // Process BTC rewards for video views
     if event.event.event == "video_duration_watched" {
         event.process_btc_rewards(&shared_state.clone()).await;
+    }
+
+    // Process video started events for profile normal views
+    if event.event.event == "video_started" {
+        event
+            .process_video_started_event(&shared_state.clone())
+            .await;
     }
 
     Ok(())

@@ -3,7 +3,7 @@ use crate::consts::{
 };
 use crate::events::types::{
     string_or_number, VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2,
-    VideoUploadSuccessfulPayload,
+    VideoStartedPayload, VideoUploadSuccessfulPayload,
 };
 use crate::pipeline::Step;
 use crate::setup_context;
@@ -446,6 +446,31 @@ impl Event {
             .await
         {
             log::error!("Failed to process BTC rewards: {e:?}");
+        }
+    }
+
+    pub async fn process_video_started_event(&self, app_state: &AppState) {
+        if self.event.event != "video_started" {
+            return;
+        }
+
+        // Parse the event parameters
+        let params: Result<VideoStartedPayload, _> = serde_json::from_str(&self.event.params);
+
+        let params = match params {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("Failed to parse video_started params: {e:?}");
+                return;
+            }
+        };
+
+        // Initialize reward engine
+        let reward_engine = app_state.rewards_module.reward_engine.clone();
+
+        // Process the video started event
+        if let Err(e) = reward_engine.process_video_started(params).await {
+            log::error!("Failed to process video_started event: {e:?}");
         }
     }
 }
