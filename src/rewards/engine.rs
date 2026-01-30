@@ -381,8 +381,24 @@ impl RewardEngine {
                 self.btc_converter.convert_inr_to_btc(total_inr).await?
             }
             RewardTokenType::Dolr => {
-                // Use live DOLR/USD rate from CoinGecko
-                self.btc_converter.convert_inr_to_dolr(total_inr).await?
+                // Use ICPSwap for DOLR price conversion
+                let icpswap_client = app_state
+                    .rewards_module
+                    .icpswap_client
+                    .as_ref()
+                    .context("ICPSwap client not available")?;
+
+                let amount = self
+                    .btc_converter
+                    .convert_inr_to_dolr_with_icpswap(total_inr, icpswap_client)
+                    .await?;
+
+                log::info!(
+                    "Used ICPSwap for DOLR conversion: ₹{} INR = {} DOLR",
+                    total_inr,
+                    amount
+                );
+                amount
             }
         };
 
