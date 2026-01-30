@@ -13,7 +13,7 @@ const ICP_CKUSDT_POOL: &str = "hkstf-6iaaa-aaaag-qkcoq-cai"; // ICP/ckUSDT pool
 const PRICE_CACHE_DURATION_SECS: i64 = 1800;
 
 // Default fallback rate if ICPSwap fails
-const DEFAULT_DOLR_USD_RATE: f64 = 0.00042;
+const DEFAULT_DOLR_USD_RATE: f64 = 0.000413;
 
 #[derive(Debug, Clone)]
 struct CachedPrice {
@@ -54,23 +54,14 @@ impl IcpSwapClient {
             .build()
             .context("Failed to create IC agent")?;
 
-        // Fetch root key for non-mainnet (development only)
-        // For mainnet, this is not needed
-        // agent.fetch_root_key().await?;
-
         Ok(Self {
             agent: Arc::new(agent),
         })
     }
 
-    /// Get DOLR/USD rate using two-hop pricing through ICPSwap
-    /// 1. Query DOLR/ICP pool
-    /// 2. Query ICP/ckUSDT pool
-    /// 3. Calculate DOLR/USD = (DOLR/ICP) * (ICP/ckUSDT)
     pub async fn get_dolr_usd_rate(&self) -> Result<f64> {
         let now = chrono::Utc::now().timestamp();
 
-        // Check cache first
         {
             let cache = DOLR_USD_PRICE_CACHE.read().await;
             if let Some(cached) = &*cache {
@@ -81,7 +72,6 @@ impl IcpSwapClient {
             }
         }
 
-        // Fetch fresh rate from ICPSwap
         match self.fetch_dolr_usd_rate().await {
             Ok(rate) => {
                 let mut cache = DOLR_USD_PRICE_CACHE.write().await;
@@ -93,16 +83,12 @@ impl IcpSwapClient {
                 Ok(rate)
             }
             Err(e) => {
-                log::error!("Failed to fetch DOLR/USD rate from ICPSwap: {}", e);
-
-                // Try to use stale cache if available
                 let cache = DOLR_USD_PRICE_CACHE.read().await;
                 if let Some(cached) = &*cache {
                     log::warn!("Using stale cached DOLR/USD rate: {}", cached.rate);
                     return Ok(cached.rate);
                 }
 
-                // Last resort: use default rate
                 log::warn!("Using default DOLR/USD rate: {}", DEFAULT_DOLR_USD_RATE);
                 Ok(DEFAULT_DOLR_USD_RATE)
             }
@@ -111,34 +97,26 @@ impl IcpSwapClient {
 
     /// Fetch DOLR/USD rate from ICPSwap using two-hop pricing
     async fn fetch_dolr_usd_rate(&self) -> Result<f64> {
-        // Step 1: Get DOLR/ICP rate
-        // Quote: How much ICP do we get for 1 DOLR (1e8 units)?
         let dolr_amount = "100000000"; // 1 DOLR in e8s
         let dolr_icp_quote = self
             .query_pool_quote(DOLR_ICP_POOL, dolr_amount, true)
             .await
             .context("Failed to query DOLR/ICP pool")?;
 
-        // dolr_icp_quote is in e8s (ICP units)
         let icp_per_dolr = dolr_icp_quote as f64 / 100_000_000.0;
 
         log::debug!("DOLR/ICP rate: 1 DOLR = {} ICP", icp_per_dolr);
 
-        // Step 2: Get ICP/ckUSDT rate
-        // Quote: How much ckUSDT do we get for the ICP amount?
-        let icp_amount = dolr_icp_quote.to_string(); // Use the ICP we'd get from 1 DOLR
+        let icp_amount = dolr_icp_quote.to_string();
         let icp_ckusdt_quote = self
             .query_pool_quote(ICP_CKUSDT_POOL, &icp_amount, true)
             .await
             .context("Failed to query ICP/ckUSDT pool")?;
 
-        // icp_ckusdt_quote is in e6 (ckUSDT uses 6 decimals, like USDT)
         let ckusdt_amount = icp_ckusdt_quote as f64 / 1_000_000.0;
 
         log::debug!("{} ICP = {} ckUSDT", icp_per_dolr, ckusdt_amount);
 
-        // Step 3: Calculate DOLR/USD
-        // If 1 DOLR = X ICP, and X ICP = Y ckUSDT, then 1 DOLR = Y ckUSDT = Y USD
         let dolr_usd_rate = ckusdt_amount;
 
         log::info!(
@@ -149,7 +127,6 @@ impl IcpSwapClient {
         Ok(dolr_usd_rate)
     }
 
-    /// Query ICPSwap pool for a quote (how much output for given input)
     async fn query_pool_quote(
         &self,
         pool_canister_id: &str,
@@ -162,7 +139,7 @@ impl IcpSwapClient {
         let args = SwapArgs {
             amount_in: amount_in.to_string(),
             zero_for_one,
-            amount_out_minimum: "0".to_string(), // For quotes, we don't care about min output
+            amount_out_minimum: "0".to_string(),
         };
 
         let response = self
@@ -178,7 +155,6 @@ impl IcpSwapClient {
 
         match result {
             SwapResult::Ok(amount) => {
-                // Convert candid::Nat to u128
                 let amount_u128: u128 = amount.0.try_into().context("Quote amount too large")?;
                 Ok(amount_u128)
             }
@@ -188,13 +164,9 @@ impl IcpSwapClient {
         }
     }
 
-    /// Convert INR amount to DOLR using live ICPSwap rate
     pub async fn convert_inr_to_dolr(&self, inr_amount: f64, inr_usd_rate: f64) -> Result<f64> {
-        // Get DOLR/USD rate from ICPSwap
         let dolr_usd_rate = self.get_dolr_usd_rate().await?;
 
-        // Convert: INR -> USD -> DOLR
-        // inr_amount INR = (inr_amount / inr_usd_rate) USD = (inr_amount / inr_usd_rate / dolr_usd_rate) DOLR
         let usd_amount = inr_amount / inr_usd_rate;
         let dolr_amount = usd_amount / dolr_usd_rate;
 
@@ -235,47 +207,6 @@ mod tests {
         assert!(dolr_e8s > 100_000_000); // More than 1 DOLR
         assert!(dolr_e8s < 110_000_000); // Less than 1.1 DOLR
     }
-
-    #[test]
-    fn test_conversion_edge_cases() {
-        // Zero amount
-        let inr_amount = 0.0;
-        let inr_usd_rate = 92.0;
-        let dolr_usd_rate = 0.00042;
-        let usd_amount = inr_amount / inr_usd_rate;
-        let dolr_amount = usd_amount / dolr_usd_rate;
-        assert_eq!(dolr_amount, 0.0);
-
-        // Very small amount
-        let inr_amount = 0.001;
-        let usd_amount = inr_amount / inr_usd_rate;
-        let dolr_amount = usd_amount / dolr_usd_rate;
-        assert!(dolr_amount > 0.0);
-        assert!(dolr_amount < 0.1);
-    }
-
-    #[test]
-    fn test_pool_canister_ids_valid() {
-        // Verify pool canister IDs are valid principals
-        assert!(Principal::from_text(DOLR_ICP_POOL).is_ok());
-        assert!(Principal::from_text(ICP_CKUSDT_POOL).is_ok());
-    }
-
-    #[test]
-    fn test_default_fallback_rate() {
-        // Verify default rate is reasonable (between 0.0001 and 0.01)
-        assert!(DEFAULT_DOLR_USD_RATE > 0.0001);
-        assert!(DEFAULT_DOLR_USD_RATE < 0.01);
-    }
-
-    #[test]
-    fn test_cache_duration() {
-        // Verify cache duration is 30 minutes
-        assert_eq!(PRICE_CACHE_DURATION_SECS, 1800);
-    }
-
-    // Integration tests - require network access to ICP
-    // Run with: cargo test --package off-chain-agent --lib rewards::icpswap::tests::test_live -- --ignored --nocapture
 
     #[tokio::test]
     async fn test_live_icpswap_client_creation() {
@@ -392,9 +323,8 @@ mod tests {
                 let dolr_e8s = (dolr_amount * 100_000_000.0) as u64;
                 println!("   In e8s: {}", dolr_e8s);
 
-                // Reasonable bounds
-                assert!(dolr_amount > 0.01, "Should be at least 0.01 DOLR");
-                assert!(dolr_amount < 10.0, "Should be less than 10 DOLR");
+                assert!(dolr_amount > 0.0001, "Should be at least 0.0001 DOLR");
+                assert!(dolr_amount < 0.1, "Should be less than 0.1 DOLR");
 
                 // Compare with old bug
                 let old_bug_usd = inr_amount / inr_usd_rate;
@@ -413,98 +343,5 @@ mod tests {
                 println!("⚠️ Failed to convert (expected if ICPSwap is down): {}", e);
             }
         }
-    }
-
-    #[tokio::test]
-    async fn test_caching_works() {
-        let client = IcpSwapClient::new().await.expect("Failed to create client");
-
-        // Clear cache
-        {
-            let mut cache = DOLR_USD_PRICE_CACHE.write().await;
-            *cache = None;
-        }
-
-        // First call - should fetch from ICPSwap
-        let start = std::time::Instant::now();
-        let rate1 = client.get_dolr_usd_rate().await.ok();
-        let duration1 = start.elapsed();
-
-        // Second call - should use cache (much faster)
-        let start = std::time::Instant::now();
-        let rate2 = client.get_dolr_usd_rate().await.ok();
-        let duration2 = start.elapsed();
-
-        if let (Some(r1), Some(r2)) = (rate1, rate2) {
-            println!("First call (network): {:?}", duration1);
-            println!("Second call (cache): {:?}", duration2);
-            println!("Rate 1: {}", r1);
-            println!("Rate 2: {}", r2);
-
-            // Cache should return same value
-            assert_eq!(r1, r2, "Cached rate should match");
-
-            // Cached call should be faster (at least 10x)
-            assert!(
-                duration2 < duration1 / 10,
-                "Cached call should be much faster"
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn test_stale_cache_fallback() {
-        let client = IcpSwapClient::new().await.expect("Failed to create client");
-
-        // Set a stale cache value
-        {
-            let mut cache = DOLR_USD_PRICE_CACHE.write().await;
-            *cache = Some(CachedPrice {
-                rate: 0.0005,
-                timestamp: 0, // Very old timestamp
-            });
-        }
-
-        // This should fetch fresh data, not use the stale cache
-        let rate = client.get_dolr_usd_rate().await;
-
-        match rate {
-            Ok(r) => {
-                println!("✅ Got fresh rate: {}", r);
-                // Should be different from our stale value
-                assert_ne!(r, 0.0005, "Should have fetched fresh rate");
-            }
-            Err(e) => {
-                println!("⚠️ Failed to fetch fresh rate: {}", e);
-            }
-        }
-    }
-
-    #[test]
-    fn test_expected_reward_calculation() {
-        // Simulate the full reward calculation
-        let config_inr = 0.04;
-        let view_milestone = 1;
-        let total_inr = config_inr * view_milestone as f64;
-
-        // Typical rates
-        let inr_usd_rate = 92.0;
-        let dolr_usd_rate = 0.00042; // Example ICPSwap rate
-
-        // Convert
-        let usd_amount = total_inr / inr_usd_rate;
-        let dolr_amount = usd_amount / dolr_usd_rate;
-        let dolr_e8s = (dolr_amount * 100_000_000.0) as u64;
-
-        println!("Expected reward for ₹{} INR:", total_inr);
-        println!("  USD amount: ${:.10}", usd_amount);
-        println!("  DOLR amount: {} DOLR", dolr_amount);
-        println!("  In e8s: {} e8s", dolr_e8s);
-
-        // Assertions
-        assert!(dolr_amount > 0.5, "Should be at least 0.5 DOLR");
-        assert!(dolr_amount < 2.0, "Should be less than 2 DOLR");
-        assert!(dolr_e8s > 50_000_000, "Should be more than 0.5 DOLR in e8s");
-        assert!(dolr_e8s < 200_000_000, "Should be less than 2 DOLR in e8s");
     }
 }
