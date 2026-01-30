@@ -9,11 +9,6 @@ use tokio::sync::RwLock;
 const DOLR_ICP_POOL: &str = "rxwy2-zaaaa-aaaag-qcfna-cai"; // DOLR/ICP pool
 const ICP_CKUSDT_POOL: &str = "hkstf-6iaaa-aaaag-qkcoq-cai"; // ICP/ckUSDT pool
 
-// Token ledger canister IDs
-const DOLR_LEDGER: &str = "uuikl-viaaa-aaaap-ahfyq-cai"; // DOLR token ledger
-const ICP_LEDGER: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai"; // ICP ledger
-const CKUSDT_LEDGER: &str = "cngnf-vqaaa-aaaar-qag4q-cai"; // ckUSDT ledger
-
 // Cache duration: 30 minutes
 const PRICE_CACHE_DURATION_SECS: i64 = 1800;
 
