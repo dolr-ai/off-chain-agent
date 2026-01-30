@@ -82,7 +82,7 @@ impl IcpSwapClient {
                 log::info!("Updated DOLR/USD rate from ICPSwap: {}", rate);
                 Ok(rate)
             }
-            Err(e) => {
+            Err(_) => {
                 let cache = DOLR_USD_PRICE_CACHE.read().await;
                 if let Some(cached) = &*cache {
                     log::warn!("Using stale cached DOLR/USD rate: {}", cached.rate);
