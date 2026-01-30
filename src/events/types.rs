@@ -213,13 +213,8 @@ pub struct VideoDurationWatchedPayloadV2 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct VideoStartedPayload {
-    #[schema(value_type = String)]
-    pub user_id: Principal,
     pub video_id: String,
-    #[schema(value_type = String)]
-    pub publisher_user_id: Principal,
-    #[serde(deserialize_with = "string_or_number")]
-    pub post_id: String,
+    pub publisher_user_id: String,
     pub feature_name: String,
     pub like_count: u64,
     pub share_count: u64,
@@ -227,6 +222,8 @@ pub struct VideoStartedPayload {
     pub is_game_enabled: bool,
     pub game_type: String,
     pub is_nsfw: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
 }
 
 // Wrapper type for VideoStarted that implements SealedMetric
@@ -241,11 +238,11 @@ impl SealedMetric for VideoStarted {
     }
 
     fn user_id(&self) -> Option<String> {
-        Some(self.payload.user_id.to_string())
+        None
     }
 
     fn user_canister(&self) -> Option<Principal> {
-        Some(self.payload.user_id)
+        None
     }
 }
 

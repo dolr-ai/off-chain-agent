@@ -276,6 +276,7 @@ pub struct EventBulkRequestV2 {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct VerifiedEventBulkRequestV2 {
     pub events: Vec<Value>,
+    pub user_id: String, // User ID from delegated identity
 }
 
 #[utoipa::path(
@@ -301,6 +302,14 @@ async fn handle_bulk_events_v2(
             .and_then(|v| v.as_str())
             .map(to_snake_case)
             .unwrap_or_else(|| "unknown".to_string());
+
+        if event_name == "video_started" {
+            if let Value::Object(ref mut map) = payload {
+                if !map.contains_key("user_id") {
+                    map.insert("user_id".to_string(), Value::String(request.user_id.clone()));
+                }
+            }
+        }
 
         // Remove "event" field from params (old AnalyticsEventV3.params() didn't include it)
         if let Value::Object(ref mut map) = payload {
