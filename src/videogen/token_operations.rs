@@ -40,17 +40,8 @@ pub fn get_token_operations(
                 )
             })?;
 
-            let user_principal = user_agent
-                .ok_or(VideoGenError::InvalidInput(
-                    "User principal required".to_owned(),
-                ))?
-                .get_principal()
-                .map_err(|e| VideoGenError::InvalidInput(format!("Invalid user principal {e}")))?;
             Ok(TokenOperationsProvider::YralProSubscription(
-                YralProSubscriptionOperation {
-                    admin_agent: admin,
-                    user_principal,
-                },
+                YralProSubscriptionOperation { admin_agent: admin },
             ))
         }
         TokenType::Free => Err(VideoGenError::InvalidInput(
