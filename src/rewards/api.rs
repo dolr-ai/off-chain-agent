@@ -321,11 +321,65 @@ async fn get_creator_reward_history(
 async fn get_reward_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ConfigResponse>, (StatusCode, String)> {
+    use crate::rewards::config::RewardMode;
+
     // Get config from RewardEngine (fetches from Dragonfly)
     let config = state.rewards_module.reward_engine.get_config().await;
 
-    // Return None if reward_amount_inr is 0 (rewards disabled)
-    let response = if config.reward_amount_inr == 0.0 {
+    // Convert reward_mode to inr_amount_per_view for backward compatibility check
+    let inr_amount_per_view = match &config.reward_mode {
+        RewardMode::InrAmount {
+            amount_per_view_inr,
+        } => *amount_per_view_inr,
+        RewardMode::DirectTokenE8s {
+            amount_per_milestone_e8s,
+        } => {
+            // Convert e8s per milestone to INR per view for API compatibility
+            // First convert e8s to token amount
+            let token_amount = *amount_per_milestone_e8s as f64 / 100_000_000.0;
+
+            // Get the exchange rate and convert to INR
+            let inr_total = match config.reward_token {
+                crate::rewards::config::RewardTokenType::Btc => {
+                    // Get BTC/INR rate
+                    match state.rewards_module.btc_converter.get_btc_inr_rate().await {
+                        Ok(rate) => token_amount * rate,
+                        Err(e) => {
+                            log::error!("Failed to get BTC/INR rate for config API: {}", e);
+                            0.0
+                        }
+                    }
+                }
+                crate::rewards::config::RewardTokenType::Dolr => {
+                    // Get DOLR → USD → INR
+                    if let Some(icpswap_client) = &state.rewards_module.icpswap_client {
+                        match (
+                            icpswap_client.get_dolr_usd_rate().await,
+                            state.rewards_module.btc_converter.get_inr_usd_rate().await,
+                        ) {
+                            (Ok(dolr_usd_rate), Ok(inr_usd_rate)) => {
+                                let usd_amount = token_amount * dolr_usd_rate;
+                                usd_amount * inr_usd_rate
+                            }
+                            _ => {
+                                log::error!("Failed to get exchange rates for DOLR config API");
+                                0.0
+                            }
+                        }
+                    } else {
+                        log::error!("ICPSwap client not available for config API");
+                        0.0
+                    }
+                }
+            };
+
+            // Convert from total INR per milestone to INR per view
+            inr_total / config.view_milestone as f64
+        }
+    };
+
+    // Return None if inr_amount_per_view is 0 (rewards disabled)
+    let response = if inr_amount_per_view == 0.0 {
         ConfigResponse { config: None }
     } else {
         ConfigResponse {
@@ -349,11 +403,60 @@ async fn get_reward_config(
 async fn get_reward_config_v2(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ConfigResponseV2>, (StatusCode, String)> {
+    use crate::rewards::config::RewardMode;
+
     // Get config from RewardEngine (fetches from Dragonfly)
     let config = state.rewards_module.reward_engine.get_config().await;
 
+    // Convert reward_mode to reward_amount_inr for backward compatibility
+    let inr_amount_per_view = match &config.reward_mode {
+        RewardMode::InrAmount {
+            amount_per_view_inr,
+        } => *amount_per_view_inr,
+        RewardMode::DirectTokenE8s {
+            amount_per_milestone_e8s,
+        } => {
+            // Convert e8s per milestone to INR per view for API compatibility
+            let token_amount = *amount_per_milestone_e8s as f64 / 100_000_000.0;
+
+            let inr_total = match config.reward_token {
+                crate::rewards::config::RewardTokenType::Btc => {
+                    match state.rewards_module.btc_converter.get_btc_inr_rate().await {
+                        Ok(rate) => token_amount * rate,
+                        Err(e) => {
+                            log::error!("Failed to get BTC/INR rate for config API: {}", e);
+                            0.0
+                        }
+                    }
+                }
+                crate::rewards::config::RewardTokenType::Dolr => {
+                    if let Some(icpswap_client) = &state.rewards_module.icpswap_client {
+                        match (
+                            icpswap_client.get_dolr_usd_rate().await,
+                            state.rewards_module.btc_converter.get_inr_usd_rate().await,
+                        ) {
+                            (Ok(dolr_usd_rate), Ok(inr_usd_rate)) => {
+                                let usd_amount = token_amount * dolr_usd_rate;
+                                usd_amount * inr_usd_rate
+                            }
+                            _ => {
+                                log::error!("Failed to get exchange rates for DOLR config API");
+                                0.0
+                            }
+                        }
+                    } else {
+                        log::error!("ICPSwap client not available for config API");
+                        0.0
+                    }
+                }
+            };
+
+            inr_total / config.view_milestone as f64
+        }
+    };
+
     // Return None if reward_amount_inr is 0 (rewards disabled)
-    if config.reward_amount_inr == 0.0 {
+    if inr_amount_per_view == 0.0 {
         return Ok(Json(ConfigResponseV2 { config: None }));
     }
 
@@ -371,10 +474,10 @@ async fn get_reward_config_v2(
             )
         })?;
 
-    let reward_amount_usd = config.reward_amount_inr / inr_usd_rate;
+    let reward_amount_usd = inr_amount_per_view / inr_usd_rate;
 
     let config_v2 = RewardConfigV2 {
-        reward_amount_inr: config.reward_amount_inr,
+        reward_amount_inr: inr_amount_per_view,
         reward_amount_usd,
         view_milestone: config.view_milestone,
         min_watch_duration: config.min_watch_duration,

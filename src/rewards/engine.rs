@@ -257,7 +257,7 @@ impl RewardEngine {
                         )
                         .await;
 
-                    if milestone_result.is_ok() {
+                    if let Ok(inr_for_analytics) = milestone_result {
                         // 7. Fraud detection (async, non-blocking)
                         let fraud_check = self
                             .fraud_detector
@@ -269,7 +269,7 @@ impl RewardEngine {
                                 publisher_user_id
                             );
                         }
-                        (true, Some(config.reward_amount_inr))
+                        (true, Some(inr_for_analytics))
                     } else {
                         log::error!(
                             "Failed to process milestone reward for video {} by user {}",
@@ -369,6 +369,7 @@ impl RewardEngine {
     }
 
     /// Process a milestone reward
+    /// Returns the INR amount (for analytics tracking)
     async fn process_milestone(
         &self,
         video_id: &str,
@@ -377,37 +378,95 @@ impl RewardEngine {
         milestone_number: u64,
         config: &RewardConfig,
         app_state: &Arc<AppState>,
-    ) -> Result<()> {
-        use crate::rewards::config::RewardTokenType;
+    ) -> Result<f64> {
+        use crate::rewards::config::{RewardMode, RewardTokenType};
 
-        // Total INR reward for this milestone
-        let total_inr = config.reward_amount_inr * config.view_milestone as f64;
+        // Calculate reward based on mode
+        let (token_amount, total_inr) = match &config.reward_mode {
+            RewardMode::InrAmount {
+                amount_per_view_inr,
+            } => {
+                // Mode 1: INR amount → convert to tokens
+                let total_inr = amount_per_view_inr * config.view_milestone as f64;
 
-        // Convert INR to token amount based on reward_token type
-        let token_amount = match config.reward_token {
-            RewardTokenType::Btc => {
-                // Use live BTC/INR rate from blockchain.info
-                self.btc_converter.convert_inr_to_btc(total_inr).await?
+                // Convert INR to token amount based on reward_token type
+                let token_amount = match config.reward_token {
+                    RewardTokenType::Btc => {
+                        // Use live BTC/INR rate from blockchain.info
+                        self.btc_converter.convert_inr_to_btc(total_inr).await?
+                    }
+                    RewardTokenType::Dolr => {
+                        // Use ICPSwap for DOLR price conversion
+                        let icpswap_client = app_state
+                            .rewards_module
+                            .icpswap_client
+                            .as_ref()
+                            .context("ICPSwap client not available")?;
+
+                        let amount = self
+                            .btc_converter
+                            .convert_inr_to_dolr_with_icpswap(total_inr, icpswap_client)
+                            .await?;
+
+                        log::info!(
+                            "Used ICPSwap for DOLR conversion: ₹{} INR = {} DOLR",
+                            total_inr,
+                            amount
+                        );
+                        amount
+                    }
+                };
+
+                (token_amount, total_inr)
             }
-            RewardTokenType::Dolr => {
-                // Use ICPSwap for DOLR price conversion
-                let icpswap_client = app_state
-                    .rewards_module
-                    .icpswap_client
-                    .as_ref()
-                    .context("ICPSwap client not available")?;
+            RewardMode::DirectTokenE8s {
+                amount_per_milestone_e8s,
+            } => {
+                // Mode 2: Direct e8s → convert to token amount, calculate INR for analytics
+                let token_amount = *amount_per_milestone_e8s as f64 / 100_000_000.0;
 
-                let amount = self
-                    .btc_converter
-                    .convert_inr_to_dolr_with_icpswap(total_inr, icpswap_client)
-                    .await?;
+                // Convert token amount to INR for analytics only
+                let total_inr = match config.reward_token {
+                    RewardTokenType::Btc => {
+                        // Get BTC/INR rate and calculate INR equivalent
+                        let btc_inr_rate = self.btc_converter.get_btc_inr_rate().await?;
+                        token_amount * btc_inr_rate
+                    }
+                    RewardTokenType::Dolr => {
+                        // Get DOLR/USD rate from ICPSwap and convert to INR
+                        let icpswap_client = app_state
+                            .rewards_module
+                            .icpswap_client
+                            .as_ref()
+                            .context("ICPSwap client not available")?;
+
+                        let inr_usd_rate = self.btc_converter.get_inr_usd_rate().await?;
+                        let dolr_usd_rate = icpswap_client.get_dolr_usd_rate().await?;
+
+                        // Convert DOLR → USD → INR
+                        let usd_amount = token_amount * dolr_usd_rate;
+                        let inr_amount = usd_amount * inr_usd_rate;
+
+                        log::info!(
+                            "Converted {} DOLR to ₹{} INR for analytics (DOLR/USD: {}, INR/USD: {})",
+                            token_amount,
+                            inr_amount,
+                            dolr_usd_rate,
+                            inr_usd_rate
+                        );
+
+                        inr_amount
+                    }
+                };
 
                 log::info!(
-                    "Used ICPSwap for DOLR conversion: ₹{} INR = {} DOLR",
-                    total_inr,
-                    amount
+                    "Using direct e8s mode: {} e8s = {} tokens ≈ ₹{} INR (for analytics)",
+                    amount_per_milestone_e8s,
+                    token_amount,
+                    total_inr
                 );
-                amount
+
+                (token_amount, total_inr)
             }
         };
 
@@ -506,7 +565,7 @@ impl RewardEngine {
             }
         }
 
-        Ok(())
+        Ok(total_inr)
     }
 
     /// Send notification to creator about reward
