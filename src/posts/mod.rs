@@ -14,7 +14,9 @@ use utoipa_axum::{
 };
 use verify::verify_post_request;
 
-use crate::posts::report_post::{__path_handle_report_post_v2, __path_handle_report_post_v3, __path_test_gchat_report};
+use crate::posts::report_post::{
+    __path_handle_report_post_v2, __path_handle_report_post_v3, __path_test_gchat_report,
+};
 use crate::posts::{
     delete_post::{__path_handle_delete_post, __path_handle_delete_post_v2},
     report_post::{handle_report_post_v3, test_gchat_report},
