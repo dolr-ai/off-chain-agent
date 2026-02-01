@@ -13,23 +13,64 @@ pub enum RewardTokenType {
     Dolr,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(default)]
-pub struct RewardConfig {
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum RewardMode {
+    InrAmount { amount_per_view_inr: f64 },
+    DirectTokenE8s { amount_per_milestone_e8s: u64 },
+}
+
+impl Default for RewardMode {
+    fn default() -> Self {
+        RewardMode::InrAmount {
+            amount_per_view_inr: 0.037,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RewardConfigV1 {
     pub reward_amount_inr: f64,
     pub view_milestone: u64,
     pub min_watch_duration: f64,
     pub fraud_threshold: usize,
     pub shadow_ban_duration: u64,
     pub config_version: u64,
-    /// Token type for rewards: "btc" (default) or "dolr"
+    #[serde(default)]
+    pub reward_token: RewardTokenType,
+}
+
+impl From<RewardConfigV1> for RewardConfig {
+    fn from(v1: RewardConfigV1) -> Self {
+        Self {
+            reward_mode: RewardMode::InrAmount {
+                amount_per_view_inr: v1.reward_amount_inr,
+            },
+            view_milestone: v1.view_milestone,
+            min_watch_duration: v1.min_watch_duration,
+            fraud_threshold: v1.fraud_threshold,
+            shadow_ban_duration: v1.shadow_ban_duration,
+            config_version: v1.config_version,
+            reward_token: v1.reward_token,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardConfig {
+    pub reward_mode: RewardMode,
+    pub view_milestone: u64,
+    pub min_watch_duration: f64,
+    pub fraud_threshold: usize,
+    pub shadow_ban_duration: u64,
+    pub config_version: u64,
     pub reward_token: RewardTokenType,
 }
 
 impl Default for RewardConfig {
     fn default() -> Self {
         Self {
-            reward_amount_inr: 10.0,
+            reward_mode: RewardMode::default(),
             view_milestone: 100,
             min_watch_duration: 3.0,
             fraud_threshold: 5,
@@ -50,7 +91,28 @@ pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardCon
         .context("Failed to get config from Dragonfly")?;
 
     match config_str {
-        Some(s) => serde_json::from_str(&s).context("Failed to deserialize config"),
+        Some(s) => {
+            let config = match serde_json::from_str::<RewardConfig>(&s) {
+                Ok(v2_config) => v2_config,
+                Err(_) => {
+                    log::info!("Attempting to migrate V1 config to V2");
+                    let v1_config: RewardConfigV1 = serde_json::from_str(&s)
+                        .context("Failed to deserialize as both V2 and V1 config")?;
+
+                    let v2_config: RewardConfig = v1_config.into();
+
+                    log::info!("Persisting migrated V2 config back to Redis");
+                    let v2_json = serde_json::to_string(&v2_config)?;
+                    conn.set::<_, _, ()>(&config_key, v2_json)
+                        .await
+                        .context("Failed to persist migrated V2 config")?;
+
+                    v2_config
+                }
+            };
+
+            Ok(config)
+        }
         None => {
             // If no config exists, initialize with default
             let default_config = RewardConfig::default();
@@ -170,7 +232,12 @@ mod tests {
     #[tokio::test]
     async fn test_default_config() {
         let config = RewardConfig::default();
-        assert_eq!(config.reward_amount_inr, 10.0);
+        assert!(matches!(
+            config.reward_mode,
+            RewardMode::InrAmount {
+                amount_per_view_inr
+            } if (amount_per_view_inr - 0.037).abs() < 0.001
+        ));
         assert_eq!(config.view_milestone, 100);
         assert_eq!(config.min_watch_duration, 3.0);
         assert_eq!(config.fraud_threshold, 5);
@@ -187,7 +254,7 @@ mod tests {
 
         // First get should initialize with defaults
         let config = get_config(&test_config.redis_pool).await.unwrap();
-        assert_eq!(config.reward_amount_inr, 10.0);
+        assert!(matches!(config.reward_mode, RewardMode::InrAmount { .. }));
         assert_eq!(config.view_milestone, 100);
         assert_eq!(config.config_version, 1);
 
@@ -206,12 +273,15 @@ mod tests {
         test_config.cleanup().await.unwrap();
 
         let new_config = RewardConfig {
-            reward_amount_inr: 20.0,
+            reward_mode: RewardMode::InrAmount {
+                amount_per_view_inr: 20.0,
+            },
             view_milestone: 200,
             min_watch_duration: 5.0,
             fraud_threshold: 10,
             shadow_ban_duration: 7200,
             config_version: 0, // Will be overridden
+            reward_token: RewardTokenType::default(),
         };
 
         update_config(&test_config.redis_pool, new_config)
@@ -220,7 +290,12 @@ mod tests {
 
         // Verify the config was updated
         let retrieved_config = get_config(&test_config.redis_pool).await.unwrap();
-        assert_eq!(retrieved_config.reward_amount_inr, 20.0);
+        assert!(matches!(
+            retrieved_config.reward_mode,
+            RewardMode::InrAmount {
+                amount_per_view_inr
+            } if (amount_per_view_inr - 20.0).abs() < 0.001
+        ));
         assert_eq!(retrieved_config.view_milestone, 200);
         assert_eq!(retrieved_config.min_watch_duration, 5.0);
         assert_eq!(retrieved_config.fraud_threshold, 10);
@@ -247,7 +322,9 @@ mod tests {
         // Update config multiple times
         for i in 0..3 {
             let config = RewardConfig {
-                reward_amount_inr: 10.0 + i as f64,
+                reward_mode: RewardMode::InrAmount {
+                    amount_per_view_inr: 10.0 + i as f64,
+                },
                 ..Default::default()
             };
             update_config(&test_config.redis_pool, config)
@@ -270,12 +347,15 @@ mod tests {
         test_config.cleanup().await.unwrap();
 
         let config = RewardConfig {
-            reward_amount_inr: 15.5,
+            reward_mode: RewardMode::InrAmount {
+                amount_per_view_inr: 15.5,
+            },
             view_milestone: 150,
             min_watch_duration: 4.5,
             fraud_threshold: 8,
             shadow_ban_duration: 5400,
             config_version: 1,
+            reward_token: RewardTokenType::default(),
         };
 
         update_config(&test_config.redis_pool, config.clone())
@@ -283,7 +363,7 @@ mod tests {
             .unwrap();
 
         let retrieved = get_config(&test_config.redis_pool).await.unwrap();
-        assert_eq!(retrieved.reward_amount_inr, config.reward_amount_inr);
+        assert_eq!(retrieved.reward_mode, config.reward_mode);
         assert_eq!(retrieved.view_milestone, config.view_milestone);
         assert_eq!(retrieved.min_watch_duration, config.min_watch_duration);
         assert_eq!(retrieved.fraud_threshold, config.fraud_threshold);
@@ -309,7 +389,9 @@ mod tests {
             let pool = test_config.redis_pool.clone();
             let handle = tokio::spawn(async move {
                 let config = RewardConfig {
-                    reward_amount_inr: 10.0 + i as f64,
+                    reward_mode: RewardMode::InrAmount {
+                        amount_per_view_inr: 10.0 + i as f64,
+                    },
                     ..Default::default()
                 };
                 update_config(&pool, config).await
@@ -327,5 +409,166 @@ mod tests {
         assert_eq!(final_version, initial_version + 5);
 
         test_config.cleanup().await.unwrap();
+    }
+
+    /// Test V1 to V2 config migration
+    #[tokio::test]
+    async fn test_v1_to_v2_migration() {
+        let test_config = TestConfig::new().await;
+        test_config.cleanup().await.unwrap();
+
+        // V1 config JSON (old format)
+        let v1_config_json = r#"{
+            "reward_amount_inr": 25.0,
+            "view_milestone": 100,
+            "min_watch_duration": 3.0,
+            "fraud_threshold": 5,
+            "shadow_ban_duration": 3600,
+            "config_version": 1,
+            "reward_token": "btc"
+        }"#;
+
+        let mut conn = test_config.redis_pool.get().await.unwrap();
+        let _: () = conn
+            .set("impressions:rewards:config", v1_config_json)
+            .await
+            .unwrap();
+
+        // First read should trigger migration and persist V2
+        let config = get_config(&test_config.redis_pool).await.unwrap();
+
+        assert!(matches!(
+            config.reward_mode,
+            RewardMode::InrAmount {
+                amount_per_view_inr
+            } if (amount_per_view_inr - 25.0).abs() < 0.001
+        ));
+
+        // Read the raw JSON from Redis to verify V2 was persisted
+        let persisted_json: String = conn.get("impressions:rewards:config").await.unwrap();
+        let persisted_config: RewardConfig = serde_json::from_str(&persisted_json).unwrap();
+
+        // Verify the persisted config is V2 format with reward_mode
+        assert!(matches!(
+            persisted_config.reward_mode,
+            RewardMode::InrAmount {
+                amount_per_view_inr
+            } if (amount_per_view_inr - 25.0).abs() < 0.001
+        ));
+
+        test_config.cleanup().await.unwrap();
+    }
+
+    /// Test InrAmount mode
+    #[tokio::test]
+    async fn test_inr_amount_mode() {
+        let test_config = TestConfig::new().await;
+        test_config.cleanup().await.unwrap();
+
+        let config = RewardConfig {
+            reward_mode: RewardMode::InrAmount {
+                amount_per_view_inr: 50.0,
+            },
+            view_milestone: 200,
+            min_watch_duration: 5.0,
+            fraud_threshold: 10,
+            shadow_ban_duration: 7200,
+            config_version: 1,
+            reward_token: RewardTokenType::Btc,
+        };
+
+        update_config(&test_config.redis_pool, config.clone())
+            .await
+            .unwrap();
+
+        let retrieved = get_config(&test_config.redis_pool).await.unwrap();
+        assert!(matches!(
+            retrieved.reward_mode,
+            RewardMode::InrAmount {
+                amount_per_view_inr
+            } if (amount_per_view_inr - 50.0).abs() < 0.001
+        ));
+        assert_eq!(retrieved.view_milestone, 200);
+
+        test_config.cleanup().await.unwrap();
+    }
+
+    /// Test DirectTokenE8s mode
+    #[tokio::test]
+    async fn test_direct_token_e8s_mode() {
+        let test_config = TestConfig::new().await;
+        test_config.cleanup().await.unwrap();
+
+        let config = RewardConfig {
+            reward_mode: RewardMode::DirectTokenE8s {
+                amount_per_milestone_e8s: 5_000_000, // 0.05 tokens per milestone
+            },
+            view_milestone: 100,
+            min_watch_duration: 3.0,
+            fraud_threshold: 5,
+            shadow_ban_duration: 3600,
+            config_version: 1,
+            reward_token: RewardTokenType::Dolr,
+        };
+
+        update_config(&test_config.redis_pool, config.clone())
+            .await
+            .unwrap();
+
+        let retrieved = get_config(&test_config.redis_pool).await.unwrap();
+        assert!(matches!(
+            retrieved.reward_mode,
+            RewardMode::DirectTokenE8s {
+                amount_per_milestone_e8s
+            } if amount_per_milestone_e8s == 5_000_000
+        ));
+        assert_eq!(retrieved.reward_token, RewardTokenType::Dolr);
+
+        test_config.cleanup().await.unwrap();
+    }
+
+    /// Test serialization and deserialization of both reward modes
+    #[tokio::test]
+    async fn test_reward_mode_serialization() {
+        // Test InrAmount mode
+        let inr_mode = RewardMode::InrAmount {
+            amount_per_view_inr: 12.5,
+        };
+        let json = serde_json::to_string(&inr_mode).unwrap();
+        let deserialized: RewardMode = serde_json::from_str(&json).unwrap();
+        assert_eq!(inr_mode, deserialized);
+
+        // Test DirectTokenE8s mode
+        let e8s_mode = RewardMode::DirectTokenE8s {
+            amount_per_milestone_e8s: 10_000_000,
+        };
+        let json = serde_json::to_string(&e8s_mode).unwrap();
+        let deserialized: RewardMode = serde_json::from_str(&json).unwrap();
+        assert_eq!(e8s_mode, deserialized);
+    }
+
+    /// Test V1 to V2 conversion
+    #[tokio::test]
+    async fn test_v1_conversion() {
+        let v1 = RewardConfigV1 {
+            reward_amount_inr: 15.0,
+            view_milestone: 100,
+            min_watch_duration: 3.0,
+            fraud_threshold: 5,
+            shadow_ban_duration: 3600,
+            config_version: 1,
+            reward_token: RewardTokenType::Btc,
+        };
+
+        let v2: RewardConfig = v1.into();
+
+        assert!(matches!(
+            v2.reward_mode,
+            RewardMode::InrAmount {
+                amount_per_view_inr
+            } if (amount_per_view_inr - 15.0).abs() < 0.001
+        ));
+        assert_eq!(v2.view_milestone, 100);
+        assert_eq!(v2.reward_token, RewardTokenType::Btc);
     }
 }
