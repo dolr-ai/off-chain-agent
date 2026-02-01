@@ -282,6 +282,7 @@ jobs:
             SENTRY_CLIENT_SECRET_1='${{ secrets.SENTRY_CLIENT_SECRET_1 }}' \
             SENTRY_CLIENT_SECRET_2='${{ secrets.SENTRY_CLIENT_SECRET_2 }}' \
             YRAL_MOBILE_SERVICE_ACCOUNT_KEY=$YRAL_MOBILE_SA_KEY_ESCAPED \
+            GOOGLE_CHAT_REPORT_SPACE_URL='${{ secrets.GOOGLE_CHAT_REPORT_SPACE_URL }}' \
             docker compose up -d
 
             echo 'Waiting for services to start...'
