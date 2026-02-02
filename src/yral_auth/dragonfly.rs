@@ -191,6 +191,33 @@ impl DragonflyPool {
         *guard = None;
     }
 
+    pub async fn execute_with_retry<F, Fut, T>(
+        &self,
+        mut operation: F,
+    ) -> std::result::Result<T, RedisError>
+    where
+        F: FnMut(MultiplexedConnection) -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<T, RedisError>>,
+    {
+        let conn = self.get().await?;
+        match operation(conn).await {
+            Ok(result) => Ok(result),
+            Err(e)
+                if e.is_connection_dropped()
+                    || e.is_timeout()
+                    || e.is_connection_refusal()
+                    || e.is_io_error() =>
+            {
+                tracing::warn!(error = %e, "Connection error detected, invalidating cache and retrying");
+                self.invalidate().await;
+
+                let fresh_conn = self.get().await?;
+                operation(fresh_conn).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     pub async fn delete_principal(&self, principal: Principal) -> Result<(), RedisError> {
         let mut conn = self.get().await?;
         let key = principal.to_string();

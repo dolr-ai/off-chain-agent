@@ -28,8 +28,13 @@ impl UserVerification {
         let cache_key = format!("impressions:user:registered:{}", principal);
 
         // Check Dragonfly cache first
-        let mut conn = self.dragonfly_pool.get().await?;
-        let cached: Option<String> = conn.get(&cache_key).await?;
+        let cached: Option<String> = self
+            .dragonfly_pool
+            .execute_with_retry(|mut conn| {
+                let key = cache_key.clone();
+                async move { conn.get(&key).await }
+            })
+            .await?;
 
         if let Some(cached_value) = cached {
             return Ok(cached_value == "true");
@@ -41,22 +46,31 @@ impl UserVerification {
         // Cache the result (fire and forget)
         let cache_key_clone = cache_key.clone();
         let dragonfly_pool = self.dragonfly_pool.clone();
+        let principal_text = principal.to_text();
         tokio::spawn(async move {
-            if let Ok(mut conn) = dragonfly_pool.get().await {
-                let value = if is_registered { "true" } else { "false" };
-                // Set with 1 minute TTL (60 seconds)
-                log::info!(
-                    "Caching user registration status for {}: {}",
-                    principal.to_text(),
-                    value
+            let value = if is_registered { "true" } else { "false" };
+            let value_str = value.to_string();
+
+            // Set with 1 minute TTL (60 seconds)
+            log::info!(
+                "Caching user registration status for {}: {}",
+                principal_text,
+                value
+            );
+
+            if let Err(e) = dragonfly_pool
+                .execute_with_retry(|mut conn| {
+                    let key = cache_key_clone.clone();
+                    let val = value_str.clone();
+                    async move { conn.set_ex::<_, _, ()>(&key, val, 60).await }
+                })
+                .await
+            {
+                log::error!(
+                    "Failed to cache user registration status for {}: {}",
+                    principal_text,
+                    e
                 );
-                if let Err(e) = conn.set_ex::<_, _, ()>(&cache_key_clone, value, 60).await {
-                    log::error!(
-                        "Failed to cache user registration status for {}: {}",
-                        principal,
-                        e
-                    );
-                }
             }
         });
 

@@ -83,10 +83,13 @@ impl Default for RewardConfig {
 
 /// Get the current reward configuration from Dragonfly
 pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardConfig> {
-    let mut conn = dragonfly_pool.get().await?;
     let config_key = "impressions:rewards:config".to_string();
-    let config_str: Option<String> = conn
-        .get(&config_key)
+
+    let config_str: Option<String> = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_key.clone();
+            async move { conn.get(&key).await }
+        })
         .await
         .context("Failed to get config from Dragonfly")?;
 
@@ -103,7 +106,13 @@ pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardCon
 
                     log::info!("Persisting migrated V2 config back to Redis");
                     let v2_json = serde_json::to_string(&v2_config)?;
-                    conn.set::<_, _, ()>(&config_key, v2_json)
+
+                    dragonfly_pool
+                        .execute_with_retry(|mut conn| {
+                            let key = config_key.clone();
+                            let json = v2_json.clone();
+                            async move { conn.set::<_, _, ()>(&key, json).await }
+                        })
                         .await
                         .context("Failed to persist migrated V2 config")?;
 
@@ -127,14 +136,15 @@ pub async fn update_config(
     dragonfly_pool: &Arc<DragonflyPool>,
     new_config: RewardConfig,
 ) -> Result<()> {
-    let mut conn = dragonfly_pool.get().await?;
-
     let config_version_key = "impressions:rewards:config:version".to_string();
     let config_key = "impressions:rewards:config".to_string();
 
     // Atomically increment the global config version
-    let version: u64 = conn
-        .incr(&config_version_key, 1)
+    let version: u64 = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_version_key.clone();
+            async move { conn.incr(&key, 1).await }
+        })
         .await
         .context("Failed to increment config version")?;
 
@@ -143,7 +153,13 @@ pub async fn update_config(
     config.config_version = version;
 
     let config_json = serde_json::to_string(&config)?;
-    conn.set::<_, _, ()>(&config_key, config_json)
+
+    dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_key.clone();
+            let json = config_json.clone();
+            async move { conn.set::<_, _, ()>(&key, json).await }
+        })
         .await
         .context("Failed to store config in Dragonfly")?;
 
@@ -154,12 +170,16 @@ pub async fn update_config(
 /// Get the current config version from Dragonfly
 #[cfg(test)]
 pub async fn get_config_version(dragonfly_pool: &Arc<DragonflyPool>) -> Result<u64> {
-    let mut conn = dragonfly_pool.get().await?;
     let config_version_key = "impressions:rewards:config:version".to_string();
-    let version: Option<u64> = conn
-        .get(&config_version_key)
+
+    let version: Option<u64> = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_version_key.clone();
+            async move { conn.get(&key).await }
+        })
         .await
         .context("Failed to get config version")?;
+
     Ok(version.unwrap_or(1))
 }
 
@@ -168,21 +188,27 @@ async fn initialize_config(
     dragonfly_pool: &Arc<DragonflyPool>,
     config: &RewardConfig,
 ) -> Result<()> {
-    let mut conn = dragonfly_pool.get().await?;
-
     let config_version_key = "impressions:rewards:config:version".to_string();
     let config_key = "impressions:rewards:config".to_string();
+    let version = config.config_version;
 
     // Set initial version if not exists
-    let _: bool = conn
-        .set_nx(&config_version_key, config.config_version)
+    let _: bool = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_version_key.clone();
+            async move { conn.set_nx(&key, version).await }
+        })
         .await
         .context("Failed to initialize config version")?;
 
     // Set config
     let config_json = serde_json::to_string(config)?;
-    let _: bool = conn
-        .set_nx(&config_key, config_json)
+    let _: bool = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_key.clone();
+            let json = config_json.clone();
+            async move { conn.set_nx(&key, json).await }
+        })
         .await
         .context("Failed to initialize config")?;
 
