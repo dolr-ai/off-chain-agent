@@ -218,12 +218,16 @@ impl DragonflyPool {
         }
     }
 
+    // can be only use with cluster 1 (auth) since it do not have key prefix
     pub async fn delete_principal(&self, principal: Principal) -> Result<(), RedisError> {
-        let mut conn = self.get().await?;
-        let key = principal.to_string();
+        let result: () = self
+            .execute_with_retry(|mut conn| {
+                let key = principal.to_string();
+                async move { conn.del::<String, ()>(key).await }
+            })
+            .await?;
 
-        conn.del::<String, ()>(key).await?;
-        Ok(())
+        Ok(result)
     }
 }
 
