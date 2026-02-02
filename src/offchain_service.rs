@@ -156,21 +156,28 @@ struct GoogleJWT {
 
 #[derive(Debug, serde::Deserialize)]
 struct GChatPayload {
-    #[serde(rename = "type")]
-    payload_type: String,
-    #[serde(rename = "eventTime")]
+    #[serde(rename = "type", default)]
+    payload_type: Option<String>,
+    #[serde(rename = "eventTime", default)]
     #[allow(dead_code)]
-    event_time: String,
+    event_time: Option<String>,
+    #[serde(default)]
     #[allow(dead_code)]
-    message: serde_json::Value,
+    message: Option<serde_json::Value>,
+    #[serde(default)]
     #[allow(dead_code)]
-    space: serde_json::Value,
+    space: Option<serde_json::Value>,
+    #[serde(default)]
     #[allow(dead_code)]
-    user: serde_json::Value,
+    user: Option<serde_json::Value>,
     #[serde(default)]
     action: Option<GChatPayloadAction>,
+    #[serde(default)]
     #[allow(dead_code)]
-    common: serde_json::Value,
+    common: Option<serde_json::Value>,
+    // Apps Script specific fields
+    #[serde(rename = "commonEventObject", default)]
+    common_event_object: Option<serde_json::Value>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -195,63 +202,70 @@ pub async fn report_approved_handler(
     log::info!("report_approved_handler: headers: {:?}", headers);
     log::info!("report_approved_handler: body: {:?}", body);
 
-    // authenticate the request
+    // Check if this is from Apps Script (no Authorization header means Apps Script proxy)
+    let is_apps_script = headers.get("Authorization").is_none();
 
-    let bearer = headers
-        .get("Authorization")
-        .context("Missing Authorization header")?;
-    log::info!("Authorization header found");
+    if !is_apps_script {
+        // authenticate the request for direct Google Chat calls
 
-    let bearer_str = bearer
-        .to_str()
-        .context("Failed to parse Authorization header")?;
-    let auth_token = bearer_str
-        .split("Bearer ")
-        .last()
-        .context("Failed to parse Bearer token")?;
-    log::info!("Auth token extracted");
+        let bearer = headers
+            .get("Authorization")
+            .context("Missing Authorization header")?;
+        log::info!("Authorization header found");
 
-    // get PUBLIC_CERTS from GET https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com
+        let bearer_str = bearer
+            .to_str()
+            .context("Failed to parse Authorization header")?;
+        let auth_token = bearer_str
+            .split("Bearer ")
+            .last()
+            .context("Failed to parse Bearer token")?;
+        log::info!("Auth token extracted");
 
-    let client = reqwest::Client::new();
-    let res = client
-        .get("https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com")
-        .send()
-        .await?;
-    let res_body = res.text().await?;
-    log::info!("Fetched Google Chat public certs");
+        // get PUBLIC_CERTS from GET https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com
 
-    let certs: HashMap<String, String> = serde_json::from_str(&res_body)?;
+        let client = reqwest::Client::new();
+        let res = client
+            .get("https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com")
+            .send()
+            .await?;
+        let res_body = res.text().await?;
+        log::info!("Fetched Google Chat public certs");
 
-    // verify the JWT using jsonwebtoken crate
+        let certs: HashMap<String, String> = serde_json::from_str(&res_body)?;
 
-    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
-    validation.set_issuer(&["chat@system.gserviceaccount.com"]);
-    validation.set_audience(&["1035262663512"]);
+        // verify the JWT using jsonwebtoken crate
 
-    let mut valid = false;
+        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
+        validation.set_issuer(&["chat@system.gserviceaccount.com"]);
+        validation.set_audience(&["1035262663512"]);
 
-    for v in certs.values() {
-        let jwt = jsonwebtoken::decode::<GoogleJWT>(
-            auth_token,
-            &DecodingKey::from_rsa_pem(v.as_bytes())?,
-            &validation,
-        );
+        let mut valid = false;
 
-        if jwt.is_ok() {
-            valid = true;
-            break;
+        for v in certs.values() {
+            let jwt = jsonwebtoken::decode::<GoogleJWT>(
+                auth_token,
+                &DecodingKey::from_rsa_pem(v.as_bytes())?,
+                &validation,
+            );
+
+            if jwt.is_ok() {
+                valid = true;
+                break;
+            }
         }
+        if !valid {
+            log::error!("Invalid JWT token from Google Chat");
+            return Err(anyhow::anyhow!("Invalid JWT").into());
+        }
+        log::info!("JWT validation successful");
+    } else {
+        log::info!("Request from Apps Script proxy - skipping JWT validation");
     }
-    if !valid {
-        log::error!("Invalid JWT token from Google Chat");
-        return Err(anyhow::anyhow!("Invalid JWT").into());
-    }
-    log::info!("JWT validation successful");
 
     // Get the data from the body
     let payload: GChatPayload = serde_json::from_str(&body)?;
-    log::info!("Parsed GChat payload: type={}", payload.payload_type);
+    log::info!("Parsed GChat payload: type={:?}", payload.payload_type);
 
     let action = payload.action.context("No action field in payload")?;
     log::info!("Action method: {}", action.action_method_name);
@@ -320,7 +334,7 @@ pub async fn report_approved_handler(
 
     log::info!("report_approved_handler completed successfully");
 
-    // Return a JSON response that Google Chat expects for interactive card actions
+    // Return a simple message response
     Ok(axum::Json(json!({
         "text": format!("✅ Post {}/{} has been banned successfully", canister_id, post_id)
     })))
