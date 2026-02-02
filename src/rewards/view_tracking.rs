@@ -68,14 +68,12 @@ impl ViewTracker {
     pub async fn load_lua_scripts(&mut self) -> Result<String> {
         let sha: String = self
             .pool
-            .execute_with_retry(|mut conn| {
-                async move {
-                    redis::cmd("SCRIPT")
-                        .arg("LOAD")
-                        .arg(LUA_ATOMIC_VIEW_SCRIPT)
-                        .query_async(&mut conn)
-                        .await
-                }
+            .execute_with_retry(|mut conn| async move {
+                redis::cmd("SCRIPT")
+                    .arg("LOAD")
+                    .arg(LUA_ATOMIC_VIEW_SCRIPT)
+                    .query_async(&mut conn)
+                    .await
             })
             .await
             .context("Failed to load Lua script")?;
@@ -208,7 +206,10 @@ impl ViewTracker {
         self.pool
             .execute_with_retry(|mut conn| {
                 let key = video_hash_key.clone();
-                async move { conn.hset::<_, _, _, ()>(&key, "last_milestone", milestone).await }
+                async move {
+                    conn.hset::<_, _, _, ()>(&key, "last_milestone", milestone)
+                        .await
+                }
             })
             .await?;
         Ok(())

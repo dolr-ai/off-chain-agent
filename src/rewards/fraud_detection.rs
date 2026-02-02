@@ -105,12 +105,15 @@ impl FraudDetector {
                     let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id_str);
                     let ban_key_clone = ban_key.clone();
 
-                    if let Err(e) = dragonfly_pool
-                        .execute_with_retry(|mut conn| {
-                            let k = ban_key_clone.clone();
-                            async move { conn.set_ex::<_, _, ()>(&k, "1", shadow_ban_duration).await }
-                        })
-                        .await
+                    if let Err(e) =
+                        dragonfly_pool
+                            .execute_with_retry(|mut conn| {
+                                let k = ban_key_clone.clone();
+                                async move {
+                                    conn.set_ex::<_, _, ()>(&k, "1", shadow_ban_duration).await
+                                }
+                            })
+                            .await
                     {
                         log::error!("Failed to shadow ban creator {}: {}", creator_id_str, e);
                     }

@@ -184,15 +184,18 @@ pub async fn report_approved_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: String,
-) -> Result<(), AppError> {
-    // log::error!("report_approved_handler: headers: {:?}", headers);
-    // log::error!("report_approved_handler: body: {:?}", body);
+) -> Result<axum::Json<Value>, AppError> {
+    log::info!("report_approved_handler called");
+    log::info!("report_approved_handler: headers: {:?}", headers);
+    log::info!("report_approved_handler: body: {:?}", body);
 
     // authenticate the request
 
     let bearer = headers
         .get("Authorization")
         .context("Missing Authorization header")?;
+    log::info!("Authorization header found");
+
     let bearer_str = bearer
         .to_str()
         .context("Failed to parse Authorization header")?;
@@ -200,6 +203,7 @@ pub async fn report_approved_handler(
         .split("Bearer ")
         .last()
         .context("Failed to parse Bearer token")?;
+    log::info!("Auth token extracted");
 
     // get PUBLIC_CERTS from GET https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com
 
@@ -209,6 +213,7 @@ pub async fn report_approved_handler(
         .send()
         .await?;
     let res_body = res.text().await?;
+    log::info!("Fetched Google Chat public certs");
 
     let certs: HashMap<String, String> = serde_json::from_str(&res_body)?;
 
@@ -233,17 +238,26 @@ pub async fn report_approved_handler(
         }
     }
     if !valid {
+        log::error!("Invalid JWT token from Google Chat");
         return Err(anyhow::anyhow!("Invalid JWT").into());
     }
+    log::info!("JWT validation successful");
 
     // Get the data from the body
     let payload: GChatPayload = serde_json::from_str(&body)?;
+    log::info!("Parsed GChat payload");
     let view_type = payload.action.parameters[0].value.clone();
+    log::info!("View type: {}", view_type);
 
     // view_type format : "canister_id post_id(int)"
     let view_type: Vec<&str> = view_type.split(" ").collect();
     let canister_id = view_type[0];
     let post_id = view_type[1];
+    log::info!(
+        "Banning post: canister_id={}, post_id={}",
+        canister_id,
+        post_id
+    );
 
     let user_post_service = UserPostService(USER_POST_SERVICE_ID, &state.agent);
 
@@ -266,12 +280,15 @@ pub async fn report_approved_handler(
     user_post_service
         .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
         .await?;
+    log::info!("Post status updated to banned");
 
     // send confirmation to Google Chat
     let confirmation_msg = json!({
         "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
     });
     send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+    log::info!("Sent confirmation message to Google Chat");
+
     let params = json!({
         "video_id": video_uid,
         "publisher_user_id": creator_principal,
@@ -284,6 +301,12 @@ pub async fn report_approved_handler(
         params: params.to_string(),
     });
     event.stream_to_bigquery(&state);
+    log::info!("Ban event sent to BigQuery");
 
-    Ok(())
+    log::info!("report_approved_handler completed successfully");
+
+    // Return a JSON response that Google Chat expects for interactive card actions
+    Ok(axum::Json(json!({
+        "text": format!("✅ Post {}/{} has been banned successfully", canister_id, post_id)
+    })))
 }
