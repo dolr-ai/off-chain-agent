@@ -156,21 +156,27 @@ struct GoogleJWT {
 
 #[derive(Debug, serde::Deserialize)]
 struct GChatPayload {
-    // #[serde(rename = "type")]
-    // payload_type: String,
-    // #[serde(rename = "eventTime")]
-    // event_time: String,
-    // message: serde_json::Value,
-    // space: serde_json::Value,
-    // user: serde_json::Value,
-    action: GChatPayloadAction,
-    // common: serde_json::Value,
+    #[serde(rename = "type")]
+    payload_type: String,
+    #[serde(rename = "eventTime")]
+    #[allow(dead_code)]
+    event_time: String,
+    #[allow(dead_code)]
+    message: serde_json::Value,
+    #[allow(dead_code)]
+    space: serde_json::Value,
+    #[allow(dead_code)]
+    user: serde_json::Value,
+    #[serde(default)]
+    action: Option<GChatPayloadAction>,
+    #[allow(dead_code)]
+    common: serde_json::Value,
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct GChatPayloadAction {
-    // #[serde(rename = "actionMethodName")]
-    // action_method_name: String,
+    #[serde(rename = "actionMethodName")]
+    action_method_name: String,
     parameters: Vec<GChatPayloadActionParameter>,
 }
 
@@ -245,8 +251,17 @@ pub async fn report_approved_handler(
 
     // Get the data from the body
     let payload: GChatPayload = serde_json::from_str(&body)?;
-    log::info!("Parsed GChat payload");
-    let view_type = payload.action.parameters[0].value.clone();
+    log::info!("Parsed GChat payload: type={}", payload.payload_type);
+
+    let action = payload.action.context("No action field in payload")?;
+    log::info!("Action method: {}", action.action_method_name);
+
+    let view_type = action
+        .parameters
+        .first()
+        .context("No parameters in action")?
+        .value
+        .clone();
     log::info!("View type: {}", view_type);
 
     // view_type format : "canister_id post_id(int)"
