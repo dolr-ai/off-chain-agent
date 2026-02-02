@@ -268,15 +268,30 @@ pub async fn report_approved_handler(
     let payload: GChatPayload = serde_json::from_str(&body)?;
     log::info!("Parsed GChat payload: type={:?}", payload.payload_type);
 
-    let action = payload.action.context("No action field in payload")?;
-    log::info!("Action method: {}", action.action_method_name);
+    // Extract viewType parameter - handle both Apps Script and direct Google Chat formats
+    let view_type = if let Some(common_event_obj) = &payload.common_event_object {
+        // Apps Script format: commonEventObject.parameters.viewType
+        log::info!("Using Apps Script event format");
+        common_event_obj
+            .get("parameters")
+            .and_then(|p| p.get("viewType"))
+            .and_then(|v| v.as_str())
+            .context("No viewType parameter in commonEventObject")?
+            .to_string()
+    } else if let Some(action) = &payload.action {
+        // Direct Google Chat format: action.parameters[0].value
+        log::info!("Using direct Google Chat event format");
+        log::info!("Action method: {}", action.action_method_name);
+        action
+            .parameters
+            .first()
+            .context("No parameters in action")?
+            .value
+            .clone()
+    } else {
+        return Err(anyhow::anyhow!("No action or commonEventObject in payload").into());
+    };
 
-    let view_type = action
-        .parameters
-        .first()
-        .context("No parameters in action")?
-        .value
-        .clone();
     log::info!("View type: {}", view_type);
 
     // view_type format : "canister_id post_id(int)"
