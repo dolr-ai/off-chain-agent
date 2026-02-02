@@ -63,56 +63,87 @@ impl FraudDetector {
 
         // Run fraud check asynchronously
         tokio::spawn(async move {
-            if let Ok(mut conn) = dragonfly_pool.get().await {
-                // Add current timestamp
-                let _ = conn.lpush::<_, _, ()>(&key, current_timestamp).await;
-                let _ = conn.ltrim::<_, ()>(&key, 0, 100).await; // Keep last 100 rewards
-                let _ = conn.expire::<_, ()>(&key, 3600).await; // 1 hour TTL
+            // Add current timestamp and trim list
+            let key_clone = key.clone();
+            let add_result = dragonfly_pool
+                .execute_with_retry(|mut conn| {
+                    let k = key_clone.clone();
+                    async move {
+                        conn.lpush::<_, _, ()>(&k, current_timestamp).await?;
+                        conn.ltrim::<_, ()>(&k, 0, 100).await?; // Keep last 100 rewards
+                        conn.expire::<_, ()>(&k, 3600).await // 1 hour TTL
+                    }
+                })
+                .await;
 
-                // Get recent timestamps
-                if let Ok(recent_timestamps) = conn.lrange::<_, Vec<i64>>(&key, 0, -1).await {
-                    let cutoff = current_timestamp - time_window;
-                    let recent_count = recent_timestamps.iter().filter(|&&ts| ts > cutoff).count();
+            if add_result.is_err() {
+                return;
+            }
 
-                    log::debug!(
-                        "Creator {} has {} rewards in last {} seconds",
+            // Get recent timestamps
+            let key_clone2 = key.clone();
+            let recent_timestamps_result = dragonfly_pool
+                .execute_with_retry(|mut conn| {
+                    let k = key_clone2.clone();
+                    async move { conn.lrange::<_, Vec<i64>>(&k, 0, -1).await }
+                })
+                .await;
+
+            if let Ok(recent_timestamps) = recent_timestamps_result {
+                let cutoff = current_timestamp - time_window;
+                let recent_count = recent_timestamps.iter().filter(|&&ts| ts > cutoff).count();
+
+                log::debug!(
+                    "Creator {} has {} rewards in last {} seconds",
+                    creator_id_str,
+                    recent_count,
+                    time_window
+                );
+
+                if recent_count > threshold {
+                    // Shadow ban the creator
+                    let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id_str);
+                    let ban_key_clone = ban_key.clone();
+
+                    if let Err(e) =
+                        dragonfly_pool
+                            .execute_with_retry(|mut conn| {
+                                let k = ban_key_clone.clone();
+                                async move {
+                                    conn.set_ex::<_, _, ()>(&k, "1", shadow_ban_duration).await
+                                }
+                            })
+                            .await
+                    {
+                        log::error!("Failed to shadow ban creator {}: {}", creator_id_str, e);
+                    }
+
+                    log::warn!(
+                        "Shadow banned creator {} for {} seconds due to {} rewards in {} seconds",
                         creator_id_str,
+                        shadow_ban_duration,
                         recent_count,
                         time_window
                     );
 
-                    if recent_count > threshold {
-                        // Shadow ban the creator
-                        let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id_str);
-                        if let Err(e) = conn
-                            .set_ex::<_, _, ()>(&ban_key, "1", shadow_ban_duration)
-                            .await
-                        {
-                            log::error!("Failed to shadow ban creator {}: {}", creator_id_str, e);
-                        }
-
-                        log::warn!(
-                            "Shadow banned creator {} for {} seconds due to {} rewards in {} seconds",
-                            creator_id_str,
-                            shadow_ban_duration,
-                            recent_count,
-                            time_window
-                        );
-
-                        // Send alert
-                        send_fraud_alert(creator_id_str.clone(), recent_count);
-                    }
+                    // Send alert
+                    send_fraud_alert(creator_id_str.clone(), recent_count);
                 }
             }
         });
 
         // For the immediate check, we need to check if already shadow banned
-        if let Ok(mut conn) = self.dragonfly_pool.get().await {
-            let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
-            if let Ok(is_banned) = conn.exists::<_, bool>(&ban_key).await {
-                if is_banned {
-                    return FraudCheck::Suspicious;
-                }
+        let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
+        if let Ok(is_banned) = self
+            .dragonfly_pool
+            .execute_with_retry(|mut conn| {
+                let key = ban_key.clone();
+                async move { conn.exists::<_, bool>(&key).await }
+            })
+            .await
+        {
+            if is_banned {
+                return FraudCheck::Suspicious;
             }
         }
 
@@ -121,9 +152,14 @@ impl FraudDetector {
 
     /// Check if a creator is currently shadow banned
     pub async fn is_shadow_banned(&self, creator_id: &Principal) -> Result<bool> {
-        let mut conn = self.dragonfly_pool.get().await?;
         let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
-        let is_banned: bool = conn.exists(&ban_key).await?;
+        let is_banned: bool = self
+            .dragonfly_pool
+            .execute_with_retry(|mut conn| {
+                let key = ban_key.clone();
+                async move { conn.exists(&key).await }
+            })
+            .await?;
         Ok(is_banned)
     }
 }
@@ -214,7 +250,7 @@ mod tests {
         }
 
         async fn cleanup(&self) -> Result<()> {
-            let mut conn = self.detector.redis_pool.get().await?;
+            let mut conn = self.detector.dragonfly_pool.get().await?;
 
             let patterns = vec![
                 format!("impressions:rewards:user:*:recent"),

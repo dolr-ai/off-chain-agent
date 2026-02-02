@@ -633,14 +633,13 @@ async fn check_exact_duplicate_in_redis(
     dragonfly_pool: &Arc<crate::yral_auth::dragonfly::DragonflyPool>,
     phash: &str,
 ) -> Result<Option<String>> {
-    let mut conn = dragonfly_pool
-        .get()
-        .await
-        .context("Failed to get Dragonfly connection")?;
-
     let key = format!("impressions:video_phash:{}", phash);
-    let result: Option<String> = conn
-        .get(&key)
+
+    let result: Option<String> = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let k = key.clone();
+            async move { conn.get(&k).await }
+        })
         .await
         .context("Failed to query Redis for phash")?;
 
@@ -653,13 +652,15 @@ async fn store_unique_phash_in_redis(
     phash: &str,
     video_id: &str,
 ) -> Result<()> {
-    let mut conn = dragonfly_pool
-        .get()
-        .await
-        .context("Failed to get Dragonfly connection")?;
-
     let key = format!("impressions:video_phash:{}", phash);
-    conn.set::<_, _, ()>(&key, video_id)
+    let vid = video_id.to_string();
+
+    dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let k = key.clone();
+            let v = vid.clone();
+            async move { conn.set::<_, _, ()>(&k, v).await }
+        })
         .await
         .context("Failed to store phash in Redis")?;
 
