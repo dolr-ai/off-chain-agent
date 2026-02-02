@@ -177,6 +177,7 @@ struct GChatPayload {
     common: Option<serde_json::Value>,
     // Apps Script specific fields
     #[serde(rename = "commonEventObject", default)]
+    #[allow(dead_code)]
     common_event_object: Option<serde_json::Value>,
 }
 
