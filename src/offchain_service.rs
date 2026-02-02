@@ -258,7 +258,7 @@ pub async fn report_approved_handler(
 
     let view_type = action
         .parameters
-        .get(0)
+        .first()
         .context("No parameters in action")?
         .value
         .clone();
