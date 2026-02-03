@@ -692,7 +692,6 @@ pub struct RewardEarnedPayload {
     pub timestamp: i64,
     #[serde(rename = "rewards_received_bs")]
     pub rewards_received_bs: bool,
-    #[serde(rename = "reward_token")]
     pub reward_token: RewardTokenType,
 }
 
