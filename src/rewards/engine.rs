@@ -582,7 +582,6 @@ impl RewardEngine {
         reward_token: crate::rewards::config::RewardTokenType,
         app_state: &Arc<AppState>,
     ) {
-
         let token_str = match reward_token {
             crate::rewards::config::RewardTokenType::Btc => "btc",
             crate::rewards::config::RewardTokenType::Dolr => "dolr",
