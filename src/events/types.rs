@@ -691,6 +691,8 @@ pub struct RewardEarnedPayload {
     pub timestamp: i64,
     #[serde(rename = "rewards_received_bs")]
     pub rewards_received_bs: bool,
+    #[serde(rename = "reward_token")]
+    pub reward_token: String, // "btc" or "dolr"
 }
 
 // ----------------------------------------------------------------------------------
@@ -763,7 +765,8 @@ where
     use serde::ser::SerializeStruct;
     let mut state = serializer.serialize_struct("RewardEarned", 1)?;
     let url = format!(
-        "rewardsReceived?token=btc&reward_on=video_views&creator_id={}&video_id={}&milestone={}&reward_btc={}&reward_inr={}&view_count={}&timestamp={}&rewards_received_bs={}",
+        "rewardsReceived?token={}&reward_on=video_views&creator_id={}&video_id={}&milestone={}&reward_btc={}&reward_inr={}&view_count={}&timestamp={}&rewards_received_bs={}",
+        payload.reward_token,
         payload.creator_id,
         payload.video_id,
         payload.milestone,
@@ -1066,8 +1069,16 @@ impl EventPayload {
             }
 
             EventPayload::RewardEarned(payload) => {
-                let title = "Bitcoin Credited";
-                let body = "Congrats! Your video views have earned you Bitcoin. See your balance in the wallet.";
+                let (title, body) = match payload.reward_token.to_lowercase().as_str() {
+                    "dolr" => (
+                        "DOLR Credited",
+                        "Congrats! Your video views have earned you DOLR. See your balance in the wallet."
+                    ),
+                    _ => (
+                        "Bitcoin Credited",
+                        "Congrats! Your video views have earned you Bitcoin. See your balance in the wallet."
+                    ),
+                };
 
                 let notif_payload = SendNotificationReq {
                     notification: Some(NotificationPayload {
