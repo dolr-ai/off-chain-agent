@@ -12,6 +12,7 @@ use yral_metrics::metrics::{
 };
 
 use crate::app_state::AppState;
+use crate::rewards::config::RewardTokenType;
 
 pub fn string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
@@ -692,7 +693,7 @@ pub struct RewardEarnedPayload {
     #[serde(rename = "rewards_received_bs")]
     pub rewards_received_bs: bool,
     #[serde(rename = "reward_token")]
-    pub reward_token: String, // "btc" or "dolr"
+    pub reward_token: RewardTokenType,
 }
 
 // ----------------------------------------------------------------------------------
@@ -764,9 +765,15 @@ where
 {
     use serde::ser::SerializeStruct;
     let mut state = serializer.serialize_struct("RewardEarned", 1)?;
+
+    let token_str = match payload.reward_token {
+        RewardTokenType::Btc => "btc",
+        RewardTokenType::Dolr => "dolr",
+    };
+
     let url = format!(
         "rewardsReceived?token={}&reward_on=video_views&creator_id={}&video_id={}&milestone={}&reward_btc={}&reward_inr={}&view_count={}&timestamp={}&rewards_received_bs={}",
-        payload.reward_token,
+        token_str,
         payload.creator_id,
         payload.video_id,
         payload.milestone,
@@ -1069,12 +1076,12 @@ impl EventPayload {
             }
 
             EventPayload::RewardEarned(payload) => {
-                let (title, body) = match payload.reward_token.to_lowercase().as_str() {
-                    "dolr" => (
+                let (title, body) = match payload.reward_token {
+                    RewardTokenType::Dolr => (
                         "DOLR Credited",
                         "Congrats! Your video views have earned you DOLR. See your balance in the wallet."
                     ),
-                    _ => (
+                    RewardTokenType::Btc => (
                         "Bitcoin Credited",
                         "Congrats! Your video views have earned you Bitcoin. See your balance in the wallet."
                     ),

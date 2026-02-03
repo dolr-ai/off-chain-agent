@@ -582,11 +582,6 @@ impl RewardEngine {
         reward_token: crate::rewards::config::RewardTokenType,
         app_state: &Arc<AppState>,
     ) {
-        let token_str = match reward_token {
-            crate::rewards::config::RewardTokenType::Btc => "btc",
-            crate::rewards::config::RewardTokenType::Dolr => "dolr",
-        };
-
         // Create the payload for the notification
         let payload = RewardEarnedPayload {
             creator_id: *creator_id,
@@ -597,7 +592,7 @@ impl RewardEngine {
             view_count,
             timestamp: chrono::Utc::now().timestamp(),
             rewards_received_bs: true,
-            reward_token: token_str.to_string(),
+            reward_token,
         };
 
         // Create the event and send notification
