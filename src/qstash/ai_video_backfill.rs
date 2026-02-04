@@ -19,7 +19,10 @@ use google_cloud_bigquery::http::tabledata::list::Value;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use crate::{app_state::AppState, consts::CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN};
+use crate::{
+    app_state::AppState,
+    consts::{get_cloudflare_stream_url, get_storj_video_url},
+};
 
 #[derive(Debug, Deserialize)]
 pub struct BackfillParams {
@@ -46,13 +49,6 @@ pub struct BackfillAckResponse {
     status: &'static str,
     message: String,
     dry_run: bool,
-}
-
-fn get_cf_url(video_id: &str) -> String {
-    format!(
-        "https://{}.cloudflarestream.com/{}/watch",
-        CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN, video_id
-    )
 }
 
 async fn detect_video(
@@ -108,14 +104,17 @@ async fn process_backfill(state: Arc<AppState>, dry_run: bool) {
     loop {
         batch_num += 1;
 
-        // Query next batch of unprocessed videos
+        // Query next batch of unprocessed videos (with publisher_user_id for Storj URL)
         let query = format!(
-            "SELECT video_id FROM (
-              SELECT JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id
+            "SELECT video_id, publisher_user_id FROM (
+              SELECT
+                JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id,
+                JSON_EXTRACT_SCALAR(params, '$.publisher_user_id') AS publisher_user_id
               FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
               WHERE event = 'video_upload_success' OR event = 'video_upload_successful'
             )
             WHERE video_id IS NOT NULL
+              AND publisher_user_id IS NOT NULL
               AND video_id NOT IN (
                 SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ai_ugc`
               )
@@ -161,8 +160,17 @@ async fn process_backfill(state: Arc<AppState>, dry_run: bool) {
         let mut batch_processed = 0usize;
 
         for row in &rows {
+            // Extract video_id and publisher_user_id (strip quotes if present)
             let video_id = match row.f.first().and_then(|c| match &c.v {
-                Value::String(s) => Some(s.clone()),
+                Value::String(s) => Some(s.trim_matches('"').to_string()),
+                _ => None,
+            }) {
+                Some(id) => id,
+                None => continue,
+            };
+
+            let publisher_user_id = match row.f.get(1).and_then(|c| match &c.v {
+                Value::String(s) => Some(s.trim_matches('"').to_string()),
                 _ => None,
             }) {
                 Some(id) => id,
@@ -171,8 +179,21 @@ async fn process_backfill(state: Arc<AppState>, dry_run: bool) {
 
             batch_processed += 1;
             total_processed += 1;
-            let cf_url = get_cf_url(&video_id);
-            let detection = detect_video(&http, &detect_url, &api_key, &cf_url).await;
+
+            // Try Storj first, fallback to Cloudflare (same pattern as duplicate.rs)
+            let storj_url = get_storj_video_url(&publisher_user_id, &video_id, false);
+            let detection = match detect_video(&http, &detect_url, &api_key, &storj_url).await {
+                Ok(response) => Ok(response),
+                Err(storj_err) => {
+                    log::warn!(
+                        "Storj detection failed for {}, trying Cloudflare: {}",
+                        video_id,
+                        storj_err
+                    );
+                    let cf_url = get_cloudflare_stream_url(&video_id);
+                    detect_video(&http, &detect_url, &api_key, &cf_url).await
+                }
+            };
 
             match detection {
                 Ok(det) => match det.verdict {
