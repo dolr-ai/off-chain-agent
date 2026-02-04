@@ -359,7 +359,7 @@ pub async fn ai_video_backfill_process_handler(
 
                     let insert_query = format!(
                         "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval` (video_id, is_approved, created_at)
-                         VALUES ('{}', FALSE, CURRENT_TIMESTAMP())",
+                         VALUES ('{}', NULL, CURRENT_TIMESTAMP())",
                         video_id.replace('\'', "''")
                     );
                     let bq_req = QueryRequest {
@@ -388,11 +388,11 @@ pub async fn ai_video_backfill_process_handler(
                     video_id
                 );
 
-                // Treat as Review - insert into ugc_content_approval with is_approved=FALSE
+                // Treat as Review - insert into ugc_content_approval with is_approved=NULL
                 let insert_query = format!(
                     "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
                      (video_id, is_approved, created_at)
-                     VALUES ('{}', FALSE, CURRENT_TIMESTAMP())",
+                     VALUES ('{}', NULL, CURRENT_TIMESTAMP())",
                     video_id.replace('\'', "''")
                 );
                 let bq_req = QueryRequest {
