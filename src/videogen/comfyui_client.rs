@@ -338,7 +338,7 @@ impl ComfyUIClient {
         };
 
         let submit_url = format!(
-            "{}generate",
+            "{}/generate",
             self.config.api_url.as_str().trim_end_matches('/')
         );
         info!(
@@ -384,7 +384,7 @@ impl ComfyUIClient {
     /// Check if the ComfyUI instance is healthy
     pub async fn health_check(&self) -> bool {
         let url = format!(
-            "{}health",
+            "{}/health",
             self.config.api_url.as_str().trim_end_matches('/')
         );
 
