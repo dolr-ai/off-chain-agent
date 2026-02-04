@@ -74,12 +74,14 @@ async fn backfill_videos_task(bigquery_client: BigQueryClient, qstash_client: QS
             "SELECT video_id, publisher_user_id FROM (
               SELECT
                 JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id,
-                JSON_EXTRACT_SCALAR(params, '$.publisher_user_id') AS publisher_user_id
+                JSON_EXTRACT_SCALAR(params, '$.publisher_user_id') AS publisher_user_id,
+                timestamp
               FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
               WHERE event = 'video_upload_success' OR event = 'video_upload_successful'
             )
             WHERE video_id IS NOT NULL
               AND publisher_user_id IS NOT NULL
+              AND timestamp < '2026-02-05'
               AND video_id NOT IN (
                 SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ai_ugc`
               )
