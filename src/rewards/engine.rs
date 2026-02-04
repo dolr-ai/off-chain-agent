@@ -550,6 +550,7 @@ impl RewardEngine {
                     token_amount,
                     total_inr,
                     view_count,
+                    config.reward_token,
                     app_state,
                 )
                 .await;
@@ -578,6 +579,7 @@ impl RewardEngine {
         reward_btc: f64,
         reward_inr: f64,
         view_count: u64,
+        reward_token: crate::rewards::config::RewardTokenType,
         app_state: &Arc<AppState>,
     ) {
         // Create the payload for the notification
@@ -590,6 +592,7 @@ impl RewardEngine {
             view_count,
             timestamp: chrono::Utc::now().timestamp(),
             rewards_received_bs: true,
+            reward_token,
         };
 
         // Create the event and send notification

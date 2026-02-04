@@ -12,6 +12,7 @@ use yral_metrics::metrics::{
 };
 
 use crate::app_state::AppState;
+use crate::rewards::config::RewardTokenType;
 
 pub fn string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
@@ -691,6 +692,7 @@ pub struct RewardEarnedPayload {
     pub timestamp: i64,
     #[serde(rename = "rewards_received_bs")]
     pub rewards_received_bs: bool,
+    pub reward_token: RewardTokenType,
 }
 
 // ----------------------------------------------------------------------------------
@@ -762,8 +764,15 @@ where
 {
     use serde::ser::SerializeStruct;
     let mut state = serializer.serialize_struct("RewardEarned", 1)?;
+
+    let token_str = match payload.reward_token {
+        RewardTokenType::Btc => "btc",
+        RewardTokenType::Dolr => "dolr",
+    };
+
     let url = format!(
-        "rewardsReceived?token=btc&reward_on=video_views&creator_id={}&video_id={}&milestone={}&reward_btc={}&reward_inr={}&view_count={}&timestamp={}&rewards_received_bs={}",
+        "rewardsReceived?token={}&reward_on=video_views&creator_id={}&video_id={}&milestone={}&reward_btc={}&reward_inr={}&view_count={}&timestamp={}&rewards_received_bs={}",
+        token_str,
         payload.creator_id,
         payload.video_id,
         payload.milestone,
@@ -1066,8 +1075,16 @@ impl EventPayload {
             }
 
             EventPayload::RewardEarned(payload) => {
-                let title = "Bitcoin Credited";
-                let body = "Congrats! Your video views have earned you Bitcoin. See your balance in the wallet.";
+                let (title, body) = match payload.reward_token {
+                    RewardTokenType::Dolr => (
+                        "DOLR Credited",
+                        "Congrats! Your video views have earned you DOLR. See your balance in the wallet."
+                    ),
+                    RewardTokenType::Btc => (
+                        "Bitcoin Credited",
+                        "Congrats! Your video views have earned you Bitcoin. See your balance in the wallet."
+                    ),
+                };
 
                 let notif_payload = SendNotificationReq {
                     notification: Some(NotificationPayload {
