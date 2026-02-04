@@ -267,29 +267,6 @@ pub async fn ai_video_backfill_process_handler(
                 response.confidence
             );
 
-            // Record in ai_ugc table for tracking (prevents re-processing)
-            let verdict_str = match response.verdict {
-                Verdict::Allow => "ALLOW",
-                Verdict::Block => "BLOCK",
-                Verdict::Review => "REVIEW",
-            };
-            let insert_ai_ugc_query = format!(
-                "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ai_ugc` (video_id, verdict, confidence, created_at)
-                 VALUES ('{}', '{}', {}, CURRENT_TIMESTAMP())",
-                video_id.replace('\'', "''"),
-                verdict_str,
-                response.confidence
-            );
-            let ai_ugc_req = QueryRequest {
-                query: insert_ai_ugc_query,
-                ..Default::default()
-            };
-            let _ = state
-                .bigquery_client
-                .job()
-                .query("hot-or-not-feed-intelligence", &ai_ugc_req)
-                .await;
-
             match response.verdict {
                 Verdict::Allow => {
                     // Auto-approve: update kvrocks and BigQuery
@@ -384,48 +361,16 @@ pub async fn ai_video_backfill_process_handler(
             (StatusCode::OK, format!("{:?}", response.verdict)).into_response()
         }
         Err(e) => {
-            let error_str = e.to_string();
-
-            // Check if it's a 404 (video not found on any storage)
-            if error_str.contains("404") {
-                log::warn!(
-                    "AI Video Backfill: {} NOT_FOUND - video doesn't exist on Storj or Cloudflare",
-                    video_id
-                );
-
-                // Insert into ai_ugc to mark as processed (so it won't be queried again)
-                let insert_query = format!(
-                    "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ai_ugc` (video_id, verdict, confidence, created_at)
-                     VALUES ('{}', 'NOT_FOUND', 0.0, CURRENT_TIMESTAMP())",
-                    video_id.replace('\'', "''")
-                );
-                let bq_req = QueryRequest {
-                    query: insert_query,
-                    ..Default::default()
-                };
-                let _ = state
-                    .bigquery_client
-                    .job()
-                    .query("hot-or-not-feed-intelligence", &bq_req)
-                    .await;
-
-                log::info!("AI Video Backfill: {} marked as NOT_FOUND in ai_ugc", video_id);
-
-                // Return 200 so QStash doesn't retry
-                (StatusCode::OK, "NOT_FOUND").into_response()
-            } else {
-                // Other errors (API down, network issues, etc.) - return 500 so QStash retries
-                log::error!(
-                    "AI Video Backfill: {} ERROR - detection failed: {}",
-                    video_id,
-                    e
-                );
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Detection failed: {}", e),
-                )
-                    .into_response()
-            }
+            log::error!(
+                "AI Video Backfill: {} ERROR - both Storj and Cloudflare failed: {}",
+                video_id,
+                e
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Detection failed: {}", e),
+            )
+                .into_response()
         }
     }
 }
