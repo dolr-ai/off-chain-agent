@@ -341,7 +341,10 @@ impl ComfyUIClient {
             "{}generate",
             self.config.api_url.as_str().trim_end_matches('/')
         );
-        info!("ComfyUI: Submitting workflow to {} with webhook", submit_url);
+        info!(
+            "ComfyUI: Submitting workflow to {} with webhook",
+            submit_url
+        );
 
         let response = self
             .http_client
@@ -403,7 +406,10 @@ impl ComfyUIClient {
         let base_url = self.config.api_url.as_str().trim_end_matches('/');
         match subfolder {
             Some(sf) if !sf.is_empty() => {
-                format!("{}/view?filename={}&subfolder={}&type=output", base_url, filename, sf)
+                format!(
+                    "{}/view?filename={}&subfolder={}&type=output",
+                    base_url, filename, sf
+                )
             }
             _ => {
                 format!("{}/view?filename={}&type=output", base_url, filename)
@@ -413,7 +419,10 @@ impl ComfyUIClient {
 }
 
 /// Extract video URL from ComfyUI webhook payload
-pub fn extract_video_url_from_webhook(payload: &ComfyUIWebhookPayload, api_url: &str) -> Option<String> {
+pub fn extract_video_url_from_webhook(
+    payload: &ComfyUIWebhookPayload,
+    api_url: &str,
+) -> Option<String> {
     let outputs = payload.output.as_ref()?;
 
     // Find the first video output (look for .mp4 files or video output type)

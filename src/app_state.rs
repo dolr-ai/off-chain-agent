@@ -1,6 +1,5 @@
 use crate::config::AppConfig;
 use crate::consts::{ANALYTICS_SERVER_URL, NSFW_SERVER_URL, YRAL_METADATA_URL};
-use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
@@ -9,6 +8,7 @@ use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
+use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::yral_auth::dragonfly::{
     get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis,
     init_dragonfly_redis_2, DragonflyPool,
