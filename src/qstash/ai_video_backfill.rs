@@ -3,12 +3,9 @@
 //! Two-endpoint architecture using QStash:
 //!
 //! 1. POST /qstash/ai_video_backfill
-//!    - Fetches unprocessed video IDs from BigQuery
-//!    - Enqueues each video to QStash for processing
-//!    - Query params:
-//!      - limit: Max videos to process (default: 1000)
-//!      - rate: QStash rate limit (default: 10)
-//!      - parallelism: QStash parallelism (default: 5)
+//!    - Fetches ALL unprocessed video IDs from BigQuery (in batches)
+//!    - Enqueues each video to QStash queue for processing
+//!    - Returns total count of videos queued
 //!
 //! 2. POST /qstash/ai_video_backfill_process
 //!    - Processes a single video (called by QStash)
@@ -36,29 +33,12 @@ use crate::{
 // Request/Response types
 // ============================================================================
 
+/// Batch size for BigQuery queries
+const BATCH_SIZE: u32 = 1000;
+
 #[derive(Debug, Deserialize)]
 pub struct BackfillParams {
-    /// Max number of videos to process
-    #[serde(default = "default_limit")]
-    limit: u32,
-    /// QStash rate limit (requests per second)
-    #[serde(default = "default_rate")]
-    rate: u32,
-    /// QStash parallelism (concurrent workers)
-    #[serde(default = "default_parallelism")]
-    parallelism: u32,
-}
-
-fn default_limit() -> u32 {
-    1000
-}
-
-fn default_rate() -> u32 {
-    10
-}
-
-fn default_parallelism() -> u32 {
-    5
+    // No params needed - we fetch ALL videos
 }
 
 #[derive(Debug, Serialize)]
@@ -122,10 +102,10 @@ async fn detect_video(
 // Endpoint 1: Enqueue videos for processing
 // ============================================================================
 
-/// Fetches unprocessed videos from BigQuery and enqueues them to QStash
+/// Fetches ALL unprocessed videos from BigQuery and enqueues them to QStash
 pub async fn ai_video_backfill_handler(
     State(state): State<Arc<AppState>>,
-    Query(params): Query<BackfillParams>,
+    Query(_params): Query<BackfillParams>,
 ) -> Response {
     // Validate API key exists
     if std::env::var("AI_VIDEO_DETECTOR_API_KEY")
@@ -139,115 +119,130 @@ pub async fn ai_video_backfill_handler(
             .into_response();
     }
 
-    log::info!(
-        "AI Video Backfill: Fetching up to {} unprocessed videos",
-        params.limit
-    );
+    log::info!("AI Video Backfill: Starting to fetch ALL unprocessed videos");
 
-    // Query unprocessed videos with publisher_user_id
-    let query = format!(
-        "SELECT video_id, publisher_user_id FROM (
-          SELECT
-            JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id,
-            JSON_EXTRACT_SCALAR(params, '$.publisher_user_id') AS publisher_user_id
-          FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
-          WHERE event = 'video_upload_success' OR event = 'video_upload_successful'
-        )
-        WHERE video_id IS NOT NULL
-          AND publisher_user_id IS NOT NULL
-          AND video_id NOT IN (
-            SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ai_ugc`
-          )
-          AND video_id NOT IN (
-            SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-          )
-        LIMIT {}",
-        params.limit
-    );
+    let mut total_queued = 0usize;
+    let mut batch_num = 0usize;
 
-    let req = QueryRequest {
-        query,
-        ..Default::default()
-    };
+    // Loop through all batches until no more videos
+    loop {
+        batch_num += 1;
 
-    let resp = match state
-        .bigquery_client
-        .job()
-        .query("hot-or-not-feed-intelligence", &req)
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            log::error!("BigQuery query failed: {}", e);
+        // Query next batch of unprocessed videos
+        let query = format!(
+            "SELECT video_id, publisher_user_id FROM (
+              SELECT
+                JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id,
+                JSON_EXTRACT_SCALAR(params, '$.publisher_user_id') AS publisher_user_id
+              FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
+              WHERE event = 'video_upload_success' OR event = 'video_upload_successful'
+            )
+            WHERE video_id IS NOT NULL
+              AND publisher_user_id IS NOT NULL
+              AND video_id NOT IN (
+                SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ai_ugc`
+              )
+              AND video_id NOT IN (
+                SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+              )
+            LIMIT {}",
+            BATCH_SIZE
+        );
+
+        let req = QueryRequest {
+            query,
+            ..Default::default()
+        };
+
+        let resp = match state
+            .bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &req)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                log::error!("BigQuery query failed at batch {}: {}", batch_num, e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("BigQuery query failed: {}", e),
+                )
+                    .into_response();
+            }
+        };
+
+        let rows = resp.rows.unwrap_or_default();
+
+        if rows.is_empty() {
+            log::info!(
+                "AI Video Backfill: No more videos to process after {} batches",
+                batch_num - 1
+            );
+            break;
+        }
+
+        // Extract video data (strip quotes if present)
+        let video_data: Vec<(String, String)> = rows
+            .iter()
+            .filter_map(|row| {
+                if row.f.len() >= 2 {
+                    let video_id = match &row.f[0].v {
+                        Value::String(s) => s.trim_matches('"').to_string(),
+                        _ => return None,
+                    };
+                    let publisher_user_id = match &row.f[1].v {
+                        Value::String(s) => s.trim_matches('"').to_string(),
+                        _ => return None,
+                    };
+                    Some((video_id, publisher_user_id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let batch_count = video_data.len();
+        log::info!(
+            "AI Video Backfill: Batch {} - Enqueueing {} videos to QStash",
+            batch_num,
+            batch_count
+        );
+
+        // Enqueue batch to QStash
+        if let Err(e) = state
+            .qstash_client
+            .queue_ai_video_backfill_batch(video_data)
+            .await
+        {
+            log::error!("Failed to enqueue batch {} to QStash: {}", batch_num, e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("BigQuery query failed: {}", e),
+                format!("Failed to enqueue batch {}: {}", batch_num, e),
             )
                 .into_response();
         }
-    };
 
-    let rows = resp.rows.unwrap_or_default();
+        total_queued += batch_count;
 
-    if rows.is_empty() {
-        log::info!("AI Video Backfill: No unprocessed videos found");
-        return Json(BackfillResponse {
-            status: "completed",
-            message: "No unprocessed videos found".to_string(),
-            videos_queued: 0,
-        })
-        .into_response();
+        // If we got less than BATCH_SIZE, we're done
+        if batch_count < BATCH_SIZE as usize {
+            break;
+        }
     }
 
-    // Extract video data (strip quotes if present)
-    let video_data: Vec<(String, String)> = rows
-        .iter()
-        .filter_map(|row| {
-            if row.f.len() >= 2 {
-                let video_id = match &row.f[0].v {
-                    Value::String(s) => s.trim_matches('"').to_string(),
-                    _ => return None,
-                };
-                let publisher_user_id = match &row.f[1].v {
-                    Value::String(s) => s.trim_matches('"').to_string(),
-                    _ => return None,
-                };
-                Some((video_id, publisher_user_id))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let video_count = video_data.len();
     log::info!(
-        "AI Video Backfill: Found {} videos, enqueueing to QStash (rate={}, parallelism={})",
-        video_count,
-        params.rate,
-        params.parallelism
+        "AI Video Backfill: Completed - {} total videos queued in {} batches",
+        total_queued,
+        batch_num
     );
-
-    // Enqueue all videos to QStash
-    if let Err(e) = state
-        .qstash_client
-        .queue_ai_video_backfill_batch(video_data, params.rate, params.parallelism)
-        .await
-    {
-        log::error!("Failed to enqueue videos to QStash: {}", e);
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to enqueue videos: {}", e),
-        )
-            .into_response();
-    }
 
     Json(BackfillResponse {
         status: "queued",
         message: format!(
-            "Queued {} videos for processing via QStash (rate={}, parallelism={})",
-            video_count, params.rate, params.parallelism
+            "Queued {} videos for processing via QStash ({} batches)",
+            total_queued, batch_num
         ),
-        videos_queued: video_count,
+        videos_queued: total_queued,
     })
     .into_response()
 }

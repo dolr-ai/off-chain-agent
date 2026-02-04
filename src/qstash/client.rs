@@ -684,13 +684,11 @@ impl QStashClient {
     }
 
     /// Queue AI video backfill processing for a batch of videos
-    /// Uses the "ai-video-detection-backfill" QStash queue
+    /// Uses the "ai-video-detection-backfill" QStash queue (queue handles rate limiting)
     #[instrument(skip(self, video_data))]
     pub async fn queue_ai_video_backfill_batch(
         &self,
         video_data: Vec<(String, String)>, // (video_id, publisher_user_id)
-        _rate_limit: u32,                  // Queue handles rate limiting
-        _parallelism: u32,                 // Queue handles parallelism
     ) -> anyhow::Result<()> {
         let destination_url = OFF_CHAIN_AGENT_URL
             .join("qstash/ai_video_backfill_process")?
