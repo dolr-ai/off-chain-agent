@@ -213,6 +213,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/ai_video_backfill",
             post(ai_video_backfill::ai_video_backfill_handler),
+        )
+        .route(
+            "/ai_video_backfill_process",
+            post(ai_video_backfill::ai_video_backfill_process_handler),
         );
 
     #[cfg(not(feature = "local-bin"))]

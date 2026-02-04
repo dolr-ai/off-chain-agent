@@ -1,11 +1,19 @@
-//! AI Video Detection Backfill endpoint
+//! AI Video Detection Backfill endpoints
 //!
-//! POST /qstash/ai_video_backfill
-//! Query params:
-//!   - dry_run: Only detect, don't update anything (default: false)
+//! Two-endpoint architecture using QStash:
 //!
-//! Processes ALL unprocessed videos in one go.
-//! Returns immediately and processes in background.
+//! 1. POST /qstash/ai_video_backfill
+//!    - Fetches unprocessed video IDs from BigQuery
+//!    - Enqueues each video to QStash for processing
+//!    - Query params:
+//!      - limit: Max videos to process (default: 1000)
+//!      - rate: QStash rate limit (default: 10)
+//!      - parallelism: QStash parallelism (default: 5)
+//!
+//! 2. POST /qstash/ai_video_backfill_process
+//!    - Processes a single video (called by QStash)
+//!    - Tries Storj URL first, falls back to Cloudflare
+//!    - Updates kvrocks and BigQuery based on verdict
 
 use std::sync::Arc;
 
@@ -24,10 +32,46 @@ use crate::{
     consts::{get_cloudflare_stream_url, get_storj_video_url},
 };
 
+// ============================================================================
+// Request/Response types
+// ============================================================================
+
 #[derive(Debug, Deserialize)]
 pub struct BackfillParams {
-    #[serde(default)]
-    dry_run: bool,
+    /// Max number of videos to process
+    #[serde(default = "default_limit")]
+    limit: u32,
+    /// QStash rate limit (requests per second)
+    #[serde(default = "default_rate")]
+    rate: u32,
+    /// QStash parallelism (concurrent workers)
+    #[serde(default = "default_parallelism")]
+    parallelism: u32,
+}
+
+fn default_limit() -> u32 {
+    1000
+}
+
+fn default_rate() -> u32 {
+    10
+}
+
+fn default_parallelism() -> u32 {
+    5
+}
+
+#[derive(Debug, Serialize)]
+pub struct BackfillResponse {
+    status: &'static str,
+    message: String,
+    videos_queued: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProcessVideoRequest {
+    video_id: String,
+    publisher_user_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,12 +88,9 @@ struct DetectionResponse {
     confidence: f64,
 }
 
-#[derive(Debug, Serialize)]
-pub struct BackfillAckResponse {
-    status: &'static str,
-    message: String,
-    dry_run: bool,
-}
+// ============================================================================
+// AI Video Detection
+// ============================================================================
 
 async fn detect_video(
     client: &reqwest::Client,
@@ -77,313 +118,16 @@ async fn detect_video(
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
-const BATCH_SIZE: u32 = 100;
+// ============================================================================
+// Endpoint 1: Enqueue videos for processing
+// ============================================================================
 
-/// Background task that processes all unprocessed videos in batches
-async fn process_backfill(state: Arc<AppState>, dry_run: bool) {
-    let api_key = match std::env::var("AI_VIDEO_DETECTOR_API_KEY") {
-        Ok(key) if !key.is_empty() => key,
-        _ => {
-            log::error!("AI_VIDEO_DETECTOR_API_KEY not set");
-            return;
-        }
-    };
-
-    let api_url = std::env::var("AI_VIDEO_DETECTOR_URL")
-        .unwrap_or_else(|_| "https://ai-video-detector.fly.dev".to_string());
-    let detect_url = format!("{}/detect", api_url);
-
-    let http = reqwest::Client::new();
-    let mut total_processed = 0usize;
-    let mut total_allow = 0usize;
-    let mut total_block = 0usize;
-    let mut total_review = 0usize;
-    let mut total_errors = 0usize;
-    let mut batch_num = 0usize;
-
-    loop {
-        batch_num += 1;
-
-        // Query next batch of unprocessed videos (with publisher_user_id for Storj URL)
-        let query = format!(
-            "SELECT video_id, publisher_user_id FROM (
-              SELECT
-                JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id,
-                JSON_EXTRACT_SCALAR(params, '$.publisher_user_id') AS publisher_user_id
-              FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
-              WHERE event = 'video_upload_success' OR event = 'video_upload_successful'
-            )
-            WHERE video_id IS NOT NULL
-              AND publisher_user_id IS NOT NULL
-              AND video_id NOT IN (
-                SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ai_ugc`
-              )
-              AND video_id NOT IN (
-                SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-              )
-            LIMIT {}",
-            BATCH_SIZE
-        );
-
-        let req = QueryRequest {
-            query,
-            ..Default::default()
-        };
-
-        let resp = match state
-            .bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &req)
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                log::error!("BigQuery query failed: {}", e);
-                break;
-            }
-        };
-
-        let rows = resp.rows.unwrap_or_default();
-
-        if rows.is_empty() {
-            log::info!("AI Video Backfill: No more videos to process");
-            break;
-        }
-
-        log::info!(
-            "AI Video Backfill: Batch {} - Processing {} videos",
-            batch_num,
-            rows.len()
-        );
-
-        let batch_total = rows.len();
-        let mut batch_processed = 0usize;
-
-        for row in &rows {
-            // Extract video_id and publisher_user_id (strip quotes if present)
-            let video_id = match row.f.first().and_then(|c| match &c.v {
-                Value::String(s) => Some(s.trim_matches('"').to_string()),
-                _ => None,
-            }) {
-                Some(id) => id,
-                None => continue,
-            };
-
-            let publisher_user_id = match row.f.get(1).and_then(|c| match &c.v {
-                Value::String(s) => Some(s.trim_matches('"').to_string()),
-                _ => None,
-            }) {
-                Some(id) => id,
-                None => continue,
-            };
-
-            batch_processed += 1;
-            total_processed += 1;
-
-            // Try Storj first, fallback to Cloudflare (same pattern as duplicate.rs)
-            let storj_url = get_storj_video_url(&publisher_user_id, &video_id, false);
-            let detection = match detect_video(&http, &detect_url, &api_key, &storj_url).await {
-                Ok(response) => Ok(response),
-                Err(storj_err) => {
-                    log::warn!(
-                        "Storj detection failed for {}, trying Cloudflare: {}",
-                        video_id,
-                        storj_err
-                    );
-                    let cf_url = get_cloudflare_stream_url(&video_id);
-                    detect_video(&http, &detect_url, &api_key, &cf_url).await
-                }
-            };
-
-            match detection {
-                Ok(det) => match det.verdict {
-                    Verdict::Allow => {
-                        total_allow += 1;
-                        if !dry_run {
-                            if let Err(e) = state
-                                .kvrocks_client
-                                .update_user_uploaded_content_approval_status(&video_id, true)
-                                .await
-                            {
-                                log::error!(
-                                    "[B{} {}/{}] {} ALLOW - kvrocks failed: {}",
-                                    batch_num,
-                                    batch_processed,
-                                    batch_total,
-                                    video_id,
-                                    e
-                                );
-                                total_errors += 1;
-                            } else {
-                                let update_query = format!(
-                                        "UPDATE `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-                                         SET is_approved = TRUE WHERE video_id = '{}'",
-                                        video_id.replace('\'', "''")
-                                    );
-                                let req = QueryRequest {
-                                    query: update_query,
-                                    ..Default::default()
-                                };
-                                let _ = state
-                                    .bigquery_client
-                                    .job()
-                                    .query("hot-or-not-feed-intelligence", &req)
-                                    .await;
-                                log::info!(
-                                    "[B{} {}/{}] {} ALLOW (conf: {:.2}) -> APPROVED",
-                                    batch_num,
-                                    batch_processed,
-                                    batch_total,
-                                    video_id,
-                                    det.confidence
-                                );
-                            }
-                        } else {
-                            log::info!(
-                                "[B{} {}/{}] {} ALLOW (conf: {:.2}) -> would_approve",
-                                batch_num,
-                                batch_processed,
-                                batch_total,
-                                video_id,
-                                det.confidence
-                            );
-                        }
-                    }
-                    Verdict::Block => {
-                        total_block += 1;
-                        if !dry_run {
-                            let _ = state
-                                .kvrocks_client
-                                .delete_user_uploaded_content_approval(&video_id)
-                                .await;
-                            let delete_query = format!(
-                                    "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-                                     WHERE video_id = '{}'",
-                                    video_id.replace('\'', "''")
-                                );
-                            let req = QueryRequest {
-                                query: delete_query,
-                                ..Default::default()
-                            };
-                            let _ = state
-                                .bigquery_client
-                                .job()
-                                .query("hot-or-not-feed-intelligence", &req)
-                                .await;
-                            log::info!(
-                                "[B{} {}/{}] {} BLOCK (conf: {:.2}) -> DELETED",
-                                batch_num,
-                                batch_processed,
-                                batch_total,
-                                video_id,
-                                det.confidence
-                            );
-                        } else {
-                            log::info!(
-                                "[B{} {}/{}] {} BLOCK (conf: {:.2}) -> would_delete",
-                                batch_num,
-                                batch_processed,
-                                batch_total,
-                                video_id,
-                                det.confidence
-                            );
-                        }
-                    }
-                    Verdict::Review => {
-                        total_review += 1;
-                        if !dry_run {
-                            if let Err(e) = state
-                                .kvrocks_client
-                                .update_user_uploaded_content_approval_status(&video_id, false)
-                                .await
-                            {
-                                log::error!(
-                                    "[B{} {}/{}] {} REVIEW - kvrocks failed: {}",
-                                    batch_num,
-                                    batch_processed,
-                                    batch_total,
-                                    video_id,
-                                    e
-                                );
-                                total_errors += 1;
-                            } else {
-                                let insert_query = format!(
-                                        "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval` (video_id, is_approved, created_at)
-                                         VALUES ('{}', FALSE, CURRENT_TIMESTAMP())",
-                                        video_id.replace('\'', "''")
-                                    );
-                                let req = QueryRequest {
-                                    query: insert_query,
-                                    ..Default::default()
-                                };
-                                let _ = state
-                                    .bigquery_client
-                                    .job()
-                                    .query("hot-or-not-feed-intelligence", &req)
-                                    .await;
-                                log::info!(
-                                    "[B{} {}/{}] {} REVIEW (conf: {:.2}) -> INSERTED_PENDING",
-                                    batch_num,
-                                    batch_processed,
-                                    batch_total,
-                                    video_id,
-                                    det.confidence
-                                );
-                            }
-                        } else {
-                            log::info!(
-                                "[B{} {}/{}] {} REVIEW (conf: {:.2}) -> would_insert_pending",
-                                batch_num,
-                                batch_processed,
-                                batch_total,
-                                video_id,
-                                det.confidence
-                            );
-                        }
-                    }
-                },
-                Err(e) => {
-                    total_errors += 1;
-                    log::error!(
-                        "[B{} {}/{}] {} ERROR: {}",
-                        batch_num,
-                        batch_processed,
-                        batch_total,
-                        video_id,
-                        e
-                    );
-                }
-            }
-        }
-
-        log::info!(
-            "AI Video Backfill: Batch {} complete. Running totals: processed={}, allow={}, block={}, review={}, errors={}",
-            batch_num,
-            total_processed,
-            total_allow,
-            total_block,
-            total_review,
-            total_errors
-        );
-    }
-
-    log::info!(
-        "AI Video Backfill COMPLETE: total_processed={}, allow={}, block={}, review={}, errors={}, batches={}, dry_run={}",
-        total_processed,
-        total_allow,
-        total_block,
-        total_review,
-        total_errors,
-        batch_num,
-        dry_run
-    );
-}
-
+/// Fetches unprocessed videos from BigQuery and enqueues them to QStash
 pub async fn ai_video_backfill_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<BackfillParams>,
 ) -> Response {
-    // Validate API key exists before spawning
+    // Validate API key exists
     if std::env::var("AI_VIDEO_DETECTOR_API_KEY")
         .map(|k| k.is_empty())
         .unwrap_or(true)
@@ -395,19 +139,275 @@ pub async fn ai_video_backfill_handler(
             .into_response();
     }
 
-    log::info!("AI Video Backfill started: dry_run={}", params.dry_run);
+    log::info!(
+        "AI Video Backfill: Fetching up to {} unprocessed videos",
+        params.limit
+    );
 
-    // Spawn background task
-    let dry_run = params.dry_run;
-    tokio::spawn(async move {
-        process_backfill(state, dry_run).await;
-    });
+    // Query unprocessed videos with publisher_user_id
+    let query = format!(
+        "SELECT video_id, publisher_user_id FROM (
+          SELECT
+            JSON_EXTRACT_SCALAR(params, '$.video_id') AS video_id,
+            JSON_EXTRACT_SCALAR(params, '$.publisher_user_id') AS publisher_user_id
+          FROM `hot-or-not-feed-intelligence.analytics_335143420.test_events_analytics`
+          WHERE event = 'video_upload_success' OR event = 'video_upload_successful'
+        )
+        WHERE video_id IS NOT NULL
+          AND publisher_user_id IS NOT NULL
+          AND video_id NOT IN (
+            SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ai_ugc`
+          )
+          AND video_id NOT IN (
+            SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+          )
+        LIMIT {}",
+        params.limit
+    );
 
-    // Return immediately
-    Json(BackfillAckResponse {
-        status: "started",
-        message: "Backfill job started in background. Processing ALL unprocessed videos. Check logs for progress.".to_string(),
-        dry_run: params.dry_run,
+    let req = QueryRequest {
+        query,
+        ..Default::default()
+    };
+
+    let resp = match state
+        .bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &req)
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            log::error!("BigQuery query failed: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("BigQuery query failed: {}", e),
+            )
+                .into_response();
+        }
+    };
+
+    let rows = resp.rows.unwrap_or_default();
+
+    if rows.is_empty() {
+        log::info!("AI Video Backfill: No unprocessed videos found");
+        return Json(BackfillResponse {
+            status: "completed",
+            message: "No unprocessed videos found".to_string(),
+            videos_queued: 0,
+        })
+        .into_response();
+    }
+
+    // Extract video data (strip quotes if present)
+    let video_data: Vec<(String, String)> = rows
+        .iter()
+        .filter_map(|row| {
+            if row.f.len() >= 2 {
+                let video_id = match &row.f[0].v {
+                    Value::String(s) => s.trim_matches('"').to_string(),
+                    _ => return None,
+                };
+                let publisher_user_id = match &row.f[1].v {
+                    Value::String(s) => s.trim_matches('"').to_string(),
+                    _ => return None,
+                };
+                Some((video_id, publisher_user_id))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let video_count = video_data.len();
+    log::info!(
+        "AI Video Backfill: Found {} videos, enqueueing to QStash (rate={}, parallelism={})",
+        video_count,
+        params.rate,
+        params.parallelism
+    );
+
+    // Enqueue all videos to QStash
+    if let Err(e) = state
+        .qstash_client
+        .queue_ai_video_backfill_batch(video_data, params.rate, params.parallelism)
+        .await
+    {
+        log::error!("Failed to enqueue videos to QStash: {}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to enqueue videos: {}", e),
+        )
+            .into_response();
+    }
+
+    Json(BackfillResponse {
+        status: "queued",
+        message: format!(
+            "Queued {} videos for processing via QStash (rate={}, parallelism={})",
+            video_count, params.rate, params.parallelism
+        ),
+        videos_queued: video_count,
     })
     .into_response()
+}
+
+// ============================================================================
+// Endpoint 2: Process a single video (called by QStash)
+// ============================================================================
+
+/// Processes a single video - called by QStash
+pub async fn ai_video_backfill_process_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ProcessVideoRequest>,
+) -> Response {
+    let video_id = req.video_id;
+    let publisher_user_id = req.publisher_user_id;
+
+    log::info!("AI Video Backfill: Processing video {}", video_id);
+
+    let api_key = match std::env::var("AI_VIDEO_DETECTOR_API_KEY") {
+        Ok(key) if !key.is_empty() => key,
+        _ => {
+            log::error!("AI_VIDEO_DETECTOR_API_KEY not set");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AI_VIDEO_DETECTOR_API_KEY not set",
+            )
+                .into_response();
+        }
+    };
+
+    let api_url = std::env::var("AI_VIDEO_DETECTOR_URL")
+        .unwrap_or_else(|_| "https://ai-video-detector.fly.dev".to_string());
+    let detect_url = format!("{}/detect", api_url);
+
+    let http = reqwest::Client::new();
+
+    // Try Storj first, fallback to Cloudflare (same pattern as duplicate.rs)
+    let storj_url = get_storj_video_url(&publisher_user_id, &video_id, false);
+    let detection = match detect_video(&http, &detect_url, &api_key, &storj_url).await {
+        Ok(response) => Ok(response),
+        Err(storj_err) => {
+            log::warn!(
+                "Storj detection failed for {}, trying Cloudflare: {}",
+                video_id,
+                storj_err
+            );
+            let cf_url = get_cloudflare_stream_url(&video_id);
+            detect_video(&http, &detect_url, &api_key, &cf_url).await
+        }
+    };
+
+    match detection {
+        Ok(det) => {
+            log::info!(
+                "AI Video Backfill: {} -> {:?} (conf: {:.2})",
+                video_id,
+                det.verdict,
+                det.confidence
+            );
+
+            match det.verdict {
+                Verdict::Allow => {
+                    // Auto-approve: update kvrocks and BigQuery
+                    if let Err(e) = state
+                        .kvrocks_client
+                        .update_user_uploaded_content_approval_status(&video_id, true)
+                        .await
+                    {
+                        log::error!("Failed to update kvrocks for {}: {}", video_id, e);
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("kvrocks error: {}", e),
+                        )
+                            .into_response();
+                    }
+
+                    let update_query = format!(
+                        "UPDATE `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+                         SET is_approved = TRUE WHERE video_id = '{}'",
+                        video_id.replace('\'', "''")
+                    );
+                    let bq_req = QueryRequest {
+                        query: update_query,
+                        ..Default::default()
+                    };
+                    let _ = state
+                        .bigquery_client
+                        .job()
+                        .query("hot-or-not-feed-intelligence", &bq_req)
+                        .await;
+
+                    log::info!("AI Video Backfill: {} APPROVED", video_id);
+                }
+                Verdict::Block => {
+                    // Delete from kvrocks and BigQuery
+                    let _ = state
+                        .kvrocks_client
+                        .delete_user_uploaded_content_approval(&video_id)
+                        .await;
+
+                    let delete_query = format!(
+                        "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+                         WHERE video_id = '{}'",
+                        video_id.replace('\'', "''")
+                    );
+                    let bq_req = QueryRequest {
+                        query: delete_query,
+                        ..Default::default()
+                    };
+                    let _ = state
+                        .bigquery_client
+                        .job()
+                        .query("hot-or-not-feed-intelligence", &bq_req)
+                        .await;
+
+                    log::info!("AI Video Backfill: {} BLOCKED/DELETED", video_id);
+                }
+                Verdict::Review => {
+                    // Insert as pending review
+                    if let Err(e) = state
+                        .kvrocks_client
+                        .update_user_uploaded_content_approval_status(&video_id, false)
+                        .await
+                    {
+                        log::error!("Failed to update kvrocks for {}: {}", video_id, e);
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("kvrocks error: {}", e),
+                        )
+                            .into_response();
+                    }
+
+                    let insert_query = format!(
+                        "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval` (video_id, is_approved, created_at)
+                         VALUES ('{}', FALSE, CURRENT_TIMESTAMP())",
+                        video_id.replace('\'', "''")
+                    );
+                    let bq_req = QueryRequest {
+                        query: insert_query,
+                        ..Default::default()
+                    };
+                    let _ = state
+                        .bigquery_client
+                        .job()
+                        .query("hot-or-not-feed-intelligence", &bq_req)
+                        .await;
+
+                    log::info!("AI Video Backfill: {} REVIEW (pending)", video_id);
+                }
+            }
+
+            (StatusCode::OK, format!("{:?}", det.verdict)).into_response()
+        }
+        Err(e) => {
+            log::error!("AI Video Backfill: {} ERROR - {}", video_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Detection failed: {}", e),
+            )
+                .into_response()
+        }
+    }
 }
