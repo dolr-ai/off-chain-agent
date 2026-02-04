@@ -3,9 +3,8 @@
 //! Two-endpoint architecture using QStash:
 //!
 //! 1. POST /qstash/ai_video_backfill
-//!    - Fetches ALL unprocessed video IDs from BigQuery (in batches)
-//!    - Enqueues each video to QStash queue for processing
-//!    - Returns total count of videos queued
+//!    - Spawns a background task to fetch ALL unprocessed video IDs from BigQuery
+//!    - Returns immediately while enqueueing happens in background
 //!
 //! 2. POST /qstash/ai_video_backfill_process
 //!    - Processes a single video (called by QStash)
@@ -27,7 +26,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app_state::AppState,
     consts::{get_cloudflare_stream_url, get_storj_video_url},
+    qstash::client::QStashClient,
 };
+use google_cloud_bigquery::client::Client as BigQueryClient;
 
 // ============================================================================
 // Request/Response types
@@ -102,33 +103,16 @@ async fn detect_video(
 // Endpoint 1: Enqueue videos for processing
 // ============================================================================
 
-/// Fetches ALL unprocessed videos from BigQuery and enqueues them to QStash
-pub async fn ai_video_backfill_handler(
-    State(state): State<Arc<AppState>>,
-    Query(_params): Query<BackfillParams>,
-) -> Response {
-    // Validate API key exists
-    if std::env::var("AI_VIDEO_DETECTOR_API_KEY")
-        .map(|k| k.is_empty())
-        .unwrap_or(true)
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "AI_VIDEO_DETECTOR_API_KEY not set",
-        )
-            .into_response();
-    }
-
-    log::info!("AI Video Backfill: Starting to fetch ALL unprocessed videos");
+/// Background task that fetches ALL unprocessed videos and enqueues them to QStash
+async fn backfill_videos_task(bigquery_client: BigQueryClient, qstash_client: QStashClient) {
+    log::info!("AI Video Backfill: Background task started - fetching ALL unprocessed videos");
 
     let mut total_queued = 0usize;
     let mut batch_num = 0usize;
 
-    // Loop through all batches until no more videos
     loop {
         batch_num += 1;
 
-        // Query next batch of unprocessed videos
         let query = format!(
             "SELECT video_id, publisher_user_id FROM (
               SELECT
@@ -154,20 +138,19 @@ pub async fn ai_video_backfill_handler(
             ..Default::default()
         };
 
-        let resp = match state
-            .bigquery_client
+        let resp = match bigquery_client
             .job()
             .query("hot-or-not-feed-intelligence", &req)
             .await
         {
             Ok(r) => r,
             Err(e) => {
-                log::error!("BigQuery query failed at batch {}: {}", batch_num, e);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("BigQuery query failed: {}", e),
-                )
-                    .into_response();
+                log::error!(
+                    "AI Video Backfill: BigQuery query failed at batch {}: {}",
+                    batch_num,
+                    e
+                );
+                return;
             }
         };
 
@@ -181,7 +164,6 @@ pub async fn ai_video_backfill_handler(
             break;
         }
 
-        // Extract video data (strip quotes if present)
         let video_data: Vec<(String, String)> = rows
             .iter()
             .filter_map(|row| {
@@ -208,41 +190,65 @@ pub async fn ai_video_backfill_handler(
             batch_count
         );
 
-        // Enqueue batch to QStash
-        if let Err(e) = state
-            .qstash_client
+        if let Err(e) = qstash_client
             .queue_ai_video_backfill_batch(video_data)
             .await
         {
-            log::error!("Failed to enqueue batch {} to QStash: {}", batch_num, e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to enqueue batch {}: {}", batch_num, e),
-            )
-                .into_response();
+            log::error!(
+                "AI Video Backfill: Failed to enqueue batch {} to QStash: {}",
+                batch_num,
+                e
+            );
+            return;
         }
 
         total_queued += batch_count;
 
-        // If we got less than BATCH_SIZE, we're done
         if batch_count < BATCH_SIZE as usize {
             break;
         }
     }
 
     log::info!(
-        "AI Video Backfill: Completed - {} total videos queued in {} batches",
+        "AI Video Backfill: Background task completed - {} total videos queued in {} batches",
         total_queued,
         batch_num
     );
+}
 
+/// Starts backfill in background and returns immediately
+pub async fn ai_video_backfill_handler(
+    State(state): State<Arc<AppState>>,
+    Query(_params): Query<BackfillParams>,
+) -> Response {
+    // Validate API key exists
+    if std::env::var("AI_VIDEO_DETECTOR_API_KEY")
+        .map(|k| k.is_empty())
+        .unwrap_or(true)
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AI_VIDEO_DETECTOR_API_KEY not set",
+        )
+            .into_response();
+    }
+
+    log::info!("AI Video Backfill: Spawning background task");
+
+    // Clone what we need for the background task
+    let bigquery_client = state.bigquery_client.clone();
+    let qstash_client = state.qstash_client.clone();
+
+    // Spawn the background task
+    tokio::spawn(async move {
+        backfill_videos_task(bigquery_client, qstash_client).await;
+    });
+
+    // Return immediately
     Json(BackfillResponse {
-        status: "queued",
-        message: format!(
-            "Queued {} videos for processing via QStash ({} batches)",
-            total_queued, batch_num
-        ),
-        videos_queued: total_queued,
+        status: "started",
+        message: "Backfill job started in background. Check logs for progress.".to_string(),
+        videos_queued: 0,
     })
     .into_response()
 }
