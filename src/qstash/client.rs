@@ -695,16 +695,18 @@ impl QStashClient {
             .to_string();
 
         // Use QStash queue endpoint: /v2/enqueue/{queueName}/{destination}
-        // Note: destination URL should NOT be encoded (same pattern as publish/)
+        // Manually construct URL to avoid issues with Url::join and embedded URLs
         let queue_name = "ai-video-detection-backfill";
-        let enqueue_url = self
-            .base_url
-            .join(&format!("enqueue/{}/{}", queue_name, destination_url))?;
+        let enqueue_url = format!(
+            "{}enqueue/{}/{}",
+            self.base_url, queue_name, destination_url
+        );
 
         log::info!(
-            "AI Video Backfill: Queuing {} videos to queue '{}'",
+            "AI Video Backfill: Queuing {} videos to queue '{}' (url: {})",
             video_data.len(),
-            queue_name
+            queue_name,
+            enqueue_url
         );
 
         let mut success_count = 0;
