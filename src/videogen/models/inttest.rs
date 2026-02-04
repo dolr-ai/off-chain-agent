@@ -29,7 +29,7 @@ pub async fn generate_with_context(
         request_key: context.request_key.clone(),
         property: context.property.clone(),
         deducted_amount: context.deducted_amount,
-        token_type: context.token_type.clone(),
+        token_type: context.token_type,
         handle_video_upload: context.handle_video_upload.clone(),
     };
 
