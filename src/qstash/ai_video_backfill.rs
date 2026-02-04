@@ -269,7 +269,7 @@ pub async fn ai_video_backfill_process_handler(
 
             match response.verdict {
                 Verdict::Allow => {
-                    // Auto-approve: update kvrocks and BigQuery
+                    // Auto-approve: insert into kvrocks and BigQuery
                     if let Err(e) = state
                         .kvrocks_client
                         .update_user_uploaded_content_approval_status(&video_id, true)
@@ -283,13 +283,14 @@ pub async fn ai_video_backfill_process_handler(
                             .into_response();
                     }
 
-                    let update_query = format!(
-                        "UPDATE `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-                         SET is_approved = TRUE WHERE video_id = '{}'",
+                    let insert_query = format!(
+                        "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+                         (video_id, is_approved, created_at)
+                         VALUES ('{}', TRUE, CURRENT_TIMESTAMP())",
                         video_id.replace('\'', "''")
                     );
                     let bq_req = QueryRequest {
-                        query: update_query,
+                        query: insert_query,
                         ..Default::default()
                     };
                     let _ = state
@@ -301,19 +302,21 @@ pub async fn ai_video_backfill_process_handler(
                     log::info!("AI Video Backfill: {} APPROVED", video_id);
                 }
                 Verdict::Block => {
-                    // Delete from kvrocks and BigQuery
+                    // For backfill: insert as blocked (is_approved=FALSE) so it's excluded from future queries
+                    // Also delete from kvrocks if it exists
                     let _ = state
                         .kvrocks_client
                         .delete_user_uploaded_content_approval(&video_id)
                         .await;
 
-                    let delete_query = format!(
-                        "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-                         WHERE video_id = '{}'",
+                    let insert_query = format!(
+                        "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+                         (video_id, is_approved, created_at)
+                         VALUES ('{}', FALSE, CURRENT_TIMESTAMP())",
                         video_id.replace('\'', "''")
                     );
                     let bq_req = QueryRequest {
-                        query: delete_query,
+                        query: insert_query,
                         ..Default::default()
                     };
                     let _ = state
@@ -322,7 +325,7 @@ pub async fn ai_video_backfill_process_handler(
                         .query("hot-or-not-feed-intelligence", &bq_req)
                         .await;
 
-                    log::info!("AI Video Backfill: {} BLOCKED/DELETED", video_id);
+                    log::info!("AI Video Backfill: {} BLOCKED", video_id);
                 }
                 Verdict::Review => {
                     // Insert as pending review
@@ -361,16 +364,47 @@ pub async fn ai_video_backfill_process_handler(
             (StatusCode::OK, format!("{:?}", response.verdict)).into_response()
         }
         Err(e) => {
-            log::error!(
-                "AI Video Backfill: {} ERROR - both Storj and Cloudflare failed: {}",
-                video_id,
-                e
-            );
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Detection failed: {}", e),
-            )
-                .into_response()
+            let error_str = e.to_string();
+
+            // Check if it's a 404 (video not found on any storage)
+            if error_str.contains("404") {
+                log::warn!(
+                    "AI Video Backfill: {} NOT_FOUND - sending to review",
+                    video_id
+                );
+
+                // Treat as Review - insert into ugc_content_approval with is_approved=FALSE
+                let insert_query = format!(
+                    "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+                     (video_id, is_approved, created_at)
+                     VALUES ('{}', FALSE, CURRENT_TIMESTAMP())",
+                    video_id.replace('\'', "''")
+                );
+                let bq_req = QueryRequest {
+                    query: insert_query,
+                    ..Default::default()
+                };
+                let _ = state
+                    .bigquery_client
+                    .job()
+                    .query("hot-or-not-feed-intelligence", &bq_req)
+                    .await;
+
+                // Return 200 so QStash doesn't retry
+                (StatusCode::OK, "REVIEW").into_response()
+            } else {
+                // Other errors (API down, network issues) - return 500 so QStash retries
+                log::error!(
+                    "AI Video Backfill: {} ERROR - detection failed: {}",
+                    video_id,
+                    e
+                );
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Detection failed: {}", e),
+                )
+                    .into_response()
+            }
         }
     }
 }
