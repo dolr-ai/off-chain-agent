@@ -226,11 +226,10 @@ pub async fn ai_video_backfill_process_handler(
     log::info!("AI Video Backfill: Processing video {}", video_id);
 
     // Check if already processed (kvrocks is fast, prevents duplicate BigQuery INSERTs)
-    if state
+    if let Ok(Some(_)) = state
         .kvrocks_client
         .get_user_uploaded_content_approval(&video_id)
         .await
-        .is_ok()
     {
         log::info!(
             "AI Video Backfill: {} already processed, skipping",
