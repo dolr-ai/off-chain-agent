@@ -256,6 +256,7 @@ jobs:
             REPLICATE_API_TOKEN='${{ secrets.REPLICATE_API_TOKEN }}' \
             AI_VIDEO_DETECTOR_API_KEY='${{ secrets.AI_VIDEO_DETECTOR_API_KEY }}' \
             COMFYUI_API_URL='https://mighty-grab-italic-pleased.trycloudflare.com/' \
+            COMFYUI_VIEW_URL='https://wow-systems-include-employ.trycloudflare.com/' \
             COMFYUI_API_TOKEN='${{ secrets.COMFYUI_API_TOKEN }}' \
             BTC_REWARDS_GCHAT_WEBHOOK_URL='${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}' \
             YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY='${{ secrets.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}' \

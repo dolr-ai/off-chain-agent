@@ -8,24 +8,36 @@ use videogen_common::VideoGenError;
 /// Configuration for a ComfyUI instance
 #[derive(Clone)]
 pub struct ComfyUIConfig {
+    /// API wrapper URL (for /generate, /result endpoints)
     pub api_url: Url,
+    /// Raw ComfyUI URL (for /view endpoint to access generated files)
+    pub view_url: Url,
     pub api_token: String,
 }
 
 impl ComfyUIConfig {
-    pub fn new(api_url: Url, api_token: String) -> Self {
-        Self { api_url, api_token }
+    pub fn new(api_url: Url, view_url: Url, api_token: String) -> Self {
+        Self {
+            api_url,
+            view_url,
+            api_token,
+        }
     }
 
     pub fn from_env() -> Option<Self> {
         let api_url = std::env::var("COMFYUI_API_URL").ok()?;
+        let view_url = std::env::var("COMFYUI_VIEW_URL").ok()?;
         let api_token = std::env::var("COMFYUI_API_TOKEN").ok()?;
 
         if api_token.is_empty() {
             return None;
         }
 
-        Some(Self::new(Url::parse(&api_url).ok()?, api_token))
+        Some(Self::new(
+            Url::parse(&api_url).ok()?,
+            Url::parse(&view_url).ok()?,
+            api_token,
+        ))
     }
 }
 

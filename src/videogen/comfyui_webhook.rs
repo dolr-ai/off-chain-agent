@@ -70,11 +70,11 @@ pub async fn handle_comfyui_webhook(
         payload.id
     );
 
-    // Get the ComfyUI API URL from config for constructing video URLs
-    let api_url = state
+    // Get the ComfyUI view URL from config for constructing video URLs
+    let view_url = state
         .comfyui_client
         .as_ref()
-        .map(|c| c.config.api_url.as_str())
+        .map(|c| c.config.view_url.as_str())
         .unwrap_or("");
 
     log::info!(
@@ -101,7 +101,7 @@ pub async fn handle_comfyui_webhook(
     };
 
     // Convert to callback result
-    let callback_result = convert_comfyui_status(&payload, api_url);
+    let callback_result = convert_comfyui_status(&payload, view_url);
 
     let token_type = match video_gen_request.token_type {
         Some(token_type_canister) => match token_type_canister {

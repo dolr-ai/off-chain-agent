@@ -100,6 +100,7 @@ services:
 
       # === ComfyUI Self-Hosted LTX-2 ===
       COMFYUI_API_URL: "https://mighty-grab-italic-pleased.trycloudflare.com/"
+      COMFYUI_VIEW_URL: "https://wow-systems-include-employ.trycloudflare.com/"
       COMFYUI_API_TOKEN: ${COMFYUI_API_TOKEN}
 
       # === Webhooks ===
