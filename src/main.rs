@@ -33,6 +33,7 @@ use crate::offchain_service::off_chain::off_chain_server::OffChainServer;
 use crate::offchain_service::{off_chain, OffChainService};
 use error::*;
 
+mod ai_video_detector;
 mod app_state;
 mod auth;
 pub mod canister;

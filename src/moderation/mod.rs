@@ -327,7 +327,7 @@ async fn fetch_pending_videos(
 }
 
 #[instrument(skip(bigquery_client, kvrocks_client))]
-async fn update_approval_status(
+pub async fn update_approval_status(
     bigquery_client: &google_cloud_bigquery::client::Client,
     kvrocks_client: &KvrocksClient,
     video_id: &str,
@@ -411,7 +411,7 @@ async fn update_approval_status(
 }
 
 #[instrument(skip(bigquery_client, kvrocks_client))]
-async fn delete_video(
+pub async fn delete_video(
     bigquery_client: &google_cloud_bigquery::client::Client,
     kvrocks_client: &KvrocksClient,
     video_id: &str,
