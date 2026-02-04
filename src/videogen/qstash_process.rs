@@ -64,6 +64,10 @@ pub async fn process_video_generation(
             crate::videogen::models::speech_to_video::generate_with_context(input, &state, &request)
                 .await
         }
+        VideoGenInput::Ltx2(_) => {
+            let input = request.input.clone();
+            crate::videogen::models::ltx2::generate_with_context(input, &state, &request).await
+        }
         _ => Err(VideoGenError::UnsupportedModel(
             request.input.model_id().to_string(),
         )),

@@ -1,5 +1,6 @@
 use crate::config::AppConfig;
 use crate::consts::{ANALYTICS_SERVER_URL, NSFW_SERVER_URL, YRAL_METADATA_URL};
+use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
@@ -99,6 +100,9 @@ pub struct AppState {
     pub scratchpad_client: ScratchpadClient,
 
     pub mixpanel_client: MixpanelClient,
+
+    /// ComfyUI client for self-hosted video generation (optional)
+    pub comfyui_client: Option<ComfyUIClient>,
 }
 
 impl AppState {
@@ -128,6 +132,12 @@ impl AppState {
         let kvrocks_client = init_kvrocks_client().await;
         #[cfg(not(feature = "local-bin"))]
         let scratchpad_client = init_scratchpad_client().await;
+
+        // Initialize ComfyUI client if env vars are configured
+        let comfyui_client = ComfyUIConfig::from_env().map(ComfyUIClient::new);
+        if comfyui_client.is_some() {
+            log::info!("ComfyUI client initialized from environment variables");
+        }
 
         AppState {
             admin_identity: init_identity(),
@@ -172,6 +182,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             scratchpad_client,
             mixpanel_client: MixpanelClient::new(),
+            comfyui_client,
         }
     }
 
