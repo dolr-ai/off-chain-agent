@@ -24,6 +24,7 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    ai_video_detector::{AiVideoDetectorClient, Verdict},
     app_state::AppState,
     consts::{get_cloudflare_stream_url, get_storj_video_url},
     qstash::client::QStashClient,
@@ -53,50 +54,6 @@ pub struct BackfillResponse {
 pub struct ProcessVideoRequest {
     video_id: String,
     publisher_user_id: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-enum Verdict {
-    Allow,
-    Block,
-    Review,
-}
-
-#[derive(Debug, Deserialize)]
-struct DetectionResponse {
-    verdict: Verdict,
-    confidence: f64,
-}
-
-// ============================================================================
-// AI Video Detection
-// ============================================================================
-
-async fn detect_video(
-    client: &reqwest::Client,
-    api_url: &str,
-    api_key: &str,
-    video_url: &str,
-) -> Result<DetectionResponse, String> {
-    let form = reqwest::multipart::Form::new().text("url", video_url.to_string());
-
-    let resp = client
-        .post(api_url)
-        .header("x-api-key", api_key)
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !resp.status().is_success() {
-        let err = resp.text().await.unwrap_or_default();
-        return Err(format!("API error: {}", err));
-    }
-
-    resp.json()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 // ============================================================================
@@ -258,6 +215,7 @@ pub async fn ai_video_backfill_handler(
 // ============================================================================
 
 /// Processes a single video - called by QStash
+/// Uses exact same detection logic as duplicate.rs
 pub async fn ai_video_backfill_process_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ProcessVideoRequest>,
@@ -267,49 +225,49 @@ pub async fn ai_video_backfill_process_handler(
 
     log::info!("AI Video Backfill: Processing video {}", video_id);
 
-    let api_key = match std::env::var("AI_VIDEO_DETECTOR_API_KEY") {
-        Ok(key) if !key.is_empty() => key,
-        _ => {
-            log::error!("AI_VIDEO_DETECTOR_API_KEY not set");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "AI_VIDEO_DETECTOR_API_KEY not set",
-            )
-                .into_response();
-        }
-    };
+    // Use the same AiVideoDetectorClient as duplicate.rs
+    let ai_detector = AiVideoDetectorClient::new();
 
-    let api_url = std::env::var("AI_VIDEO_DETECTOR_URL")
-        .unwrap_or_else(|_| "https://ai-video-detector.fly.dev".to_string());
-    let detect_url = format!("{}/detect", api_url);
-
-    let http = reqwest::Client::new();
+    if !ai_detector.is_configured() {
+        log::error!("AI_VIDEO_DETECTOR_API_KEY not configured");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AI_VIDEO_DETECTOR_API_KEY not configured",
+        )
+            .into_response();
+    }
 
     // Try Storj first, fallback to Cloudflare (same pattern as duplicate.rs)
     let storj_url = get_storj_video_url(&publisher_user_id, &video_id, false);
-    let detection = match detect_video(&http, &detect_url, &api_key, &storj_url).await {
+    let cf_url = get_cloudflare_stream_url(&video_id);
+
+    log::info!(
+        "AI Video Backfill: Trying Storj URL first for video {}",
+        video_id
+    );
+
+    let detection_result = match ai_detector.detect_video(&storj_url).await {
         Ok(response) => Ok(response),
         Err(storj_err) => {
             log::warn!(
-                "Storj detection failed for {}, trying Cloudflare: {}",
+                "Storj detection failed for {}: {}. Trying Cloudflare...",
                 video_id,
                 storj_err
             );
-            let cf_url = get_cloudflare_stream_url(&video_id);
-            detect_video(&http, &detect_url, &api_key, &cf_url).await
+            ai_detector.detect_video(&cf_url).await
         }
     };
 
-    match detection {
-        Ok(det) => {
+    match detection_result {
+        Ok(response) => {
             log::info!(
                 "AI Video Backfill: {} -> {:?} (conf: {:.2})",
                 video_id,
-                det.verdict,
-                det.confidence
+                response.verdict,
+                response.confidence
             );
 
-            match det.verdict {
+            match response.verdict {
                 Verdict::Allow => {
                     // Auto-approve: update kvrocks and BigQuery
                     if let Err(e) = state
@@ -400,10 +358,14 @@ pub async fn ai_video_backfill_process_handler(
                 }
             }
 
-            (StatusCode::OK, format!("{:?}", det.verdict)).into_response()
+            (StatusCode::OK, format!("{:?}", response.verdict)).into_response()
         }
         Err(e) => {
-            log::error!("AI Video Backfill: {} ERROR - {}", video_id, e);
+            log::error!(
+                "AI Video Backfill: {} ERROR - both Storj and Cloudflare failed: {}",
+                video_id,
+                e
+            );
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Detection failed: {}", e),
