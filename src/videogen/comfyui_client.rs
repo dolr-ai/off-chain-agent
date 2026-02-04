@@ -449,9 +449,24 @@ pub fn extract_video_url_from_webhook(
                 return Some(url.clone());
             }
 
-            // Fall back to local URL
+            // Fall back to local URL using /view endpoint
             let base_url = api_url.trim_end_matches('/');
-            let subfolder = output.subfolder.as_deref().unwrap_or("");
+
+            // Try to extract subfolder from local_path if subfolder field is empty
+            // local_path format: /workspace/ComfyUI/output/{request_id}/{filename}
+            let subfolder = if let Some(ref lp) = output.local_path {
+                // Extract the parent folder name from local_path
+                std::path::Path::new(lp)
+                    .parent()
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    .filter(|s| *s != "output") // Don't use "output" as subfolder
+                    .map(|s| s.to_string())
+            } else {
+                output.subfolder.clone()
+            };
+
+            let subfolder = subfolder.as_deref().unwrap_or("");
             if subfolder.is_empty() {
                 return Some(format!(
                     "{}/view?filename={}&type=output",
