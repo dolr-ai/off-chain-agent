@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::ai_video_detector::{AiVideoDetectorClient, Verdict};
 use crate::events::types::string_or_number;
 use crate::kvrocks::{
     BotUploadedAiContent, KvrocksClient, UserUploadedContentApproval,
@@ -7,7 +8,7 @@ use crate::kvrocks::{
 };
 use crate::{
     app_state,
-    consts::DEDUP_INDEX_CANISTER_ID,
+    consts::{get_storj_video_url, DEDUP_INDEX_CANISTER_ID},
     duplicate_video::phash::{compute_phash_from_storj, VideoMetadata},
 };
 use anyhow::Context;
@@ -409,13 +410,67 @@ impl VideoHashDuplication {
             return Ok(());
         }
 
-        // First store to kvrocks (fast, synchronous)
+        // Run AI video detection FIRST to determine approval status
+        let ai_detector = AiVideoDetectorClient::new();
+        let video_url = get_storj_video_url(user_id, video_id, false);
+
+        let is_approved = if ai_detector.is_configured() {
+            log::info!("Running AI detection for video {}: {}", video_id, video_url);
+
+            match ai_detector.detect_video(&video_url).await {
+                Ok(response) => {
+                    log::info!(
+                        "AI detection result for video {}: verdict={:?}, confidence={:.2}",
+                        video_id,
+                        response.verdict,
+                        response.confidence
+                    );
+
+                    match response.verdict {
+                        Verdict::Allow => {
+                            // AI-generated content - auto-approve
+                            log::info!("Auto-approving AI-generated video: {}", video_id);
+                            true
+                        }
+                        Verdict::Block => {
+                            // Real footage - don't store, reject immediately
+                            log::info!("Rejecting real footage video: {}", video_id);
+                            return Ok(()); // Don't store this video at all
+                        }
+                        Verdict::Review => {
+                            // Uncertain - needs manual review
+                            log::info!(
+                                "Video {} needs manual review (confidence: {:.2})",
+                                video_id,
+                                response.confidence
+                            );
+                            false
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!(
+                        "AI detection failed for video {}: {}. Sending to manual review.",
+                        video_id,
+                        e
+                    );
+                    false // On error, send to manual review
+                }
+            }
+        } else {
+            log::warn!(
+                "AI video detector not configured, sending video {} to manual review",
+                video_id
+            );
+            false // Not configured, send to manual review
+        };
+
         let approval_data = UserUploadedContentApproval {
             video_id: video_id.to_string(),
             post_id: post_id.to_string(),
             canister_id: canister_id.clone().unwrap_or_default(),
             user_id: user_id.to_string(),
-            is_approved: false,
+            is_approved,
             created_at: chrono::Utc::now().to_rfc3339(),
         };
         if let Err(e) = kvrocks_client
@@ -429,58 +484,123 @@ impl VideoHashDuplication {
         }
 
         log::info!(
-            "Stored ugc_content_approval to kvrocks: video_id={}, post_id={}, canister_id={:?}, user_id={}, is_approved=false",
+            "Stored ugc_content_approval to kvrocks: video_id={}, post_id={}, canister_id={:?}, user_id={}, is_approved={}",
             video_id,
             post_id,
             canister_id,
-            user_id
+            user_id,
+            is_approved
         );
 
-        // Then insert into BigQuery in the background
         let video_id_owned = video_id.to_string();
         let post_id_owned = post_id.to_string();
         let user_id_owned = user_id.to_string();
         let canister_id_owned = canister_id.clone();
         let bigquery_client = bigquery_client.clone();
+        // Use streaming for approved videos but for review use manual
+        if is_approved {
+            tokio::spawn(async move {
+                let row_data = json!({
+                    "video_id": video_id_owned,
+                    "post_id": post_id_owned,
+                    "canister_id": canister_id_owned.unwrap_or_default(),
+                    "user_id": user_id_owned,
+                    "is_approved": is_approved,
+                    "created_at": chrono::Utc::now().to_rfc3339(),
+                });
 
-        tokio::spawn(async move {
-            let canister_id_sql = canister_id_owned
-                .as_ref()
-                .map(|id| format!("'{}'", id.replace('\'', "''")))
-                .unwrap_or_else(|| "NULL".to_string());
+                let request = InsertAllRequest {
+                    rows: vec![Row {
+                        insert_id: Some(format!(
+                            "ugc_approval_{}_{}",
+                            video_id_owned,
+                            chrono::Utc::now().timestamp_millis()
+                        )),
+                        json: row_data,
+                    }],
+                    ignore_unknown_values: Some(false),
+                    skip_invalid_rows: Some(false),
+                    ..Default::default()
+                };
 
-            let query = format!(
-                "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
-                 (video_id, post_id, canister_id, user_id, is_approved, created_at)
-                 VALUES ('{}', '{}', {}, '{}', FALSE, CURRENT_TIMESTAMP())",
-                video_id_owned.replace('\'', "''"),
-                post_id_owned.replace('\'', "''"),
-                canister_id_sql,
-                user_id_owned.replace('\'', "''")
-            );
+                match bigquery_client
+                    .tabledata()
+                    .insert(
+                        "hot-or-not-feed-intelligence",
+                        "yral_ds",
+                        "ugc_content_approval",
+                        &request,
+                    )
+                    .await
+                {
+                    Ok(result) => {
+                        if let Some(errors) = result.insert_errors {
+                            if !errors.is_empty() {
+                                log::error!(
+                                    "BigQuery streaming insert errors for video_id={}: {:?}",
+                                    video_id_owned,
+                                    errors
+                                );
+                            }
+                        } else {
+                            log::info!(
+                                "Successfully inserted ugc_content_approval via streaming for video_id={}, is_approved={}",
+                                video_id_owned,
+                                is_approved
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to insert ugc_content_approval to BigQuery for video_id={}: {}",
+                            video_id_owned,
+                            e
+                        );
+                    }
+                }
+            });
+        } else {
+            tokio::spawn(async move {
+                let canister_id_sql = canister_id_owned
+                    .as_ref()
+                    .map(|id| format!("'{}'", id.replace('\'', "''")))
+                    .unwrap_or_else(|| "NULL".to_string());
 
-            let request = QueryRequest {
-                query,
-                ..Default::default()
-            };
-
-            if let Err(e) = bigquery_client
-                .job()
-                .query("hot-or-not-feed-intelligence", &request)
-                .await
-            {
-                log::error!(
-                    "Failed to insert ugc_content_approval to BigQuery for video_id={}: {}",
-                    video_id_owned,
-                    e
+                let query = format!(
+                    "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.ugc_content_approval`
+                     (video_id, post_id, canister_id, user_id, is_approved, created_at)
+                     VALUES ('{}', '{}', {}, '{}', {}, CURRENT_TIMESTAMP())",
+                    video_id_owned.replace('\'', "''"),
+                    post_id_owned.replace('\'', "''"),
+                    canister_id_sql,
+                    user_id_owned.replace('\'', "''"),
+                    is_approved
                 );
-            } else {
-                log::info!(
-                    "Successfully inserted ugc_content_approval to BigQuery: video_id={}",
-                    video_id_owned
-                );
-            }
-        });
+
+                let request = QueryRequest {
+                    query,
+                    ..Default::default()
+                };
+
+                if let Err(e) = bigquery_client
+                    .job()
+                    .query("hot-or-not-feed-intelligence", &request)
+                    .await
+                {
+                    log::error!(
+                        "Failed to insert ugc_content_approval to BigQuery for video_id={}: {}",
+                        video_id_owned,
+                        e
+                    );
+                } else {
+                    log::info!(
+                        "Successfully inserted ugc_content_approval to BigQuery: video_id={}, is_approved={}",
+                        video_id_owned,
+                        is_approved
+                    );
+                }
+            });
+        }
 
         Ok(())
     }
