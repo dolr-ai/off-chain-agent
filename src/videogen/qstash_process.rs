@@ -48,7 +48,7 @@ pub async fn process_video_generation(
         }
         VideoGenInput::IntTest(_) => {
             let input = request.input.clone();
-            crate::videogen::models::inttest::generate(input, &state).await
+            crate::videogen::models::inttest::generate_with_context(input, &state, &request).await
         }
         VideoGenInput::Wan25(_) => {
             let input = request.input.clone();

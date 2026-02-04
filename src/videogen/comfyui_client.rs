@@ -272,12 +272,9 @@ impl ComfyUIClient {
                 "class_type": "LTXVConcatAVLatent"
             });
         } else {
-            // Text-to-video mode
+            // Text-to-video mode - EmptyLTXVLatentVideo only outputs latent at [0]
             workflow["9"] = serde_json::json!({
                 "inputs": {
-                    "positive": ["7", 0],
-                    "negative": ["8", 0],
-                    "vae": ["1", 2],
                     "width": 1280,
                     "height": 720,
                     "length": 121,
@@ -285,17 +282,18 @@ impl ComfyUIClient {
                 },
                 "class_type": "EmptyLTXVLatentVideo"
             });
+            // For T2V, conditioning comes directly from CLIP encoders
             workflow["9b"] = serde_json::json!({
                 "inputs": {
-                    "positive": ["9", 0],
-                    "negative": ["9", 1],
+                    "positive": ["7", 0],
+                    "negative": ["8", 0],
                     "frame_rate": 24
                 },
                 "class_type": "LTXVConditioning"
             });
             workflow["6"] = serde_json::json!({
                 "inputs": {
-                    "video_latent": ["9", 2],
+                    "video_latent": ["9", 0],
                     "audio_latent": ["5", 0]
                 },
                 "class_type": "LTXVConcatAVLatent"
