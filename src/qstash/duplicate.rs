@@ -8,7 +8,7 @@ use crate::kvrocks::{
 };
 use crate::{
     app_state,
-    consts::{get_storj_video_url, DEDUP_INDEX_CANISTER_ID},
+    consts::{get_cloudflare_stream_url, get_storj_video_url, DEDUP_INDEX_CANISTER_ID},
     duplicate_video::phash::{compute_phash_from_storj, VideoMetadata},
 };
 use anyhow::Context;
@@ -412,12 +412,30 @@ impl VideoHashDuplication {
 
         // Run AI video detection FIRST to determine approval status
         let ai_detector = AiVideoDetectorClient::new();
-        let video_url = get_storj_video_url(user_id, video_id, false);
+        let storj_url = get_storj_video_url(user_id, video_id, false);
+        let cf_url = get_cloudflare_stream_url(video_id);
 
         let is_approved = if ai_detector.is_configured() {
-            log::info!("Running AI detection for video {}: {}", video_id, video_url);
+            // Try Storj first, fallback to Cloudflare Stream if it fails
+            log::info!(
+                "Running AI detection for video {}: trying Storj URL first",
+                video_id
+            );
 
-            match ai_detector.detect_video(&video_url).await {
+            let detection_result = match ai_detector.detect_video(&storj_url).await {
+                Ok(response) => Ok(response),
+                Err(storj_err) => {
+                    log::warn!(
+                        "AI detection failed with Storj URL for video {}: {}. Trying Cloudflare Stream...",
+                        video_id,
+                        storj_err
+                    );
+                    // Fallback to Cloudflare Stream URL
+                    ai_detector.detect_video(&cf_url).await
+                }
+            };
+
+            match detection_result {
                 Ok(response) => {
                     log::info!(
                         "AI detection result for video {}: verdict={:?}, confidence={:.2}",
@@ -450,7 +468,7 @@ impl VideoHashDuplication {
                 }
                 Err(e) => {
                     log::error!(
-                        "AI detection failed for video {}: {}. Sending to manual review.",
+                        "AI detection failed for video {} with both Storj and Cloudflare URLs: {}. Sending to manual review.",
                         video_id,
                         e
                     );

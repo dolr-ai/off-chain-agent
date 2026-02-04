@@ -78,6 +78,16 @@ pub fn get_storj_video_url(publisher_user_id: &str, video_id: &str, is_nsfw: boo
     format!("{}/{}/{}.mp4", bucket_url, publisher_user_id, video_id)
 }
 
+// Cloudflare Stream URL
+pub const CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN: &str = "customer-2p3jflss4r4hmpnz";
+
+pub fn get_cloudflare_stream_url(video_id: &str) -> String {
+    format!(
+        "https://{}.cloudflarestream.com/{}/watch",
+        CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN, video_id
+    )
+}
+
 // Rate Limiting Constants
 pub static RATE_LIMITS_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
     "h2jgv-ayaaa-aaaas-qbh4a-cai"
