@@ -4,7 +4,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     app_state::AppState,
-    videogen::{handlers, handlers_v2, replicate_webhook},
+    videogen::{comfyui_webhook, handlers, handlers_v2, replicate_webhook},
 };
 
 /// V1 API routes for video generation
@@ -30,5 +30,12 @@ pub fn replicate_webhook_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/webhook",
             post(replicate_webhook::handle_replicate_webhook),
         )
+        .with_state(state)
+}
+
+/// ComfyUI webhook router - separate from API docs since it's an internal endpoint
+pub fn comfyui_webhook_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/webhook", post(comfyui_webhook::handle_comfyui_webhook))
         .with_state(state)
 }

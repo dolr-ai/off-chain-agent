@@ -8,6 +8,7 @@ use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
+use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::yral_auth::dragonfly::{
     get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis,
     init_dragonfly_redis_2, DragonflyPool,
@@ -99,6 +100,9 @@ pub struct AppState {
     pub scratchpad_client: ScratchpadClient,
 
     pub mixpanel_client: MixpanelClient,
+
+    /// ComfyUI client for self-hosted video generation (optional)
+    pub comfyui_client: Option<ComfyUIClient>,
 }
 
 impl AppState {
@@ -128,6 +132,12 @@ impl AppState {
         let kvrocks_client = init_kvrocks_client().await;
         #[cfg(not(feature = "local-bin"))]
         let scratchpad_client = init_scratchpad_client().await;
+
+        // Initialize ComfyUI client if env vars are configured
+        let comfyui_client = ComfyUIConfig::from_env().map(ComfyUIClient::new);
+        if comfyui_client.is_some() {
+            log::info!("ComfyUI client initialized from environment variables");
+        }
 
         AppState {
             admin_identity: init_identity(),
@@ -172,6 +182,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             scratchpad_client,
             mixpanel_client: MixpanelClient::new(),
+            comfyui_client,
         }
     }
 

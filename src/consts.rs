@@ -122,6 +122,11 @@ pub const REPLICATE_API_URL: &str = "https://api.replicate.com/v1";
 pub const REPLICATE_WAN2_5_MODEL: &str = "wan-video/wan-2.5-t2v";
 pub const REPLICATE_WAN2_5_FAST_MODEL: &str = "wan-video/wan-2.5-t2v-fast";
 
+// ComfyUI LTX-2 Self-Hosted Instance (Vast.ai H100)
+// Configured via environment variables:
+// - COMFYUI_API_URL: The base URL of the ComfyUI API (e.g., https://your-tunnel.trycloudflare.com/)
+// - COMFYUI_API_TOKEN: Bearer token for authentication
+
 pub static MODERATOR_PRINCIPALS: Lazy<Vec<Principal>> = Lazy::new(|| {
     vec![
         "o7soq-c4ync-cfs3n-i5qbs-472zl-nbxlh-df7r4-2uqpz-svjpz-7ktda-dae"
