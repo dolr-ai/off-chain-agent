@@ -88,8 +88,8 @@ jobs:
           flyctl secrets set "HETZNER_S3_SECRET_KEY=$HETZNER_S3_SECRET_KEY" --app "$APP_NAME" --stage
           flyctl secrets set "REPLICATE_API_TOKEN=$REPLICATE_API_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set "AI_VIDEO_DETECTOR_API_KEY=$AI_VIDEO_DETECTOR_API_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set "COMFYUI_API_URL=https://mighty-grab-italic-pleased.trycloudflare.com/" --app "$APP_NAME" --stage
-          flyctl secrets set "COMFYUI_VIEW_URL=https://wow-systems-include-employ.trycloudflare.com/" --app "$APP_NAME" --stage
+          flyctl secrets set "COMFYUI_API_URL=$COMFYUI_API_URL" --app "$APP_NAME" --stage
+          flyctl secrets set "COMFYUI_VIEW_URL=$COMFYUI_VIEW_URL" --app "$APP_NAME" --stage
           flyctl secrets set "COMFYUI_API_TOKEN=$COMFYUI_API_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set "BTC_REWARDS_GCHAT_WEBHOOK_URL=$BTC_REWARDS_GCHAT_WEBHOOK_URL" --app "$APP_NAME" --stage
           flyctl secrets set "YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY=$YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY" --app "$APP_NAME" --stage
@@ -158,6 +158,8 @@ jobs:
           HETZNER_S3_ACCESS_KEY: ${{ secrets.HETZNER_S3_ACCESS_KEY }}
           HETZNER_S3_SECRET_KEY: ${{ secrets.HETZNER_S3_SECRET_KEY }}
           REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+          COMFYUI_API_URL: ${{ vars.COMFYUI_API_URL }}
+          COMFYUI_VIEW_URL: ${{ vars.COMFYUI_VIEW_URL }}
           COMFYUI_API_TOKEN: ${{ secrets.COMFYUI_API_TOKEN }}
           BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}
           YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY: ${{ secrets.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}
