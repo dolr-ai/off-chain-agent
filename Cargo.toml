@@ -117,14 +117,14 @@ milvus-sdk-rust = "0.1.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master", features = [ "full" ] }
-yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", branch = "master", package = "alloydb-client"}
-yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master" }
-yral-metrics = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
-videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master", features = ["server"] }
-yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
-yral-types = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
-yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", branch = "feat/wan25-image-support", features = [ "full" ] }
+yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", branch = "feat/wan25-image-support", package = "alloydb-client"}
+yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", branch = "feat/wan25-image-support" }
+yral-metrics = { git = "https://github.com/dolr-ai/yral-common", branch = "feat/wan25-image-support" }
+videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "feat/wan25-image-support", features = ["server"] }
+yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", branch = "feat/wan25-image-support" }
+yral-types = { git = "https://github.com/dolr-ai/yral-common", branch = "feat/wan25-image-support" }
+yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "feat/wan25-image-support" }
 
 
 # Local (Path) - uncomment to use local development versions
