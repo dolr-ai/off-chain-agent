@@ -888,10 +888,20 @@ impl EventPayload {
                 let title = "Video Uploaded";
                 let body = "Your video has been uploaded successfully";
                 let publisher_user_id = payload.publisher_user_id;
-                let canister_id = app_state
+                let canister_id = match app_state
                     .get_individual_canister_by_user_principal(publisher_user_id)
                     .await
-                    .unwrap();
+                {
+                    Ok(id) => id,
+                    Err(e) => {
+                        log::error!(
+                            "Failed to get canister for user {}: {}",
+                            publisher_user_id,
+                            e
+                        );
+                        return;
+                    }
+                };
                 let notif_payload = SendNotificationReq {
                     notification: Some(NotificationPayload {
                         title: Some(title.to_string()),
@@ -957,10 +967,20 @@ impl EventPayload {
                 let title = "Video Liked";
                 let body = format!("{} liked your video", payload.user_id.to_text());
                 let publisher_user_id = payload.publisher_user_id;
-                let canister_id = app_state
+                let canister_id = match app_state
                     .get_individual_canister_by_user_principal(publisher_user_id)
                     .await
-                    .unwrap();
+                {
+                    Ok(id) => id,
+                    Err(e) => {
+                        log::error!(
+                            "Failed to get canister for user {}: {}",
+                            publisher_user_id,
+                            e
+                        );
+                        return;
+                    }
+                };
                 let notif_payload = SendNotificationReq {
                     notification: Some(NotificationPayload {
                         title: Some(title.to_string()),
