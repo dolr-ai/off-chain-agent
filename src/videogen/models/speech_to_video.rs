@@ -4,7 +4,8 @@ use futures::StreamExt;
 use log::info;
 use serde_json::Value;
 use videogen_common::{
-    types_v2::VideoUploadHandling, AudioData, VideoGenError, VideoGenInput, VideoGenResponse,
+    types_v2::VideoUploadHandling, AudioData, ImageData, VideoGenError, VideoGenInput,
+    VideoGenResponse,
 };
 
 use crate::{
@@ -117,11 +118,20 @@ pub async fn generate_with_context(
         video_upload_handling_str,
     );
 
+    // Process image data - convert to URL or data URI
+    let image_url = model.image.as_ref().map(|img_data| match img_data {
+        ImageData::Url(url) => url.clone(),
+        ImageData::Base64(image_input) => {
+            format!("data:{};base64,{}", image_input.mime_type, image_input.data)
+        }
+    });
+
     // Build request with hardcoded parameters
     let request = ReplicatePredictionRequest {
         version: REPLICATE_WAN2_5_FAST_MODEL.to_string(),
         input: Wan25Input {
             prompt: prompt.clone(),
+            image: image_url,
             size: "720*1280".to_string(),
             duration: 5,
             seed: -1,

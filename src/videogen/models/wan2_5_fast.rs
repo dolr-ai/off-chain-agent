@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::info;
 use videogen_common::{
-    types_v2::VideoUploadHandling, VideoGenError, VideoGenInput, VideoGenResponse,
+    types_v2::VideoUploadHandling, ImageData, VideoGenError, VideoGenInput, VideoGenResponse,
 };
 
 use crate::app_state::AppState;
@@ -22,6 +22,10 @@ pub struct ReplicatePredictionRequest {
 #[derive(Serialize)]
 pub struct Wan25Input {
     pub prompt: String,
+
+    // Optional image URL for image-to-video generation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
 
     // Hardcoded parameters from Python script and API spec
     #[serde(rename = "size")]
@@ -76,11 +80,20 @@ pub async fn generate_with_context(
         video_upload_handling_str,
     );
 
+    // Process image data - convert to URL or data URI
+    let image_url = model.image.as_ref().map(|img_data| match img_data {
+        ImageData::Url(url) => url.clone(),
+        ImageData::Base64(image_input) => {
+            format!("data:{};base64,{}", image_input.mime_type, image_input.data)
+        }
+    });
+
     // Build request with hardcoded parameters
     let request = ReplicatePredictionRequest {
         version: REPLICATE_WAN2_5_FAST_MODEL.to_string(),
         input: Wan25Input {
             prompt: model.prompt.clone(),
+            image: image_url,
             size: "720*1280".to_string(),
             duration: 5,
             seed: -1,
