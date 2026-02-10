@@ -143,7 +143,7 @@ async fn process_event_impl(
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery(&shared_state.clone());
 
-    event.forward_to_mixpanel(&shared_state);
+    // event.forward_to_mixpanel(&shared_state);
 
     event.check_video_deduplication(&shared_state.clone());
 
@@ -186,7 +186,7 @@ async fn process_event_impl_v2(
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery(&shared_state.clone());
 
-    event.forward_to_mixpanel(&shared_state);
+    // event.forward_to_mixpanel(&shared_state);
 
     event.check_video_deduplication(&shared_state.clone());
 
