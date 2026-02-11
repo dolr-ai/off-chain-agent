@@ -145,6 +145,14 @@ impl ComfyUIClient {
                 "inputs": { "model": ["1", 0], "backend": "inductor" },
                 "class_type": "TorchCompileModel"
             },
+            "1c": {
+                "inputs": { "model": ["1b", 0], "chunks": 4, "dim_threshold": 4096 },
+                "class_type": "LTXVChunkFeedForward"
+            },
+            "1d": {
+                "inputs": { "model": ["1c", 0], "sage_attention": "auto", "allow_compile": false },
+                "class_type": "PathchSageAttentionKJ"
+            },
             "2": {
                 "inputs": {
                     "gemma_path": "gemma-3-12b-it-qat-q4_0-unquantized/model-00001-of-00005.safetensors",
@@ -196,7 +204,7 @@ impl ComfyUIClient {
             },
             "33": {
                 "inputs": {
-                    "model": ["1b", 0], "positive": ["9b", 0],
+                    "model": ["1d", 0], "positive": ["9b", 0],
                     "negative": ["9b", 1], "cfg": 1.0
                 },
                 "class_type": "CFGGuider"
@@ -244,7 +252,7 @@ impl ComfyUIClient {
             },
             "43": {
                 "inputs": {
-                    "model": ["1b", 0], "positive": ["9b", 0],
+                    "model": ["1d", 0], "positive": ["9b", 0],
                     "negative": ["9b", 1], "cfg": 1.0
                 },
                 "class_type": "CFGGuider"
