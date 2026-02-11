@@ -178,15 +178,37 @@ impl ComfyUIClient {
                 "class_type": "CLIPTextEncode"
             },
 
+            // === First pass: sampling components ===
+            "30": {
+                "inputs": { "noise_seed": 0 },
+                "class_type": "RandomNoise"
+            },
+            "31": {
+                "inputs": { "sampler_name": "euler_ancestral" },
+                "class_type": "KSamplerSelect"
+            },
+            "32": {
+                "inputs": {
+                    "steps": 8, "max_shift": 2.05, "base_shift": 0.95,
+                    "stretch": true, "terminal": 0.1, "latent": ["6", 0]
+                },
+                "class_type": "LTXVScheduler"
+            },
+            "33": {
+                "inputs": {
+                    "model": ["1b", 0], "positive": ["9b", 0],
+                    "negative": ["9b", 1], "cfg": 1.0
+                },
+                "class_type": "CFGGuider"
+            },
             // === First pass: generate at half res (540x960), 8 steps euler_ancestral ===
             "10": {
                 "inputs": {
-                    "seed": 0, "steps": 8, "cfg": 2.0,
-                    "sampler_name": "euler_ancestral", "scheduler": "ddim_uniform", "denoise": 1.0,
-                    "model": ["1b", 0], "positive": ["9b", 0], "negative": ["9b", 1],
+                    "noise": ["30", 0], "guider": ["33", 0],
+                    "sampler": ["31", 0], "sigmas": ["32", 0],
                     "latent_image": ["6", 0]
                 },
-                "class_type": "KSampler"
+                "class_type": "SamplerCustomAdvanced"
             },
 
             // === Separate AV latent from first pass ===
@@ -207,15 +229,34 @@ impl ComfyUIClient {
                 "class_type": "LTXVConcatAVLatent"
             },
 
+            // === Second pass: sampling components ===
+            "40": {
+                "inputs": { "noise_seed": 0 },
+                "class_type": "RandomNoise"
+            },
+            "41": {
+                "inputs": { "sampler_name": "euler_ancestral" },
+                "class_type": "KSamplerSelect"
+            },
+            "42": {
+                "inputs": { "sigmas": "0.900375, 0.725, 0.421875, 0.0" },
+                "class_type": "ManualSigmas"
+            },
+            "43": {
+                "inputs": {
+                    "model": ["1b", 0], "positive": ["9b", 0],
+                    "negative": ["9b", 1], "cfg": 1.0
+                },
+                "class_type": "CFGGuider"
+            },
             // === Second pass: refine at full res, 3 steps euler_ancestral ===
             "19": {
                 "inputs": {
-                    "seed": 0, "steps": 3, "cfg": 2.0,
-                    "sampler_name": "euler_ancestral", "scheduler": "ddim_uniform", "denoise": 0.5,
-                    "model": ["1b", 0], "positive": ["9b", 0], "negative": ["9b", 1],
+                    "noise": ["40", 0], "guider": ["43", 0],
+                    "sampler": ["41", 0], "sigmas": ["42", 0],
                     "latent_image": ["18", 0]
                 },
-                "class_type": "KSampler"
+                "class_type": "SamplerCustomAdvanced"
             },
 
             // === Separate refined AV latent ===
