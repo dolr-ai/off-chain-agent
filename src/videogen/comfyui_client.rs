@@ -178,11 +178,11 @@ impl ComfyUIClient {
                 "class_type": "CLIPTextEncode"
             },
 
-            // === First pass: generate at half res (540x960), 8 steps res_2s ===
+            // === First pass: generate at half res (540x960), 8 steps euler ===
             "10": {
                 "inputs": {
                     "seed": 0, "steps": 8, "cfg": 2.0,
-                    "sampler_name": "res_2s", "scheduler": "ddim_uniform", "denoise": 1.0,
+                    "sampler_name": "euler", "scheduler": "ddim_uniform", "denoise": 1.0,
                     "model": ["1b", 0], "positive": ["9b", 0], "negative": ["9b", 1],
                     "latent_image": ["6", 0]
                 },
@@ -207,11 +207,11 @@ impl ComfyUIClient {
                 "class_type": "LTXVConcatAVLatent"
             },
 
-            // === Second pass: refine at full res, 4 steps res_2s ===
+            // === Second pass: refine at full res, 3 steps euler ===
             "19": {
                 "inputs": {
-                    "seed": 0, "steps": 4, "cfg": 2.0,
-                    "sampler_name": "res_2s", "scheduler": "ddim_uniform", "denoise": 0.5,
+                    "seed": 0, "steps": 3, "cfg": 2.0,
+                    "sampler_name": "euler", "scheduler": "ddim_uniform", "denoise": 0.5,
                     "model": ["1b", 0], "positive": ["9b", 0], "negative": ["9b", 1],
                     "latent_image": ["18", 0]
                 },
