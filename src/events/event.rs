@@ -23,6 +23,7 @@ use tracing::instrument;
 pub mod storj;
 
 /// Flat event for Mixpanel - event name + all params at same level
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlatEvent {
     pub event: String,
@@ -42,6 +43,7 @@ impl Event {
 
     /// Convert to flat event (for Mixpanel)
     /// Returns None if no principal can be determined (analytics server requires it)
+    #[allow(dead_code)]
     fn to_flat_event(&self) -> Option<FlatEvent> {
         let mut params: Value = serde_json::from_str(&self.event.params).ok()?;
 
@@ -108,6 +110,7 @@ impl Event {
     }
 
     /// Mixpanel format: {event: string, user_id: string, video_id: string, ...} (flat)
+    #[allow(dead_code)]
     pub fn forward_to_mixpanel(&self, app_state: &AppState) {
         let mixpanel_client = app_state.mixpanel_client.clone();
         let flat_event = match self.to_flat_event() {
