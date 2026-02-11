@@ -121,7 +121,9 @@ impl ComfyUIClient {
         }
     }
 
-    /// Build LTX-2 distilled workflow based on the generation mode
+    /// Build LTX-2 distilled workflow with 1080p upscale based on the generation mode
+    ///
+    /// Pipeline: generate at half res (540x960) → upscale 2x in latent space → refine → tiled VAE decode
     pub fn build_ltx2_workflow(&self, mode: &VideoGenMode) -> Value {
         let (prompt_text, image_url) = match mode {
             VideoGenMode::TextToVideo { prompt } => (prompt.as_str(), None),
@@ -134,17 +136,13 @@ impl ComfyUIClient {
         };
 
         let mut workflow = serde_json::json!({
+            // === Model loading ===
             "1": {
-                "inputs": {
-                    "ckpt_name": "ltx-2-19b-distilled.safetensors"
-                },
+                "inputs": { "ckpt_name": "ltx-2-19b-distilled.safetensors" },
                 "class_type": "CheckpointLoaderSimple"
             },
             "1b": {
-                "inputs": {
-                    "model": ["1", 0],
-                    "backend": "inductor"
-                },
+                "inputs": { "model": ["1", 0], "backend": "inductor" },
                 "class_type": "TorchCompileModel"
             },
             "2": {
@@ -156,158 +154,139 @@ impl ComfyUIClient {
                 "class_type": "LTXVGemmaCLIPModelLoader"
             },
             "3": {
-                "inputs": {
-                    "ckpt_name": "ltx-2-19b-distilled.safetensors"
-                },
+                "inputs": { "ckpt_name": "ltx-2-19b-distilled.safetensors" },
                 "class_type": "LTXVAudioVAELoader"
             },
+            "16": {
+                "inputs": { "model_name": "ltx-2-spatial-upscaler-x2-1.0.safetensors" },
+                "class_type": "LatentUpscaleModelLoader"
+            },
+
+            // === Audio latent ===
             "5": {
-                "inputs": {
-                    "frames_number": 121,
-                    "frame_rate": 24,
-                    "batch_size": 1,
-                    "audio_vae": ["3", 0]
-                },
+                "inputs": { "frames_number": 121, "frame_rate": 24, "batch_size": 1, "audio_vae": ["3", 0] },
                 "class_type": "LTXVEmptyLatentAudio"
             },
+
+            // === Text conditioning ===
             "7": {
-                "inputs": {
-                    "text": prompt_text,
-                    "clip": ["2", 0]
-                },
+                "inputs": { "text": prompt_text, "clip": ["2", 0] },
                 "class_type": "CLIPTextEncode"
             },
             "8": {
-                "inputs": {
-                    "text": "blurry, low quality, silent, distorted",
-                    "clip": ["2", 0]
-                },
+                "inputs": { "text": "blurry, low quality, silent, distorted", "clip": ["2", 0] },
                 "class_type": "CLIPTextEncode"
             },
+
+            // === First pass: generate at half res (540x960), 8 steps res_2s ===
             "10": {
                 "inputs": {
-                    "seed": 0,
-                    "steps": 10,
-                    "cfg": 2.0,
-                    "sampler_name": "ddim",
-                    "scheduler": "ddim_uniform",
-                    "denoise": 1,
-                    "model": ["1b", 0],
-                    "positive": ["9b", 0],
-                    "negative": ["9b", 1],
+                    "seed": 0, "steps": 8, "cfg": 2.0,
+                    "sampler_name": "res_2s", "scheduler": "ddim_uniform", "denoise": 1.0,
+                    "model": ["1b", 0], "positive": ["9b", 0], "negative": ["9b", 1],
                     "latent_image": ["6", 0]
                 },
                 "class_type": "KSampler"
             },
+
+            // === Separate AV latent from first pass ===
             "11": {
-                "inputs": {
-                    "av_latent": ["10", 0]
-                },
+                "inputs": { "av_latent": ["10", 0] },
                 "class_type": "LTXVSeparateAVLatent"
             },
+
+            // === Upscale video latent 2x ===
+            "17": {
+                "inputs": { "samples": ["11", 0], "upscale_model": ["16", 0], "vae": ["1", 2] },
+                "class_type": "LTXVLatentUpsampler"
+            },
+
+            // === Concat upscaled video + original audio for refinement ===
+            "18": {
+                "inputs": { "video_latent": ["17", 0], "audio_latent": ["11", 1] },
+                "class_type": "LTXVConcatAVLatent"
+            },
+
+            // === Second pass: refine at full res, 4 steps res_2s ===
+            "19": {
+                "inputs": {
+                    "seed": 0, "steps": 4, "cfg": 2.0,
+                    "sampler_name": "res_2s", "scheduler": "ddim_uniform", "denoise": 0.5,
+                    "model": ["1b", 0], "positive": ["9b", 0], "negative": ["9b", 1],
+                    "latent_image": ["18", 0]
+                },
+                "class_type": "KSampler"
+            },
+
+            // === Separate refined AV latent ===
+            "20": {
+                "inputs": { "av_latent": ["19", 0] },
+                "class_type": "LTXVSeparateAVLatent"
+            },
+
+            // === Tiled VAE decode (memory-efficient for 1080p) ===
             "12": {
                 "inputs": {
-                    "samples": ["11", 0],
-                    "vae": ["1", 2]
+                    "samples": ["20", 0], "vae": ["1", 2],
+                    "tile_size": 512, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8
                 },
-                "class_type": "VAEDecode"
+                "class_type": "VAEDecodeTiled"
             },
             "12b": {
-                "inputs": {
-                    "images": ["12", 0],
-                    "factor": 0.8
-                },
+                "inputs": { "images": ["12", 0], "factor": 0.8 },
                 "class_type": "AdjustContrast"
             },
+
+            // === Audio decode ===
             "13": {
-                "inputs": {
-                    "samples": ["11", 1],
-                    "audio_vae": ["3", 0]
-                },
+                "inputs": { "samples": ["20", 1], "audio_vae": ["3", 0] },
                 "class_type": "LTXVAudioVAEDecode"
             },
+
+            // === Output ===
             "14": {
-                "inputs": {
-                    "fps": 24,
-                    "images": ["12b", 0],
-                    "audio": ["13", 0]
-                },
+                "inputs": { "fps": 24, "images": ["12b", 0], "audio": ["13", 0] },
                 "class_type": "CreateVideo"
             },
             "15": {
-                "inputs": {
-                    "filename_prefix": "ltx2-video",
-                    "format": "mp4",
-                    "codec": "h264",
-                    "video": ["14", 0]
-                },
+                "inputs": { "filename_prefix": "ltx2-video", "format": "mp4", "codec": "h264", "video": ["14", 0] },
                 "class_type": "SaveVideo"
             }
         });
 
-        // Add mode-specific nodes
+        // Add mode-specific nodes (half res: 540x960 portrait)
         if let Some(img_url) = image_url {
-            // Image-to-video or Image+Text-to-video mode
             workflow["4"] = serde_json::json!({
-                "inputs": {
-                    "image": img_url
-                },
+                "inputs": { "image": img_url },
                 "class_type": "LoadImage"
             });
             workflow["9"] = serde_json::json!({
                 "inputs": {
-                    "positive": ["7", 0],
-                    "negative": ["8", 0],
-                    "vae": ["1", 2],
-                    "image": ["4", 0],
-                    "width": 1280,
-                    "height": 720,
-                    "length": 121,
-                    "batch_size": 1,
-                    "strength": 1.0
+                    "positive": ["7", 0], "negative": ["8", 0], "vae": ["1", 2],
+                    "image": ["4", 0], "width": 540, "height": 960, "length": 121,
+                    "batch_size": 1, "strength": 1.0
                 },
                 "class_type": "LTXVImgToVideo"
             });
             workflow["9b"] = serde_json::json!({
-                "inputs": {
-                    "positive": ["9", 0],
-                    "negative": ["9", 1],
-                    "frame_rate": 24
-                },
+                "inputs": { "positive": ["9", 0], "negative": ["9", 1], "frame_rate": 24 },
                 "class_type": "LTXVConditioning"
             });
             workflow["6"] = serde_json::json!({
-                "inputs": {
-                    "video_latent": ["9", 2],
-                    "audio_latent": ["5", 0]
-                },
+                "inputs": { "video_latent": ["9", 2], "audio_latent": ["5", 0] },
                 "class_type": "LTXVConcatAVLatent"
             });
         } else {
-            // Text-to-video mode - EmptyLTXVLatentVideo only outputs latent at [0]
             workflow["9"] = serde_json::json!({
-                "inputs": {
-                    "width": 1280,
-                    "height": 720,
-                    "length": 121,
-                    "batch_size": 1
-                },
+                "inputs": { "width": 540, "height": 960, "length": 121, "batch_size": 1 },
                 "class_type": "EmptyLTXVLatentVideo"
             });
-            // For T2V, conditioning comes directly from CLIP encoders
             workflow["9b"] = serde_json::json!({
-                "inputs": {
-                    "positive": ["7", 0],
-                    "negative": ["8", 0],
-                    "frame_rate": 24
-                },
+                "inputs": { "positive": ["7", 0], "negative": ["8", 0], "frame_rate": 24 },
                 "class_type": "LTXVConditioning"
             });
             workflow["6"] = serde_json::json!({
-                "inputs": {
-                    "video_latent": ["9", 0],
-                    "audio_latent": ["5", 0]
-                },
+                "inputs": { "video_latent": ["9", 0], "audio_latent": ["5", 0] },
                 "class_type": "LTXVConcatAVLatent"
             });
         }
