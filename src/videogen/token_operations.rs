@@ -187,9 +187,11 @@ pub async fn deduct_balance_with_cleanup(
             Ok(Some(amount))
         }
         Err(e) => {
-            log::error!(
-                "Balance deduction failed for user {user_principal}: {e:?}. Decrementing rate limit counter."
-            );
+            if !matches!(e, VideoGenError::InsufficientBalance) {
+                log::error!(
+                    "Balance deduction failed for user {user_principal}: {e:?}. Decrementing rate limit counter."
+                );
+            }
 
             // Cleanup: decrement rate limit counter
             let rate_limits_client = RateLimits(*crate::consts::RATE_LIMITS_CANISTER_ID, agent);
