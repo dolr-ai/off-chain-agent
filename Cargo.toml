@@ -117,14 +117,14 @@ milvus-sdk-rust = "0.1.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", rev = "52746e7d3f12a0019c73ab1e8c98623a5d66e217", features = [ "full" ] }
-yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", rev = "52746e7d3f12a0019c73ab1e8c98623a5d66e217", package = "alloydb-client"}
-yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", rev = "52746e7d3f12a0019c73ab1e8c98623a5d66e217" }
-yral-metrics = { git = "https://github.com/dolr-ai/yral-common", rev = "52746e7d3f12a0019c73ab1e8c98623a5d66e217" }
-videogen-common = { git = "https://github.com/dolr-ai/yral-common", rev = "52746e7d3f12a0019c73ab1e8c98623a5d66e217", features = ["server"] }
-yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", rev = "52746e7d3f12a0019c73ab1e8c98623a5d66e217" }
-yral-types = { git = "https://github.com/dolr-ai/yral-common", rev = "52746e7d3f12a0019c73ab1e8c98623a5d66e217" }
-yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", rev = "52746e7d3f12a0019c73ab1e8c98623a5d66e217" }
+yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master", features = [ "full" ] }
+yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", branch = "master", package = "alloydb-client"}
+yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master" }
+yral-metrics = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master", features = ["server"] }
+yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-types = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
 
 
 # Local (Path) - uncomment to use local development versions
