@@ -238,6 +238,9 @@ pub async fn process_video_generation(
     let model_id = video_gen_input.model_id();
     let prompt = video_gen_input.get_prompt();
 
+    // Check prompt for NSFW content before any rate limiting or balance deduction
+    super::prompt_moderation::check_prompt_nsfw(prompt).await?;
+
     // Determine property for rate limiting
     let property = if model_id == "inttest" {
         "VIDEOGEN_INTTEST"
