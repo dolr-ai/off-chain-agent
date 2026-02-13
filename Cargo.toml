@@ -117,14 +117,14 @@ milvus-sdk-rust = "0.1.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", rev = "b7466baf02451c8c0ac9cce0b6250e91fee0084e", features = [ "full" ] }
-yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", rev = "b7466baf02451c8c0ac9cce0b6250e91fee0084e", package = "alloydb-client"}
-yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", rev = "b7466baf02451c8c0ac9cce0b6250e91fee0084e" }
-yral-metrics = { git = "https://github.com/dolr-ai/yral-common", rev = "b7466baf02451c8c0ac9cce0b6250e91fee0084e" }
-videogen-common = { git = "https://github.com/dolr-ai/yral-common", rev = "b7466baf02451c8c0ac9cce0b6250e91fee0084e", features = ["server"] }
-yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", rev = "b7466baf02451c8c0ac9cce0b6250e91fee0084e" }
-yral-types = { git = "https://github.com/dolr-ai/yral-common", rev = "b7466baf02451c8c0ac9cce0b6250e91fee0084e" }
-yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", rev = "b7466baf02451c8c0ac9cce0b6250e91fee0084e" }
+yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", rev = "dd5c45a7feb2339625ed95911c9275da0a1405a5", features = [ "full" ] }
+yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", rev = "dd5c45a7feb2339625ed95911c9275da0a1405a5", package = "alloydb-client"}
+yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", rev = "dd5c45a7feb2339625ed95911c9275da0a1405a5" }
+yral-metrics = { git = "https://github.com/dolr-ai/yral-common", rev = "dd5c45a7feb2339625ed95911c9275da0a1405a5" }
+videogen-common = { git = "https://github.com/dolr-ai/yral-common", rev = "dd5c45a7feb2339625ed95911c9275da0a1405a5", features = ["server"] }
+yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", rev = "dd5c45a7feb2339625ed95911c9275da0a1405a5" }
+yral-types = { git = "https://github.com/dolr-ai/yral-common", rev = "dd5c45a7feb2339625ed95911c9275da0a1405a5" }
+yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", rev = "dd5c45a7feb2339625ed95911c9275da0a1405a5" }
 
 
 # Local (Path) - uncomment to use local development versions
