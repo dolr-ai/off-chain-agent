@@ -77,9 +77,7 @@ struct ModerationResult {
 
 /// Check if a prompt contains NSFW content using Gemini 2.5 Flash structured outputs.
 /// Fails open: if the API call fails, the prompt is allowed through with a warning log.
-pub async fn check_prompt_nsfw(
-    prompt: &str,
-) -> Result<(), (StatusCode, Json<VideoGenError>)> {
+pub async fn check_prompt_nsfw(prompt: &str) -> Result<(), (StatusCode, Json<VideoGenError>)> {
     // Skip empty prompts (e.g. image-only generation)
     if prompt.is_empty() {
         return Ok(());
@@ -94,16 +92,14 @@ pub async fn check_prompt_nsfw(
     };
 
     let request = GeminiRequest {
-        contents: vec![
-            GeminiContent {
-                role: "user".to_string(),
-                parts: vec![GeminiPart {
-                    text: format!(
-                        "{SYSTEM_PROMPT}\n\nAnalyze this video generation prompt:\n\n{prompt}"
-                    ),
-                }],
-            },
-        ],
+        contents: vec![GeminiContent {
+            role: "user".to_string(),
+            parts: vec![GeminiPart {
+                text: format!(
+                    "{SYSTEM_PROMPT}\n\nAnalyze this video generation prompt:\n\n{prompt}"
+                ),
+            }],
+        }],
         generation_config: GenerationConfig {
             response_mime_type: "application/json".to_string(),
             response_schema: serde_json::json!({
