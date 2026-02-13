@@ -277,7 +277,7 @@ impl ComfyUIClient {
             "12": {
                 "inputs": {
                     "samples": ["20", 0], "vae": ["1", 2],
-                    "tile_size": 512, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8
+                    "tile_size": 256, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8
                 },
                 "class_type": "VAEDecodeTiled"
             },
