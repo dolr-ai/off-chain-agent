@@ -1,12 +1,9 @@
 use crate::app_state::AppState;
-use crate::videogen::qstash_types::QstashVideoGenRequest;
-use videogen_common::models::ltx2::Ltx2Model;
 use videogen_common::{VideoGenError, VideoGenInput, VideoGenResponse};
 
-pub async fn generate_with_context(
+pub async fn generate(
     input: VideoGenInput,
-    app_state: &AppState,
-    context: &QstashVideoGenRequest,
+    _app_state: &AppState,
 ) -> Result<VideoGenResponse, VideoGenError> {
     let VideoGenInput::IntTest(model) = input else {
         return Err(VideoGenError::InvalidInput(
@@ -14,25 +11,19 @@ pub async fn generate_with_context(
         ));
     };
 
-    log::info!("IntTest: Routing to LTX2 for prompt: {}", model.prompt);
+    // tokio::time::sleep(std::time::Duration::from_secs(15)).await; // Simulate processing delay
 
-    // Convert IntTest input to LTX2 input and run LTX2 under the hood
-    let ltx2_input = VideoGenInput::Ltx2(Ltx2Model {
-        prompt: model.prompt,
-        image: model.image,
-    });
+    log::info!("IntTest: Generating video for prompt: {}", model.prompt);
 
-    // Create a modified context with LTX2 input
-    let ltx2_context = QstashVideoGenRequest {
-        user_principal: context.user_principal,
-        input: ltx2_input.clone(),
-        request_key: context.request_key.clone(),
-        property: context.property.clone(),
-        deducted_amount: context.deducted_amount,
-        token_type: context.token_type,
-        handle_video_upload: context.handle_video_upload.clone(),
-    };
+    // Log if image is present (for testing)
+    if model.image.is_some() {
+        log::info!("IntTest: Image provided (ignored for test)");
+    }
 
-    // Call LTX2 handler
-    super::ltx2::generate_with_context(ltx2_input, app_state, &ltx2_context).await
+    // Always return the same URL
+    Ok(VideoGenResponse {
+        operation_id: "inttest-static-id".to_string(),
+        video_url: "https://storage.cdn-luma.com/dream_machine/7f48468f-e704-44db-ba86-7bb9fa754352/b1696749-f2e3-4b9b-b5db-404daf160e11_resulte6b5644af53da416.mp4".to_string(),
+        provider: "inttest".to_string(),
+    })
 }
