@@ -682,4 +682,85 @@ impl QStashClient {
 
         Ok(())
     }
+
+    /// Queue AI video backfill processing for a batch of videos
+    /// Uses the "ai-video-detection-backfill" QStash queue (queue handles rate limiting)
+    #[instrument(skip(self, video_data))]
+    pub async fn queue_ai_video_backfill_batch(
+        &self,
+        video_data: Vec<(String, String)>, // (video_id, publisher_user_id)
+    ) -> anyhow::Result<()> {
+        let destination_url = OFF_CHAIN_AGENT_URL
+            .join("qstash/ai_video_backfill_process")?
+            .to_string();
+
+        // Use QStash queue endpoint: /v2/enqueue/{queueName}/{destination}
+        // Manually construct URL to avoid issues with Url::join and embedded URLs
+        let queue_name = "ai-video-detection-backfill";
+        let enqueue_url = format!(
+            "{}enqueue/{}/{}",
+            self.base_url, queue_name, destination_url
+        );
+
+        log::info!(
+            "AI Video Backfill: Queuing {} videos to queue '{}' (url: {})",
+            video_data.len(),
+            queue_name,
+            enqueue_url
+        );
+
+        let mut success_count = 0;
+        let mut failed_count = 0;
+
+        for (video_id, publisher_user_id) in &video_data {
+            let payload = json!({
+                "video_id": video_id,
+                "publisher_user_id": publisher_user_id
+            });
+
+            match self
+                .client
+                .post(enqueue_url.clone())
+                .json(&payload)
+                .header(CONTENT_TYPE, "application/json")
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        success_count += 1;
+                    } else {
+                        failed_count += 1;
+                        let status = response.status();
+                        let body = response.text().await.unwrap_or_default();
+                        tracing::error!(
+                            "QStash enqueue failed for {}: {} - {}",
+                            video_id,
+                            status,
+                            body
+                        );
+                    }
+                }
+                Err(e) => {
+                    failed_count += 1;
+                    tracing::error!("QStash enqueue failed for {}: {}", video_id, e);
+                }
+            }
+        }
+
+        log::info!(
+            "AI Video Backfill: Enqueue completed - success={}, failed={}",
+            success_count,
+            failed_count
+        );
+
+        if failed_count > 0 {
+            log::warn!(
+                "AI Video Backfill: {} video(s) failed to enqueue",
+                failed_count
+            );
+        }
+
+        Ok(())
+    }
 }

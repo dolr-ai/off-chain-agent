@@ -36,6 +36,7 @@ use crate::{
     rewards::api::update_reward_config,
 };
 
+pub mod ai_video_backfill;
 pub mod client;
 pub mod dedup_index_backfill;
 pub mod duplicate;
@@ -208,6 +209,14 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/backfill_dedup_index",
             post(dedup_index_backfill::backfill_dedup_index_handler),
+        )
+        .route(
+            "/ai_video_backfill",
+            post(ai_video_backfill::ai_video_backfill_handler),
+        )
+        .route(
+            "/ai_video_backfill_process",
+            post(ai_video_backfill::ai_video_backfill_process_handler),
         );
 
     #[cfg(not(feature = "local-bin"))]
