@@ -1,6 +1,8 @@
 use axum::{
+    body::Body,
     extract::{Query, State},
     http::StatusCode,
+    response::Response,
     Json,
 };
 use candid::Principal;
@@ -70,12 +72,11 @@ pub async fn handle_comfyui_webhook(
         payload.id
     );
 
-    // Get the ComfyUI view URL from config for constructing video URLs
-    let view_url = state
-        .comfyui_client
-        .as_ref()
-        .map(|c| c.config.view_url.as_str())
-        .unwrap_or("");
+    // Use offchain's own URL as proxy base for video URLs (avoids Cloudflare tunnel rotation issues)
+    let view_url = crate::consts::OFF_CHAIN_AGENT_URL
+        .join("comfyui")
+        .map(|u| u.to_string())
+        .unwrap_or_default();
 
     log::info!(
         "Processing ComfyUI webhook for request {} with status {}",
@@ -101,7 +102,7 @@ pub async fn handle_comfyui_webhook(
     };
 
     // Convert to callback result
-    let callback_result = convert_comfyui_status(&payload, view_url);
+    let callback_result = convert_comfyui_status(&payload, &view_url);
 
     let token_type = match video_gen_request.token_type {
         Some(token_type_canister) => match token_type_canister {
@@ -155,6 +156,83 @@ pub fn generate_comfyui_webhook_url(
         counter,
         handle_video_upload
     )
+}
+
+/// Query parameters for proxying ComfyUI /view requests
+#[derive(Debug, Deserialize)]
+pub struct ComfyUIViewParams {
+    pub filename: String,
+    pub subfolder: Option<String>,
+    #[serde(rename = "type")]
+    pub file_type: Option<String>,
+}
+
+/// Proxy ComfyUI /view endpoint through offchain
+/// This avoids exposing the ComfyUI Cloudflare tunnel URL to the frontend
+pub async fn proxy_comfyui_view(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ComfyUIViewParams>,
+) -> Result<Response, StatusCode> {
+    let comfyui_client = state.comfyui_client.as_ref().ok_or_else(|| {
+        log::error!("ComfyUI client not configured");
+        StatusCode::SERVICE_UNAVAILABLE
+    })?;
+
+    let base_url = comfyui_client
+        .config
+        .view_url
+        .as_str()
+        .trim_end_matches('/');
+
+    let url = match params.subfolder.as_deref() {
+        Some(subfolder) if !subfolder.is_empty() => format!(
+            "{}/view?filename={}&subfolder={}&type={}",
+            base_url,
+            params.filename,
+            subfolder,
+            params.file_type.as_deref().unwrap_or("output")
+        ),
+        _ => format!(
+            "{}/view?filename={}&type={}",
+            base_url,
+            params.filename,
+            params.file_type.as_deref().unwrap_or("output")
+        ),
+    };
+
+    log::info!("Proxying ComfyUI view request: {}", url);
+
+    let upstream_resp = reqwest::get(&url).await.map_err(|e| {
+        log::error!("Failed to fetch from ComfyUI: {}", e);
+        StatusCode::BAD_GATEWAY
+    })?;
+
+    if !upstream_resp.status().is_success() {
+        log::error!("ComfyUI returned error status: {}", upstream_resp.status());
+        return Err(StatusCode::BAD_GATEWAY);
+    }
+
+    let content_type = upstream_resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream")
+        .to_string();
+
+    let bytes = upstream_resp.bytes().await.map_err(|e| {
+        log::error!("Failed to read ComfyUI response body: {}", e);
+        StatusCode::BAD_GATEWAY
+    })?;
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", content_type)
+        .header("content-length", bytes.len())
+        .body(Body::from(bytes))
+        .map_err(|e| {
+            log::error!("Failed to build response: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
 }
 
 #[cfg(test)]

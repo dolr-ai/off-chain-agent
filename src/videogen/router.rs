@@ -1,4 +1,7 @@
-use axum::{routing::post, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use std::sync::Arc;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -37,5 +40,6 @@ pub fn replicate_webhook_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
 pub fn comfyui_webhook_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/webhook", post(comfyui_webhook::handle_comfyui_webhook))
+        .route("/view", get(comfyui_webhook::proxy_comfyui_view))
         .with_state(state)
 }
