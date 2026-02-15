@@ -202,10 +202,15 @@ pub async fn proxy_comfyui_view(
 
     log::info!("Proxying ComfyUI view request: {}", url);
 
-    let upstream_resp = reqwest::get(&url).await.map_err(|e| {
-        log::error!("Failed to fetch from ComfyUI: {}", e);
-        StatusCode::BAD_GATEWAY
-    })?;
+    let upstream_resp = reqwest::Client::new()
+        .get(&url)
+        .bearer_auth(&comfyui_client.config.api_token)
+        .send()
+        .await
+        .map_err(|e| {
+            log::error!("Failed to fetch from ComfyUI: {}", e);
+            StatusCode::BAD_GATEWAY
+        })?;
 
     if !upstream_resp.status().is_success() {
         log::error!("ComfyUI returned error status: {}", upstream_resp.status());
