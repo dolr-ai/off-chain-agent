@@ -237,6 +237,10 @@ pub async fn process_video_generation(
     // Extract metadata from the input
     let model_id = video_gen_input.model_id();
     let prompt = video_gen_input.get_prompt();
+    let image = video_gen_input.get_image();
+
+    // Check prompt and image for NSFW content before any rate limiting or balance deduction
+    super::prompt_moderation::check_prompt_nsfw(prompt, image).await?;
 
     // Determine property for rate limiting
     let property = if model_id == "inttest" {

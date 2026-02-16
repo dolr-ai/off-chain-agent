@@ -255,6 +255,7 @@ jobs:
             HETZNER_S3_SECRET_KEY='${{ secrets.HETZNER_S3_SECRET_KEY }}' \
             REPLICATE_API_TOKEN='${{ secrets.REPLICATE_API_TOKEN }}' \
             AI_VIDEO_DETECTOR_API_KEY='${{ secrets.AI_VIDEO_DETECTOR_API_KEY }}' \
+            PROMPT_MODERATION_GEMINI_API_KEY='${{ secrets.PROMPT_MODERATION_GEMINI_API_KEY }}' \
             COMFYUI_API_URL='${{ vars.COMFYUI_API_URL }}' \
             COMFYUI_VIEW_URL='${{ vars.COMFYUI_VIEW_URL }}' \
             COMFYUI_API_TOKEN='${{ secrets.COMFYUI_API_TOKEN }}' \
