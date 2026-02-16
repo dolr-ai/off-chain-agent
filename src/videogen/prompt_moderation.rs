@@ -237,8 +237,7 @@ pub async fn check_prompt_nsfw(
 
     if moderation.is_nsfw {
         log::info!(
-            "Prompt rejected by moderation: {} (reason: {})",
-            &prompt[..prompt.len().min(60)],
+            "Prompt rejected by moderation: {prompt} (reason: {})",
             moderation.reason
         );
         return Err((
