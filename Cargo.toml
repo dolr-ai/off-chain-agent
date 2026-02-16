@@ -117,14 +117,14 @@ milvus-sdk-rust = "0.1.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", features = [ "full" ] }
-yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", package = "alloydb-client"}
-yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git" }
-yral-metrics = { git = "https://github.com/dolr-ai/yral-common" }
-videogen-common = { git = "https://github.com/dolr-ai/yral-common", features = ["server"] }
-yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common" }
-yral-types = { git = "https://github.com/dolr-ai/yral-common" }
-yral-username-gen = { git = "https://github.com/dolr-ai/yral-common" }
+yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master", features = [ "full" ] }
+yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", branch = "master", package = "alloydb-client"}
+yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master" }
+yral-metrics = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master", features = ["server"] }
+yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-types = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
 
 
 # Local (Path) - uncomment to use local development versions

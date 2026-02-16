@@ -64,6 +64,10 @@ pub async fn process_video_generation(
             crate::videogen::models::speech_to_video::generate_with_context(input, &state, &request)
                 .await
         }
+        VideoGenInput::Ltx2(_) => {
+            let input = request.input.clone();
+            crate::videogen::models::ltx2::generate_with_context(input, &state, &request).await
+        }
         _ => Err(VideoGenError::UnsupportedModel(
             request.input.model_id().to_string(),
         )),
@@ -86,15 +90,21 @@ pub async fn process_video_generation(
         handle_video_upload: request.handle_video_upload,
     };
 
+    // For webhook-based models, only handle failures here
+    // Success callbacks will come from the actual webhook (e.g., Replicate, ComfyUI)
     if supports_webhook {
         if let VideoGenCallbackResult::Failure(_e) = &callback.result {
+            // Only process failures - the external webhook will handle success
             handle_video_gen_callback_internal(state, callback.clone())
                 .await
                 .map_err(|e| (e.0, Json(VideoGenError::NetworkError(e.1))))?;
         }
+        // For successful webhook-based submissions, return empty response
+        // The actual video URL will come via the external webhook callback
+        return Ok(Json(json!({})));
     }
 
-    // Return the callback data as the response
+    // Return the callback data as the response for non-webhook models
     // Qstash will automatically send this to the callback URL
     Ok(Json(serde_json::to_value(&callback).map_err(|e| {
         (
