@@ -69,6 +69,7 @@ jobs:
           flyctl secrets set "HETZNER_S3_SECRET_KEY=$HETZNER_S3_SECRET_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "REPLICATE_API_TOKEN=$REPLICATE_API_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "AI_VIDEO_DETECTOR_API_KEY=$AI_VIDEO_DETECTOR_API_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "PROMPT_MODERATION_GEMINI_API_KEY=$PROMPT_MODERATION_GEMINI_API_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "BTC_REWARDS_GCHAT_WEBHOOK_URL=$BTC_REWARDS_GCHAT_WEBHOOK_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set "YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY=$YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "SERVICE_CANISTER_MIGRATION_REDIS_URL=$SERVICE_CANISTER_MIGRATION_REDIS_URL" --app "icp-off-chain-agent" --stage
@@ -134,6 +135,7 @@ jobs:
           SERVICE_CANISTER_MIGRATION_REDIS_URL: ${{ secrets.SERVICE_CANISTER_MIGRATION_REDIS_URL }}
           REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
           AI_VIDEO_DETECTOR_API_KEY: ${{ secrets.AI_VIDEO_DETECTOR_API_KEY }}
+          PROMPT_MODERATION_GEMINI_API_KEY: ${{ secrets.PROMPT_MODERATION_GEMINI_API_KEY }}
           BTC_REWARDS_GCHAT_WEBHOOK_URL: ${{ secrets.BTC_REWARDS_GCHAT_WEBHOOK_URL }}
           YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY: ${{ secrets.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}
           ANALYTICS_SERVER_TOKEN: ${{ secrets.ANALYTICS_SERVER_TOKEN }}
