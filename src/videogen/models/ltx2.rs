@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use base64::Engine;
 use tracing::info;
 use videogen_common::types::ImageData;
 use videogen_common::types_v2::VideoUploadHandling;
@@ -6,8 +6,7 @@ use videogen_common::{VideoGenError, VideoGenInput, VideoGenResponse};
 
 use crate::app_state::AppState;
 use crate::consts::OFF_CHAIN_AGENT_URL;
-use crate::utils::gcs::upload_image_to_gcs;
-use crate::videogen::comfyui_client::VideoGenMode;
+use crate::videogen::comfyui_client::{ComfyUIClient, VideoGenMode};
 use crate::videogen::comfyui_webhook::generate_comfyui_webhook_url;
 
 /// Generate video using LTX-2 on self-hosted ComfyUI
@@ -27,25 +26,21 @@ pub async fn generate_with_context(
         .as_ref()
         .ok_or_else(|| VideoGenError::ProviderError("ComfyUI client not configured".to_string()))?;
 
-    let user_principal = context.request_key.principal.to_string();
-
     // Determine generation mode based on inputs
     let mode = match (&model.image, model.prompt.is_empty()) {
         (Some(image), true) => {
             // Image only - image-to-video
-            let image_url =
-                get_image_url(image, app_state.gcs_client.clone(), &user_principal).await?;
+            let image_name = upload_image_to_comfyui(image, comfyui_client).await?;
             VideoGenMode::ImageToVideo {
-                image_url,
+                image_url: image_name,
                 prompt: None,
             }
         }
         (Some(image), false) => {
             // Image + prompt - image+text-to-video
-            let image_url =
-                get_image_url(image, app_state.gcs_client.clone(), &user_principal).await?;
+            let image_name = upload_image_to_comfyui(image, comfyui_client).await?;
             VideoGenMode::ImageTextToVideo {
-                image_url,
+                image_url: image_name,
                 prompt: model.prompt.clone(),
             }
         }
@@ -112,20 +107,39 @@ pub async fn generate_with_context(
     })
 }
 
-/// Extract URL from ImageData — uploads base64 images to GCS first since ComfyUI
-/// LoadImage node doesn't accept data URIs
-async fn get_image_url(
+/// Upload image to ComfyUI's /upload/image endpoint.
+/// LoadImage node only accepts filenames from the input directory, not URLs or data URIs.
+async fn upload_image_to_comfyui(
     image: &ImageData,
-    gcs_client: Arc<cloud_storage::Client>,
-    user_principal: &str,
+    client: &ComfyUIClient,
 ) -> Result<String, VideoGenError> {
-    match image {
-        ImageData::Url(url) => Ok(url.clone()),
-        ImageData::Base64(input) => {
-            info!("Uploading base64 image to GCS for ComfyUI LoadImage");
-            upload_image_to_gcs(gcs_client, input, user_principal)
-                .await
-                .map_err(|e| VideoGenError::ProviderError(format!("Failed to upload image: {e}")))
+    let (image_bytes, filename) = match image {
+        ImageData::Url(url) => {
+            info!("Downloading image from URL for ComfyUI upload: {}", url);
+            let resp = reqwest::get(url).await.map_err(|e| {
+                VideoGenError::NetworkError(format!("Failed to download image: {e}"))
+            })?;
+            let bytes = resp.bytes().await.map_err(|e| {
+                VideoGenError::NetworkError(format!("Failed to read image bytes: {e}"))
+            })?;
+            let name = format!("{}.png", uuid::Uuid::new_v4());
+            (bytes.to_vec(), name)
         }
-    }
+        ImageData::Base64(input) => {
+            info!("Decoding base64 image for ComfyUI upload");
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(&input.data)
+                .map_err(|e| VideoGenError::InvalidInput(format!("Invalid base64 image: {e}")))?;
+            let ext = match input.mime_type.as_str() {
+                "image/png" => "png",
+                "image/jpeg" | "image/jpg" => "jpg",
+                "image/webp" => "webp",
+                _ => "png",
+            };
+            let name = format!("{}.{}", uuid::Uuid::new_v4(), ext);
+            (bytes, name)
+        }
+    };
+
+    client.upload_image(image_bytes, &filename).await
 }
