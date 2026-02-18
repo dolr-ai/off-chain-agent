@@ -55,10 +55,106 @@ pub async fn delete_canister_data(
     // 0. Delete user from YRAL auth Redis (this step is unique to user deletion)
     #[cfg(not(feature = "local-bin"))]
     {
-        state
-            .yral_auth_dragonfly
-            .delete_principal(user_principal)
+        use ic_agent::identity::{Identity, Secp256k1Identity};
+
+        let dragonfly = &state.yral_auth_dragonfly;
+        let principal_text = user_principal.to_text();
+
+        dragonfly.delete_principal(user_principal).await?;
+
+        let reverse_key = format!("ai-account:{principal_text}");
+        let bot_owner: Option<String> = dragonfly
+            .execute_with_retry(|mut conn| {
+                let key = reverse_key.clone();
+                async move { conn.hget::<_, _, Option<String>>(key, "auth").await }
+            })
             .await?;
+
+        let mut bot_slots: Vec<(u8, String)> = Vec::new();
+        for slot in 1..=3u8 {
+            let slot_key = format!("{principal_text}-ai-account-{slot}");
+            let jwk: Option<String> = dragonfly
+                .execute_with_retry(|mut conn| {
+                    let key = slot_key.clone();
+                    async move { conn.hget::<_, _, Option<String>>(key, "auth").await }
+                })
+                .await?;
+            if let Some(jwk_str) = jwk {
+                bot_slots.push((slot, jwk_str));
+            }
+        }
+
+        match (bot_owner, bot_slots.is_empty()) {
+            (Some(owner_text), _) => {
+                log::info!(
+                    "Deleting AI account keys for bot {principal_text} (owner: {owner_text})"
+                );
+
+                let _: () = dragonfly
+                    .execute_with_retry(|mut conn| {
+                        let key = reverse_key.clone();
+                        async move { conn.del(key).await }
+                    })
+                    .await?;
+
+                for slot in 1..=3u8 {
+                    let slot_key = format!("{owner_text}-ai-account-{slot}");
+                    let jwk_str: Option<String> = dragonfly
+                        .execute_with_retry(|mut conn| {
+                            let key = slot_key.clone();
+                            async move { conn.hget::<_, _, Option<String>>(key, "auth").await }
+                        })
+                        .await?;
+
+                    let Some(jwk_str) = jwk_str else { continue };
+
+                    let Ok(sk) = k256::SecretKey::from_jwk_str(&jwk_str) else {
+                        continue;
+                    };
+                    let identity = Secp256k1Identity::from_private_key(sk);
+                    if identity.sender().ok() == Some(user_principal) {
+                        log::info!("Deleting forward slot {slot} for bot {principal_text}");
+                        let _: () = dragonfly
+                            .execute_with_retry(|mut conn| {
+                                let key = slot_key.clone();
+                                async move { conn.del(key).await }
+                            })
+                            .await?;
+                        break;
+                    }
+                }
+            }
+            (None, false) => {
+                log::info!(
+                    "Deleting AI account keys for main account {principal_text} ({} bots)",
+                    bot_slots.len()
+                );
+
+                for (slot, jwk_str) in bot_slots {
+                    if let Ok(sk) = k256::SecretKey::from_jwk_str(&jwk_str) {
+                        let identity = Secp256k1Identity::from_private_key(sk);
+                        if let Ok(bot_principal) = identity.sender() {
+                            let bot_reverse_key = format!("ai-account:{}", bot_principal.to_text());
+                            let _: () = dragonfly
+                                .execute_with_retry(|mut conn| {
+                                    let key = bot_reverse_key.clone();
+                                    async move { conn.del(key).await }
+                                })
+                                .await?;
+                        }
+                    }
+
+                    let slot_key = format!("{principal_text}-ai-account-{slot}");
+                    let _: () = dragonfly
+                        .execute_with_retry(|mut conn| {
+                            let key = slot_key.clone();
+                            async move { conn.del(key).await }
+                        })
+                        .await?;
+                }
+            }
+            (None, true) => {}
+        }
     }
 
     // 1. Delete user metadata using yral_metadata_client (this step is unique to user deletion)
