@@ -145,6 +145,7 @@ impl ComfyUIClient {
         let response = self
             .http_client
             .post(&upload_url)
+            .bearer_auth(&self.config.api_token)
             .multipart(form)
             .timeout(Duration::from_secs(30))
             .send()
