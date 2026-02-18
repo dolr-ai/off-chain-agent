@@ -121,6 +121,60 @@ impl ComfyUIClient {
         }
     }
 
+    /// Upload an image to ComfyUI's input directory via /upload/image endpoint.
+    /// Returns the filename to use in LoadImage node.
+    pub async fn upload_image(
+        &self,
+        image_bytes: Vec<u8>,
+        filename: &str,
+    ) -> Result<String, VideoGenError> {
+        let upload_url = format!(
+            "{}/upload/image",
+            self.config.view_url.as_str().trim_end_matches('/')
+        );
+
+        let part = reqwest::multipart::Part::bytes(image_bytes)
+            .file_name(filename.to_string())
+            .mime_str("image/png")
+            .map_err(|e| VideoGenError::NetworkError(format!("Failed to create multipart: {e}")))?;
+
+        let form = reqwest::multipart::Form::new()
+            .part("image", part)
+            .text("overwrite", "true");
+
+        let response = self
+            .http_client
+            .post(&upload_url)
+            .bearer_auth(&self.config.api_token)
+            .multipart(form)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await
+            .map_err(|e| {
+                VideoGenError::NetworkError(format!("Failed to upload image to ComfyUI: {e}"))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(VideoGenError::ProviderError(format!(
+                "ComfyUI image upload failed: {status}, {body}"
+            )));
+        }
+
+        #[derive(Deserialize)]
+        struct UploadResponse {
+            name: String,
+        }
+
+        let upload_resp: UploadResponse = response.json().await.map_err(|e| {
+            VideoGenError::ProviderError(format!("Failed to parse upload response: {e}"))
+        })?;
+
+        info!("Uploaded image to ComfyUI: {}", upload_resp.name);
+        Ok(upload_resp.name)
+    }
+
     /// Build LTX-2 distilled workflow with 1080p upscale based on the generation mode
     ///
     /// Pipeline: generate at half res (540x960) → upscale 2x in latent space → refine → tiled VAE decode
