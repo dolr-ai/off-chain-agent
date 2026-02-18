@@ -83,9 +83,16 @@ pub async fn send_btc_video_viewed_event(
         });
 
         if let Err(e) =
-            send_event_to_pipeline(&mixpanel_client, "btc_video_viewed", event_params).await
+            send_event_to_pipeline(&mixpanel_client, "btc_video_viewed", event_params.clone()).await
         {
-            log::error!("Failed to send btc_video_viewed event: {}", e);
+            log::error!("Failed to send btc_video_viewed event to pipeline: {}", e);
+        }
+
+        // Send directly to Mixpanel proxy
+        if let Err(e) =
+            send_event_to_mixpanel(&mixpanel_client, "btc_video_viewed", event_params).await
+        {
+            log::error!("Failed to send btc_video_viewed event to Mixpanel: {}", e);
         }
     });
 }
@@ -130,9 +137,17 @@ pub async fn send_btc_rewarded_event(
             "ts": timestamp,
         });
 
-        if let Err(e) = send_event_to_pipeline(&mixpanel_client, "btc_rewarded", event_params).await
+        // Send to event pipeline (BigQuery etc.)
+        if let Err(e) =
+            send_event_to_pipeline(&mixpanel_client, "btc_rewarded", event_params.clone()).await
         {
-            log::error!("Failed to send btc_rewarded event: {}", e);
+            log::error!("Failed to send btc_rewarded event to pipeline: {}", e);
+        }
+
+        // Send directly to Mixpanel proxy
+        if let Err(e) = send_event_to_mixpanel(&mixpanel_client, "btc_rewarded", event_params).await
+        {
+            log::error!("Failed to send btc_rewarded event to Mixpanel: {}", e);
         } else {
             log::info!(
                 "Successfully sent btc_rewarded event for creator {} (video: {}, milestone: {}, BTC: {:.8}, INR: {:.2})",
@@ -144,6 +159,39 @@ pub async fn send_btc_rewarded_event(
             );
         }
     });
+}
+
+/// Send event directly to the Mixpanel analytics proxy
+async fn send_event_to_mixpanel(
+    mixpanel_client: &MixpanelClient,
+    event_name: &str,
+    params: serde_json::Value,
+) -> anyhow::Result<()> {
+    let mut body = params;
+    if let serde_json::Value::Object(ref mut map) = body {
+        map.insert(
+            "event".to_string(),
+            serde_json::Value::String(event_name.to_string()),
+        );
+    }
+
+    let response = mixpanel_client
+        .client
+        .post(&mixpanel_client.url)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", mixpanel_client.token))
+        .json(&body)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response.text().await.unwrap_or_default();
+        anyhow::bail!("Mixpanel proxy error {status}: {error_text}");
+    }
+
+    log::debug!("Successfully sent '{event_name}' event to Mixpanel");
+    Ok(())
 }
 
 /// Send event to the /api/v2/events endpoint for processing through the event pipeline
