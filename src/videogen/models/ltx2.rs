@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tracing::info;
 use videogen_common::types::ImageData;
 use videogen_common::types_v2::VideoUploadHandling;
@@ -5,6 +6,7 @@ use videogen_common::{VideoGenError, VideoGenInput, VideoGenResponse};
 
 use crate::app_state::AppState;
 use crate::consts::OFF_CHAIN_AGENT_URL;
+use crate::utils::gcs::upload_image_to_gcs;
 use crate::videogen::comfyui_client::VideoGenMode;
 use crate::videogen::comfyui_webhook::generate_comfyui_webhook_url;
 
@@ -25,11 +27,14 @@ pub async fn generate_with_context(
         .as_ref()
         .ok_or_else(|| VideoGenError::ProviderError("ComfyUI client not configured".to_string()))?;
 
+    let user_principal = context.request_key.principal.to_string();
+
     // Determine generation mode based on inputs
     let mode = match (&model.image, model.prompt.is_empty()) {
         (Some(image), true) => {
             // Image only - image-to-video
-            let image_url = get_image_url(image)?;
+            let image_url =
+                get_image_url(image, app_state.gcs_client.clone(), &user_principal).await?;
             VideoGenMode::ImageToVideo {
                 image_url,
                 prompt: None,
@@ -37,7 +42,8 @@ pub async fn generate_with_context(
         }
         (Some(image), false) => {
             // Image + prompt - image+text-to-video
-            let image_url = get_image_url(image)?;
+            let image_url =
+                get_image_url(image, app_state.gcs_client.clone(), &user_principal).await?;
             VideoGenMode::ImageTextToVideo {
                 image_url,
                 prompt: model.prompt.clone(),
@@ -106,13 +112,20 @@ pub async fn generate_with_context(
     })
 }
 
-/// Extract URL from ImageData (either direct URL or convert base64 to data URI)
-fn get_image_url(image: &ImageData) -> Result<String, VideoGenError> {
+/// Extract URL from ImageData — uploads base64 images to GCS first since ComfyUI
+/// LoadImage node doesn't accept data URIs
+async fn get_image_url(
+    image: &ImageData,
+    gcs_client: Arc<cloud_storage::Client>,
+    user_principal: &str,
+) -> Result<String, VideoGenError> {
     match image {
         ImageData::Url(url) => Ok(url.clone()),
         ImageData::Base64(input) => {
-            // Convert to data URI for ComfyUI LoadImage node
-            Ok(format!("data:{};base64,{}", input.mime_type, input.data))
+            info!("Uploading base64 image to GCS for ComfyUI LoadImage");
+            upload_image_to_gcs(gcs_client, input, user_principal)
+                .await
+                .map_err(|e| VideoGenError::ProviderError(format!("Failed to upload image: {e}")))
         }
     }
 }
