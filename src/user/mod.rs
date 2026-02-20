@@ -13,6 +13,7 @@ use crate::app_state::AppState;
 pub fn user_router(state: Arc<AppState>) -> OpenApiRouter {
     OpenApiRouter::new()
         .routes(routes!(delete_user::handle_delete_user))
+        .routes(routes!(delete_user::handle_delete_user_by_principal))
         .routes(routes!(
             profile_image::handle_upload_profile_image,
             profile_image::handle_delete_profile_image

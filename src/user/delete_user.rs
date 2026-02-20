@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use candid::Principal;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
@@ -62,6 +63,58 @@ pub async fn handle_delete_user(
         use crate::canister::delete_canister_data;
 
         delete_canister_data(&agent, &state, user_canister, user_principal, true)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to delete canister data: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to delete canister data: {e}"),
+                )
+            })?;
+    }
+
+    Ok((StatusCode::OK, "User deleted successfully".to_string()))
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct DeleteUserByPrincipalRequest {
+    #[schema(value_type = String)]
+    pub user_principal: Principal,
+}
+
+#[utoipa::path(
+    delete,
+    path = "/by_principal",
+    request_body = DeleteUserByPrincipalRequest,
+    tag = "user",
+    responses(
+        (status = 200, description = "User deleted successfully"),
+        (status = 400, description = "Invalid request"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+#[instrument(skip(state))]
+pub async fn handle_delete_user_by_principal(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<DeleteUserByPrincipalRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let user_principal = request.user_principal;
+
+    let user_canister = match state
+        .get_individual_canister_by_user_principal(user_principal)
+        .await
+    {
+        Ok(canister) => canister,
+        Err(_) => *crate::consts::USER_INFO_SERVICE_CANISTER_ID,
+    };
+
+    crate::middleware::set_user_context(user_principal);
+
+    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
+    {
+        use crate::canister::delete_canister_data;
+
+        delete_canister_data(&state.agent, &state, user_canister, user_principal, true)
             .await
             .map_err(|e| {
                 log::error!("Failed to delete canister data: {e}");
