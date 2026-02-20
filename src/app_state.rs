@@ -492,10 +492,25 @@ async fn init_milvus_client(app_config: &AppConfig) -> Option<MilvusClient> {
     }
 }
 
+const KVROCKS_MAX_RETRIES: u32 = 10;
+
 async fn init_kvrocks_client() -> KvrocksClient {
-    crate::kvrocks::init_kvrocks_client()
-        .await
-        .expect("Failed to connect to kvrocks - this is required for the application to function")
+    let mut attempt = 0u32;
+    loop {
+        match crate::kvrocks::init_kvrocks_client().await {
+            Ok(client) => return client,
+            Err(e) => {
+                attempt += 1;
+                if attempt >= KVROCKS_MAX_RETRIES {
+                    log::error!(
+                        "Failed to connect to kvrocks after {attempt} attempts: {e}. Retrying..."
+                    );
+                }
+                let delay = std::time::Duration::from_secs(2u64.pow(attempt.min(7)).min(120));
+                tokio::time::sleep(delay).await;
+            }
+        }
+    }
 }
 
 async fn init_scratchpad_client() -> ScratchpadClient {
