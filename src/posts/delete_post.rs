@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::types::{UserPost, UserPostV2, VideoDeleteRow};
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use chrono::Utc;
 use google_cloud_bigquery::{
@@ -290,10 +290,10 @@ pub async fn handle_duplicate_post_on_delete(
         .await?
         .is_some();
 
-    let videohash = get_hash_from_videohash_original(kvrocks_client, &video_id)
-        .await
-        .context("Couldn't get video hash")?
-        .ok_or(anyhow!("No video hash associated with the given video id"))?;
+    let videohash = match get_hash_from_videohash_original(kvrocks_client, &video_id).await? {
+        Some(h) => h,
+        None => return Ok(()),
+    };
 
     DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent)
         .remove_video_id(yral_canisters_client::dedup_index::RemoveVideoIdArgs {
