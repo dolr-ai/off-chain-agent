@@ -76,7 +76,7 @@ pub async fn handle_delete_user(
     Ok((StatusCode::OK, "User deleted successfully".to_string()))
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct DeleteUserByPrincipalRequest {
     #[schema(value_type = String)]
     pub user_principal: Principal,
