@@ -178,6 +178,7 @@ pub async fn delete_canister_data(
                     if let Ok(sk) = k256::SecretKey::from_jwk_str(&jwk_str) {
                         let identity = Secp256k1Identity::from_private_key(sk);
                         if let Ok(bot_principal) = identity.sender() {
+                            // Delete bot's reverse lookup from Redis
                             let bot_reverse_key = format!("ai-account:{}", bot_principal.to_text());
                             let _: () = dragonfly
                                 .execute_with_retry(|mut conn| {
@@ -185,6 +186,17 @@ pub async fn delete_canister_data(
                                     async move { conn.del(key).await }
                                 })
                                 .await?;
+
+                            // Delete bot from canister so it doesn't become orphaned
+                            let user_info_service =
+                                UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &state.agent);
+                            if let Err(e) = user_info_service.delete_user_info(bot_principal).await
+                            {
+                                log::error!(
+                                    "Failed to delete bot {} from canister: {e}",
+                                    bot_principal.to_text()
+                                );
+                            }
                         }
                     }
 
