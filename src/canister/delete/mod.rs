@@ -52,6 +52,9 @@ pub async fn delete_canister_data(
 ) -> Result<(), anyhow::Error> {
     log::info!("Deleting canister data for canister {canister_id} and user {user_principal}");
 
+    // Collect bot principals during Redis cleanup so we can delete their metadata/canister data too
+    let mut bot_principals: Vec<Principal> = Vec::new();
+
     // 0. Delete user from YRAL auth Redis (this step is unique to user deletion)
     #[cfg(not(feature = "local-bin"))]
     {
@@ -178,6 +181,9 @@ pub async fn delete_canister_data(
                     if let Ok(sk) = k256::SecretKey::from_jwk_str(&jwk_str) {
                         let identity = Secp256k1Identity::from_private_key(sk);
                         if let Ok(bot_principal) = identity.sender() {
+                            bot_principals.push(bot_principal);
+
+                            // Delete bot's reverse lookup from Redis
                             let bot_reverse_key = format!("ai-account:{}", bot_principal.to_text());
                             let _: () = dragonfly
                                 .execute_with_retry(|mut conn| {
@@ -201,26 +207,42 @@ pub async fn delete_canister_data(
         }
     }
 
-    // 1. Delete user metadata using yral_metadata_client (this step is unique to user deletion)
-    // Wont return error if metadata deletion fails, just log it
+    // 1. Delete user metadata (including bots if this is a main account)
+    let mut principals_to_delete = vec![user_principal];
+    principals_to_delete.extend(bot_principals.iter().copied());
     if let Err(e) = state
         .yral_metadata_client
-        .delete_metadata_bulk(vec![user_principal])
+        .delete_metadata_bulk(principals_to_delete)
         .await
     {
         log::error!("Failed to delete metadata for user {user_principal}: {e}");
     }
 
-    // 2. Delete user info from UserInfoService
-    // Use admin agent (state.agent) so we have permission to delete both main accounts and bots
-    // Bot deletion requires the caller to be the owner or admin on the canister
+    // 2. Delete user info from UserInfoService (including bots if this is a main account)
     let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &state.agent);
+    for bot_principal in &bot_principals {
+        if let Err(e) = user_info_service.delete_user_info(*bot_principal).await {
+            log::error!(
+                "Failed to delete bot {} from canister: {e}",
+                bot_principal.to_text()
+            );
+        }
+    }
     if let Err(e) = user_info_service.delete_user_info(user_principal).await {
         log::error!("Failed to delete user info for user {user_principal}: {e}");
     }
 
-    // Step 2: Get all posts for the canister
-    let posts = get_canister_posts(agent, canister_id, user_principal).await?;
+    // 3. Get all posts for the user and their bots
+    let mut posts = get_canister_posts(agent, canister_id, user_principal).await?;
+    for bot_principal in &bot_principals {
+        match get_canister_posts(agent, canister_id, *bot_principal).await {
+            Ok(bot_posts) => posts.extend(bot_posts),
+            Err(e) => log::error!(
+                "Failed to get posts for bot {}: {e}",
+                bot_principal.to_text()
+            ),
+        }
+    }
 
     // Step 3: Bulk insert into video_deleted table if posts exist
     //       : Handle duplicate posts cleanup (spawn as background task)
