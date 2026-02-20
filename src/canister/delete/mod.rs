@@ -62,6 +62,7 @@ pub async fn delete_canister_data(
 
         dragonfly.delete_principal(user_principal).await?;
 
+        // First try the reverse lookup in Redis
         let reverse_key = format!("ai-account:{principal_text}");
         let bot_owner: Option<String> = dragonfly
             .execute_with_retry(|mut conn| {
@@ -69,6 +70,46 @@ pub async fn delete_canister_data(
                 async move { conn.hget::<_, _, Option<String>>(key, "auth").await }
             })
             .await?;
+
+        // If reverse lookup is missing, fall back to querying the canister for account type
+        let bot_owner = match bot_owner {
+            Some(owner) => Some(owner),
+            None => {
+                let user_info_service =
+                    UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &state.agent);
+                match user_info_service
+                    .get_user_profile_details_v_7(user_principal)
+                    .await
+                {
+                    Ok(yral_canisters_client::user_info_service::Result7::Ok(profile)) => {
+                        match profile.account_type {
+                            yral_canisters_client::user_info_service::UserAccountType::BotAccount {
+                                owner,
+                            } => {
+                                log::info!(
+                                    "Reverse lookup missing for bot {principal_text}, found owner {} from canister",
+                                    owner.to_text()
+                                );
+                                Some(owner.to_text())
+                            }
+                            _ => None,
+                        }
+                    }
+                    Ok(yral_canisters_client::user_info_service::Result7::Err(e)) => {
+                        log::warn!(
+                            "Failed to get profile for {principal_text} from canister: {e}"
+                        );
+                        None
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to query canister for {principal_text}: {e}"
+                        );
+                        None
+                    }
+                }
+            }
+        };
 
         let mut bot_slots: Vec<(u8, String)> = Vec::new();
         for slot in 1..=3u8 {
@@ -90,13 +131,8 @@ pub async fn delete_canister_data(
                     "Deleting AI account keys for bot {principal_text} (owner: {owner_text})"
                 );
 
-                let _: () = dragonfly
-                    .execute_with_retry(|mut conn| {
-                        let key = reverse_key.clone();
-                        async move { conn.del(key).await }
-                    })
-                    .await?;
-
+                // Delete forward slot FIRST, then reverse lookup
+                // This prevents orphaned slots if the slot cleanup fails
                 for slot in 1..=3u8 {
                     let slot_key = format!("{owner_text}-ai-account-{slot}");
                     let jwk_str: Option<String> = dragonfly
@@ -123,6 +159,14 @@ pub async fn delete_canister_data(
                         break;
                     }
                 }
+
+                // Delete reverse lookup AFTER forward slot is cleaned up
+                let _: () = dragonfly
+                    .execute_with_retry(|mut conn| {
+                        let key = reverse_key.clone();
+                        async move { conn.del(key).await }
+                    })
+                    .await?;
             }
             (None, false) => {
                 log::info!(
@@ -168,8 +212,9 @@ pub async fn delete_canister_data(
     }
 
     // 2. Delete user info from UserInfoService
-    // Wont return error if user info deletion fails, just log it
-    let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, agent);
+    // Use admin agent (state.agent) so we have permission to delete both main accounts and bots
+    // Bot deletion requires the caller to be the owner or admin on the canister
+    let user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &state.agent);
     if let Err(e) = user_info_service.delete_user_info(user_principal).await {
         log::error!("Failed to delete user info for user {user_principal}: {e}");
     }

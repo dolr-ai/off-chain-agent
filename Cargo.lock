@@ -10593,7 +10593,7 @@ dependencies = [
 [[package]]
 name = "yral-identity"
 version = "0.1.0"
-source = "git+https://github.com/dolr-ai/yral-common?branch=master#c2f23aab2366510eefaf688254506b474833c8d1"
+source = "git+https://github.com/dolr-ai/yral-common?branch=master#2568a4955956b2cd0add6c3c94cc09e41cf7e1a5"
 dependencies = [
  "candid",
  "ic-agent",
@@ -10617,7 +10617,7 @@ dependencies = [
 [[package]]
 name = "yral-metadata-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#7d4cd6163616ce9f744cca83bb799a436121c65c"
+source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#2e346e9a8e84203a32cae24ad0bc6a477a30e3bf"
 dependencies = [
  "ic-agent",
  "reqwest 0.12.28",
@@ -10644,7 +10644,7 @@ dependencies = [
 [[package]]
 name = "yral-metadata-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#7d4cd6163616ce9f744cca83bb799a436121c65c"
+source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#2e346e9a8e84203a32cae24ad0bc6a477a30e3bf"
 dependencies = [
  "candid",
  "chrono",
