@@ -100,15 +100,13 @@ pub async fn handle_delete_user_by_principal(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let user_principal = request.user_principal;
 
-    let user_canister = state
+    let user_canister = match state
         .get_individual_canister_by_user_principal(user_principal)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("Failed to get user canister: {e}"),
-            )
-        })?;
+    {
+        Ok(canister) => canister,
+        Err(_) => *crate::consts::USER_INFO_SERVICE_CANISTER_ID,
+    };
 
     crate::middleware::set_user_context(user_principal);
 
