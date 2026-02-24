@@ -78,7 +78,10 @@ pub async fn process_video_generation(
     // Prepare callback data for non-webhook or error cases
     let callback_result = match result {
         Ok(response) => VideoGenCallbackResult::Success(response),
-        Err(e) => VideoGenCallbackResult::Failure(e.to_string()),
+        Err(e) => {
+            log::error!("Video generation failed: {e}");
+            VideoGenCallbackResult::Failure(e.to_string())
+        }
     };
 
     let callback = QstashVideoGenCallback {

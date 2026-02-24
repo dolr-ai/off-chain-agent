@@ -157,6 +157,7 @@ impl ComfyUIClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+            log::error!("ComfyUI image upload failed: {status}, {body}");
             return Err(VideoGenError::ProviderError(format!(
                 "ComfyUI image upload failed: {status}, {body}"
             )));
@@ -455,6 +456,7 @@ impl ComfyUIClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
+            log::error!("ComfyUI API error ({}): {}", status, error_text);
             return Err(VideoGenError::ProviderError(format!(
                 "ComfyUI API error ({}): {}",
                 status, error_text

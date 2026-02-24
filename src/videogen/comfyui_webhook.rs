@@ -52,6 +52,10 @@ fn convert_comfyui_status(
                 .message
                 .clone()
                 .unwrap_or_else(|| "Unknown error".to_string());
+            log::error!(
+                "ComfyUI generation failed for request {}: {error}",
+                payload.id
+            );
             VideoGenCallbackResult::Failure(format!("Video generation failed: {error}"))
         }
         _ => VideoGenCallbackResult::Failure(format!("Unknown status: {}", payload.status)),
