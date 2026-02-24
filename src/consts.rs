@@ -65,7 +65,7 @@ pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
 
 // Storj Public Bucket URLs
 pub const STORJ_SFW_BUCKET_URL: &str =
-    "https://link.storjshare.io/raw/jx6vm3ebgb4gt3gfkmcrw62bl7rq/yral-videos";
+    "https://link.storjshare.io/raw/jxdwdcqbubqksqgz4i7wxsg6o7cq/yral-videos";
 pub const STORJ_NSFW_BUCKET_URL: &str =
     "https://link.storjshare.io/raw/jwait7tp3civp6cbaot4zzjbheqq/yral-nsfw-videos";
 
