@@ -206,15 +206,13 @@ jobs:
           SENTRY_ENVIRONMENT: "staging"
           ALLOYDB_DB_NAME: "postgres"
           ALLOYDB_DB_USER: "postgres"
+          PORT: "8080"
         run: |
           APP_UUID="${{ steps.coolify_app.outputs.app_uuid }}"
           flatten() { echo "$1" | tr -d '\n\r'; }
           
           ENV_JSON=$(jq -n \
             --arg app_url "$APP_URL" \
-            --arg sentry_environment "$SENTRY_ENVIRONMENT" \
-            --arg alloydb_db_name "$ALLOYDB_DB_NAME" \
-            --arg alloydb_db_user "$ALLOYDB_DB_USER" \
             --arg off_chain_agent_url "$OFF_CHAIN_AGENT_URL" \
             --arg cf_r2_access_key_temp "$CF_R2_ACCESS_KEY_TEMP" \
             --arg cf_r2_secret_access_key_temp "$CF_R2_SECRET_ACCESS_KEY_TEMP" \
@@ -282,6 +280,10 @@ jobs:
             --arg dragonfly_2_client_key "$DRAGONFLY_2_CLIENT_KEY" \
             --arg yral_mobile_service_account_key "$(flatten "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY")" \
             --arg prompt_moderation_gemini_api_key "$PROMPT_MODERATION_GEMINI_API_KEY" \
+            --arg sentry_environment "$SENTRY_ENVIRONMENT" \
+            --arg alloydb_db_name "$ALLOYDB_DB_NAME" \
+            --arg alloydb_db_user "$ALLOYDB_DB_USER" \
+            --arg port "$PORT" \
             '[
               { "key": "APP_URL", "value": $app_url,  "is_literal": true},
               { "key": "OFF_CHAIN_AGENT_URL", "value": $off_chain_agent_url, "is_literal": true},
@@ -353,7 +355,8 @@ jobs:
               { "key": "PROMPT_MODERATION_GEMINI_API_KEY", "value": $prompt_moderation_gemini_api_key,"is_literal": true},
               { "key": "SENTRY_ENVIRONMENT", "value": $sentry_environment, "is_literal": true},
               { "key": "ALLOYDB_DB_NAME", "value": $alloydb_db_name, "is_literal": true},
-              { "key": "ALLOYDB_DB_USER", "value": $alloydb_db_user, "is_literal": true}
+              { "key": "ALLOYDB_DB_USER", "value": $alloydb_db_user, "is_literal": true},
+              { "key": "PORT", "value": $port, "is_literal": true}
             ]')
 
           RESPONSE=$(curl -s -o /tmp/curl_response.txt -w "%{http_code}" -X PATCH \
