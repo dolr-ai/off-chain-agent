@@ -350,7 +350,10 @@ jobs:
               { "key": "DRAGONFLY_2_CLIENT_CERT", "value": $dragonfly_2_client_cert, "is_multiline": true},
               { "key": "DRAGONFLY_2_CLIENT_KEY", "value": $dragonfly_2_client_key, "is_multiline": true},
               { "key": "YRAL_MOBILE_SERVICE_ACCOUNT_KEY", "value": $yral_mobile_service_account_key, "is_literal": true},
-              { "key": "PROMPT_MODERATION_GEMINI_API_KEY", "value": $prompt_moderation_gemini_api_key,"is_literal": true}
+              { "key": "PROMPT_MODERATION_GEMINI_API_KEY", "value": $prompt_moderation_gemini_api_key,"is_literal": true},
+              { "key": "SENTRY_ENVIRONMENT", "value": $sentry_environment, "is_literal": true},
+              { "key": "ALLOYDB_DB_NAME", "value": $alloydb_db_name, "is_literal": true},
+              { "key": "ALLOYDB_DB_USER", "value": $alloydb_db_user, "is_literal": true}
             ]')
 
           RESPONSE=$(curl -s -o /tmp/curl_response.txt -w "%{http_code}" -X PATCH \
