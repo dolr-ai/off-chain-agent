@@ -82,7 +82,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.image_tag }}
 
-      - name: Create or Get Coolify Application
+      - name: Create or Get Coolify Application for PR
         id: coolify_app
         run: |
           APP_NAME="${{ steps.meta.outputs.app_name }}"
@@ -90,14 +90,18 @@ jobs:
           IMAGE_TAG="${{ steps.meta.outputs.image_tag }}"
           PREVIEW_DOMAIN="${{ steps.meta.outputs.preview_domain }}"
 
+          # Check if app already exists for this PR (e.g. new commit pushed to same PR)
           EXISTING=$(curl -s \
             "${{ secrets.COOLIFY_URL }}/api/v1/applications" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
             | jq -r --arg name "$APP_NAME" '.[] | select(.name == $name) | .uuid // empty')
 
           if [ -n "$EXISTING" ]; then
+            echo "Reusing existing Coolify app: $EXISTING"
             echo "app_uuid=${EXISTING}" >> $GITHUB_OUTPUT
           else
+            echo "Creating new Coolify app: $APP_NAME"
+
             RESPONSE=$(curl -s -X POST \
               "${{ secrets.COOLIFY_URL }}/api/v1/applications/dockerimage" \
               -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
@@ -343,11 +347,16 @@ jobs:
               { "key": "PROMPT_MODERATION_GEMINI_API_KEY", "value": $prompt_moderation_gemini_api_key,"is_literal": true}
             ]')
 
-          curl -s -X PATCH \
+          RESPONSE=$(curl -s -o /tmp/curl_response.txt -w "%{http_code}" -X PATCH \
             "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}/envs/bulk" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{\"data\": ${ENV_JSON}}"
+            -d "{\"data\": ${ENV_JSON}}")
+
+          if [ "$RESPONSE" != "200" ]; then
+            echo "Failed with HTTP $RESPONSE"
+            exit 1
+          fi
 
       - name: Start Deployment
         id: deploy
