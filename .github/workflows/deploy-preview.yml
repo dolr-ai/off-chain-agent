@@ -203,12 +203,18 @@ jobs:
           DRAGONFLY_2_CLIENT_KEY: ${{ secrets.DRAGONFLY_2_CLIENT_KEY }}
           YRAL_MOBILE_SERVICE_ACCOUNT_KEY: ${{ secrets.YRAL_MOBILE_SERVICE_ACCOUNT_KEY }}
           PROMPT_MODERATION_GEMINI_API_KEY: ${{ secrets.PROMPT_MODERATION_GEMINI_API_KEY }}
+          SENTRY_ENVIRONMENT: "staging"
+          ALLOYDB_DB_NAME: "postgres"
+          ALLOYDB_DB_USER: "postgres"
         run: |
           APP_UUID="${{ steps.coolify_app.outputs.app_uuid }}"
           flatten() { echo "$1" | tr -d '\n\r'; }
           
           ENV_JSON=$(jq -n \
             --arg app_url "$APP_URL" \
+            --arg sentry_environment "$SENTRY_ENVIRONMENT" \
+            --arg alloydb_db_name "$ALLOYDB_DB_NAME" \
+            --arg alloydb_db_user "$ALLOYDB_DB_USER" \
             --arg off_chain_agent_url "$OFF_CHAIN_AGENT_URL" \
             --arg cf_r2_access_key_temp "$CF_R2_ACCESS_KEY_TEMP" \
             --arg cf_r2_secret_access_key_temp "$CF_R2_SECRET_ACCESS_KEY_TEMP" \
