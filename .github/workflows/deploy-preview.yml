@@ -204,74 +204,74 @@ jobs:
           flatten() { echo "$1" | tr -d '\n\r'; }
           
           ENV_JSON=$(jq -n \
-            -- arg app_url "$APP_URL" \
-            -- arg off_chain_agent_url "$OFF_CHAIN_AGENT_URL" \
-            -- arg cf_r2_access_key_temp "$CF_R2_ACCESS_KEY_TEMP" \
-            -- arg cf_r2_secret_access_key_temp "$CF_R2_SECRET_ACCESS_KEY_TEMP" \
-            -- arg cf_worker_access_off_chain_agent_key "$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" \
-            -- arg backend_admin_identity "$BACKEND_ADMIN_IDENTITY" \
-            -- arg google_sa_key "$(flatten "$GOOGLE_SA_KEY")" \
-            -- arg grpc_auth_token "$GRPC_AUTH_TOKEN" \
-            -- arg yral_cloudflare_worker_grpc_auth_token "$YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN" \
-            -- arg yral_metadata_token "$YRAL_METADATA_TOKEN" \
-            -- arg upstash_vector_read_write_token "$UPSTASH_VECTOR_READ_WRITE_TOKEN" \
-            -- arg ml_server_jwt_token "$ML_SERVER_JWT_TOKEN" \
-            -- arg cloudflare_stream_read_and_list_access_token "$CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN" \
-            -- arg qstash_current_signing_key "$QSTASH_CURRENT_SIGNING_KEY" \
-            -- arg cf_images_api_token "$CF_IMAGES_API_TOKEN" \
-            -- arg nsfw_grpc_token "$NSFW_GRPC_TOKEN" \
-            -- arg qstash_auth_token "$QSTASH_AUTH_TOKEN" \
-            -- arg ml_feed_cache_redis_url "$ML_FEED_CACHE_REDIS_URL" \
-            -- arg storj_interface_token "$STORJ_INTERFACE_TOKEN" \
-            -- arg videohash_backfill_token "$VIDEOHASH_BACKFILL_TOKEN" \
-            -- arg storj_backup_canister_access_grant "$STORJ_BACKUP_CANISTER_ACCESS_GRANT" \
-            -- arg canister_backup_alert_google_chat_webhook_url "$CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL" \
-            -- arg alloydb_service_account_json "$(flatten "$ALLOYDB_SERVICE_ACCOUNT_JSON")" \
-            -- arg alloydb_instance "$ALLOYDB_INSTANCE" \
-            -- arg alloydb_db_password "$ALLOYDB_DB_PASSWORD" \
-            -- arg canister_backup_cache_redis_url "$CANISTER_BACKUP_CACHE_REDIS_URL" \
-            -- arg yral_metadata_notification_api_key "$YRAL_METADATA_NOTIFICATION_API_KEY" \
-            -- arg ml_feed_cache_memorystore_url "$ML_FEED_CACHE_MEMORYSTORE_URL" \
-            -- arg lumalabs_api_key "$LUMALABS_API_KEY" \
-            -- arg yral_hon_worker_jwt "$YRAL_HON_WORKER_JWT" \
-            -- arg leaderboard_redis_url "$LEADERBOARD_REDIS_URL" \
-            -- arg service_canister_migration_redis_url "$SERVICE_CANISTER_MIGRATION_REDIS_URL" \
-            -- arg test_redis_url "$TEST_REDIS_URL" \
-            -- arg hetzner_s3_access_key "$HETZNER_S3_ACCESS_KEY" \
-            -- arg hetzner_s3_secret_key "$HETZNER_S3_SECRET_KEY" \
-            -- arg replicate_api_token "$REPLICATE_API_TOKEN" \
-            -- arg comfyui_api_url "$COMFYUI_API_URL" \
-            -- arg comfyui_view_url "$COMFYUI_VIEW_URL" \
-            -- arg comfyui_api_token "$COMFYUI_API_TOKEN" \
-            -- arg btc_rewards_gchat_webhook_url "$BTC_REWARDS_GCHAT_WEBHOOK_URL" \
-            -- arg yral_off_chain_user_migration_api_key "$YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY" \
-            -- arg analytics_server_token "$ANALYTICS_SERVER_TOKEN" \
-            -- arg milvus_url "$MILVUS_URL" \
-            -- arg replicate_webhook_signing_secret "$REPLICATE_WEBHOOK_SIGNING_SECRET" \
-            -- arg sentry_client_secret_1 "$SENTRY_CLIENT_SECRET_1" \
-            -- arg sentry_client_secret_2 "$SENTRY_CLIENT_SECRET_2" \
-            -- arg gchat_sentry_webhook_url "$GCHAT_SENTRY_WEBHOOK_URL" \
-            -- arg google_chat_report_space_url "$GOOGLE_CHAT_REPORT_SPACE_URL" \
-            -- arg kvrocks_password "$KVROCKS_PASSWORD" \
-            -- arg kvrocks_hosts "$KVROCKS_HOSTS" \
-            -- arg kvrocks_ca_cert "$KVROCKS_CA_CERT" \
-            -- arg kvrocks_client_cert "$KVROCKS_CLIENT_CERT" \
-            -- arg kvrocks_client_key "$KVROCKS_CLIENT_KEY" \
-            -- arg scratchpad_dragonfly_host "$SCRATCHPAD_DRAGONFLY_HOST" \
-            -- arg scratchpad_dragonfly_port "$SCRATCHPAD_DRAGONFLY_PORT" \
-            -- arg scratchpad_dragonfly_password "$SCRATCHPAD_DRAGONFLY_PASSWORD" \
-            -- arg dragonfly_password "$DRAGONFLY_PASSWORD" \
-            -- arg dragonfly_hosts "$DRAGONFLY_HOSTS" \
-            -- arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
-            -- arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
-            -- arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
-            -- arg dragonfly_2_password "$DRAGONFLY_2_PASSWORD" \
-            -- arg dragonfly_2_hosts "$DRAGONFLY_2_HOSTS" \
-            -- arg dragonfly_2_ca_cert "$DRAGONFLY_2_CA_CERT" \
-            -- arg dragonfly_2_client_cert "$DRAGONFLY_2_CLIENT_CERT" \
-            -- arg dragonfly_2_client_key "$DRAGONFLY_2_CLIENT_KEY" \
-            -- arg yral_mobile_service_account_key "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY" \
-            -- arg prompt_moderation_gemini_api_key "$PROMPT_MODERATION_GEMINI_API_KEY" \
+            --arg app_url "$APP_URL" \
+            --arg off_chain_agent_url "$OFF_CHAIN_AGENT_URL" \
+            --arg cf_r2_access_key_temp "$CF_R2_ACCESS_KEY_TEMP" \
+            --arg cf_r2_secret_access_key_temp "$CF_R2_SECRET_ACCESS_KEY_TEMP" \
+            --arg cf_worker_access_off_chain_agent_key "$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" \
+            --arg backend_admin_identity "$BACKEND_ADMIN_IDENTITY" \
+            --arg google_sa_key "$(flatten "$GOOGLE_SA_KEY")" \
+            --arg grpc_auth_token "$GRPC_AUTH_TOKEN" \
+            --arg yral_cloudflare_worker_grpc_auth_token "$YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN" \
+            --arg yral_metadata_token "$YRAL_METADATA_TOKEN" \
+            --arg upstash_vector_read_write_token "$UPSTASH_VECTOR_READ_WRITE_TOKEN" \
+            --arg ml_server_jwt_token "$ML_SERVER_JWT_TOKEN" \
+            --arg cloudflare_stream_read_and_list_access_token "$CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN" \
+            --arg qstash_current_signing_key "$QSTASH_CURRENT_SIGNING_KEY" \
+            --arg cf_images_api_token "$CF_IMAGES_API_TOKEN" \
+            --arg nsfw_grpc_token "$NSFW_GRPC_TOKEN" \
+            --arg qstash_auth_token "$QSTASH_AUTH_TOKEN" \
+            --arg ml_feed_cache_redis_url "$ML_FEED_CACHE_REDIS_URL" \
+            --arg storj_interface_token "$STORJ_INTERFACE_TOKEN" \
+            --arg videohash_backfill_token "$VIDEOHASH_BACKFILL_TOKEN" \
+            --arg storj_backup_canister_access_grant "$STORJ_BACKUP_CANISTER_ACCESS_GRANT" \
+            --arg canister_backup_alert_google_chat_webhook_url "$CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL" \
+            --arg alloydb_service_account_json "$(flatten "$ALLOYDB_SERVICE_ACCOUNT_JSON")" \
+            --arg alloydb_instance "$ALLOYDB_INSTANCE" \
+            --arg alloydb_db_password "$ALLOYDB_DB_PASSWORD" \
+            --arg canister_backup_cache_redis_url "$CANISTER_BACKUP_CACHE_REDIS_URL" \
+            --arg yral_metadata_notification_api_key "$YRAL_METADATA_NOTIFICATION_API_KEY" \
+            --arg ml_feed_cache_memorystore_url "$ML_FEED_CACHE_MEMORYSTORE_URL" \
+            --arg lumalabs_api_key "$LUMALABS_API_KEY" \
+            --arg yral_hon_worker_jwt "$YRAL_HON_WORKER_JWT" \
+            --arg leaderboard_redis_url "$LEADERBOARD_REDIS_URL" \
+            --arg service_canister_migration_redis_url "$SERVICE_CANISTER_MIGRATION_REDIS_URL" \
+            --arg test_redis_url "$TEST_REDIS_URL" \
+            --arg hetzner_s3_access_key "$HETZNER_S3_ACCESS_KEY" \
+            --arg hetzner_s3_secret_key "$HETZNER_S3_SECRET_KEY" \
+            --arg replicate_api_token "$REPLICATE_API_TOKEN" \
+            --arg comfyui_api_url "$COMFYUI_API_URL" \
+            --arg comfyui_view_url "$COMFYUI_VIEW_URL" \
+            --arg comfyui_api_token "$COMFYUI_API_TOKEN" \
+            --arg btc_rewards_gchat_webhook_url "$BTC_REWARDS_GCHAT_WEBHOOK_URL" \
+            --arg yral_off_chain_user_migration_api_key "$YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY" \
+            --arg analytics_server_token "$ANALYTICS_SERVER_TOKEN" \
+            --arg milvus_url "$MILVUS_URL" \
+            --arg replicate_webhook_signing_secret "$REPLICATE_WEBHOOK_SIGNING_SECRET" \
+            --arg sentry_client_secret_1 "$SENTRY_CLIENT_SECRET_1" \
+            --arg sentry_client_secret_2 "$SENTRY_CLIENT_SECRET_2" \
+            --arg gchat_sentry_webhook_url "$GCHAT_SENTRY_WEBHOOK_URL" \
+            --arg google_chat_report_space_url "$GOOGLE_CHAT_REPORT_SPACE_URL" \
+            --arg kvrocks_password "$KVROCKS_PASSWORD" \
+            --arg kvrocks_hosts "$KVROCKS_HOSTS" \
+            --arg kvrocks_ca_cert "$KVROCKS_CA_CERT" \
+            --arg kvrocks_client_cert "$KVROCKS_CLIENT_CERT" \
+            --arg kvrocks_client_key "$KVROCKS_CLIENT_KEY" \
+            --arg scratchpad_dragonfly_host "$SCRATCHPAD_DRAGONFLY_HOST" \
+            --arg scratchpad_dragonfly_port "$SCRATCHPAD_DRAGONFLY_PORT" \
+            --arg scratchpad_dragonfly_password "$SCRATCHPAD_DRAGONFLY_PASSWORD" \
+            --arg dragonfly_password "$DRAGONFLY_PASSWORD" \
+            --arg dragonfly_hosts "$DRAGONFLY_HOSTS" \
+            --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
+            --arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
+            --arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
+            --arg dragonfly_2_password "$DRAGONFLY_2_PASSWORD" \
+            --arg dragonfly_2_hosts "$DRAGONFLY_2_HOSTS" \
+            --arg dragonfly_2_ca_cert "$DRAGONFLY_2_CA_CERT" \
+            --arg dragonfly_2_client_cert "$DRAGONFLY_2_CLIENT_CERT" \
+            --arg dragonfly_2_client_key "$DRAGONFLY_2_CLIENT_KEY" \
+            --arg yral_mobile_service_account_key "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY" \
+            --arg prompt_moderation_gemini_api_key "$PROMPT_MODERATION_GEMINI_API_KEY" \
             '[
               { "key": "APP_URL", "value": $app_url,  "is_literal": true},
               { "key": "OFF_CHAIN_AGENT_URL", "value": $off_chain_agent_url, "is_literal": true},
