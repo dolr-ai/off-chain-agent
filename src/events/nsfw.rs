@@ -166,7 +166,9 @@ pub struct NSFWInfo {
 #[instrument]
 pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
-    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+    let tls_config = ClientTlsConfig::new()
+        .with_webpki_roots()
+        .assume_http2(true);
     let channel = Channel::from_static(NSFW_SERVER_URL)
         .tls_config(tls_config)
         .expect("Couldn't update TLS config for nsfw agent")
@@ -198,7 +200,9 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
 /// Check a base64-encoded image for NSFW content using the gRPC NSFW detector service.
 #[instrument(skip(base64_image))]
 pub async fn get_image_nsfw_info(base64_image: String) -> Result<NSFWInfo, Error> {
-    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+    let tls_config = ClientTlsConfig::new()
+        .with_webpki_roots()
+        .assume_http2(true);
     let channel = Channel::from_static(NSFW_SERVER_URL)
         .tls_config(tls_config)?
         .connect()
@@ -422,7 +426,9 @@ pub async fn nsfw_job_v2(
 #[instrument]
 pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
-    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+    let tls_config = ClientTlsConfig::new()
+        .with_webpki_roots()
+        .assume_http2(true);
     let channel = Channel::from_static(NSFW_SERVER_URL)
         .tls_config(tls_config)?
         .connect()
