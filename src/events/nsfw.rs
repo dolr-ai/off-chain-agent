@@ -195,6 +195,34 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     Ok(nsfw_info)
 }
 
+/// Check a base64-encoded image for NSFW content using the gRPC NSFW detector service.
+#[instrument(skip(base64_image))]
+pub async fn get_image_nsfw_info(base64_image: String) -> Result<NSFWInfo, Error> {
+    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+    let channel = Channel::from_static(NSFW_SERVER_URL)
+        .tls_config(tls_config)?
+        .connect()
+        .await?;
+
+    let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
+    let token: MetadataValue<_> = format!("Bearer {nsfw_grpc_auth_token}").parse()?;
+
+    let mut client = nsfw_detector::nsfw_detector_client::NsfwDetectorClient::with_interceptor(
+        channel,
+        move |mut req: Request<()>| {
+            req.metadata_mut().insert("authorization", token.clone());
+            Ok(req)
+        },
+    );
+
+    let req = tonic::Request::new(nsfw_detector::NsfwDetectorRequestImg {
+        image: base64_image,
+    });
+    let res = client.detect_nsfw_img(req).await?;
+
+    Ok(NSFWInfo::from(res.into_inner()))
+}
+
 #[derive(Serialize)]
 struct VideoNSFWData {
     video_id: String,
