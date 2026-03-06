@@ -106,8 +106,13 @@ pub async fn check_prompt_nsfw(
     let api_key = match std::env::var("PROMPT_MODERATION_GEMINI_API_KEY") {
         Ok(key) => key,
         Err(_) => {
-            log::warn!("PROMPT_MODERATION_GEMINI_API_KEY not set, skipping prompt moderation");
-            return Ok(());
+            log::error!("PROMPT_MODERATION_GEMINI_API_KEY not set");
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(VideoGenError::NetworkError(
+                    "PROMPT_MODERATION_GEMINI_API_KEY not set".to_string(),
+                )),
+            ));
         }
     };
 
@@ -179,8 +184,13 @@ pub async fn check_prompt_nsfw(
     let response = match client.post(&url).json(&request).send().await {
         Ok(resp) => resp,
         Err(e) => {
-            log::warn!("Gemini API call failed, allowing prompt through: {e}");
-            return Ok(());
+            log::error!("Gemini API call failed: {e}");
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(VideoGenError::NetworkError(format!(
+                    "Content moderation failed: {e}"
+                ))),
+            ));
         }
     };
 
@@ -202,15 +212,25 @@ pub async fn check_prompt_nsfw(
             ));
         }
 
-        log::warn!("Gemini API returned {status}, allowing prompt through: {body}");
-        return Ok(());
+        log::error!("Gemini API returned {status}: {body}");
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(VideoGenError::NetworkError(format!(
+                "Content moderation error: {status} {body}"
+            ))),
+        ));
     }
 
     let gemini_response: GeminiResponse = match response.json().await {
         Ok(resp) => resp,
         Err(e) => {
-            log::warn!("Failed to parse Gemini response, allowing prompt through: {e}");
-            return Ok(());
+            log::error!("Failed to parse Gemini response: {e}");
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(VideoGenError::NetworkError(
+                    "Content moderation service error".to_string(),
+                )),
+            ));
         }
     };
 
@@ -223,15 +243,25 @@ pub async fn check_prompt_nsfw(
         .and_then(|p| p.text.as_ref());
 
     let Some(text) = text else {
-        log::warn!("No text in Gemini response, allowing prompt through");
-        return Ok(());
+        log::error!("No text in Gemini response");
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(VideoGenError::NetworkError(
+                "Content moderation: empty Gemini response".to_string(),
+            )),
+        ));
     };
 
     let moderation: ModerationResult = match serde_json::from_str(text) {
         Ok(result) => result,
         Err(e) => {
-            log::warn!("Failed to parse moderation result, allowing prompt through: {e}");
-            return Ok(());
+            log::error!("Failed to parse moderation result: {e}");
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(VideoGenError::NetworkError(format!(
+                    "Content moderation parse error: {e}"
+                ))),
+            ));
         }
     };
 

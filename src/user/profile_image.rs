@@ -101,7 +101,7 @@ pub async fn handle_upload_profile_image(
             tracing::error!("NSFW detection failed for profile image: {e}");
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                format!("NSFW detection service unavailable: {e}"),
+                format!("NSFW detection failed: {e}"),
             )
         })?;
     if nsfw_result.is_nsfw {
