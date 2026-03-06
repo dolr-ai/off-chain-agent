@@ -383,7 +383,9 @@ pub async fn init_bigquery_client() -> Client {
 }
 
 pub async fn init_nsfw_detect_channel() -> Channel {
-    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+    let tls_config = ClientTlsConfig::new()
+        .with_webpki_roots()
+        .assume_http2(true);
     Channel::from_static(NSFW_SERVER_URL)
         .tls_config(tls_config)
         .expect("Couldn't update TLS config for nsfw agent")

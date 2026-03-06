@@ -7,12 +7,12 @@ use tracing::instrument;
 use utoipa::ToSchema;
 
 use crate::{
-    app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, types::DelegatedIdentityWire,
-    user::utils::get_agent_from_delegated_identity_wire,
+    app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, events::nsfw::get_image_nsfw_info,
+    types::DelegatedIdentityWire, user::utils::get_agent_from_delegated_identity_wire,
     utils::delegated_identity::get_user_info_from_delegated_identity_wire,
     utils::s3::upload_profile_image_to_s3,
 };
-use yral_canisters_client::user_info_service::{ProfileUpdateDetails, UserInfoService};
+use yral_canisters_client::user_info_service::{NsfwInfo, ProfileUpdateDetails, UserInfoService};
 
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct UploadProfileImageRequest {
@@ -94,6 +94,23 @@ pub async fn handle_upload_profile_image(
         ));
     }
 
+    // Check image for NSFW content before uploading
+    let nsfw_result = get_image_nsfw_info(base64_data.to_string())
+        .await
+        .map_err(|e| {
+            tracing::error!("NSFW detection failed for profile image: {e}");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("NSFW detection failed: {e}"),
+            )
+        })?;
+    if nsfw_result.is_nsfw {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Profile image rejected: content violates safety guidelines".to_string(),
+        ));
+    }
+
     // Upload image to S3
     let profile_image_url = upload_profile_image_to_s3(base64_data, &user_principal.to_text())
         .await
@@ -155,6 +172,25 @@ pub async fn handle_upload_profile_image(
                 format!("Failed to update profile in canister: {e}"),
             ));
         }
+    }
+
+    // Update NSFW info in canister
+    let admin_user_info_service = UserInfoService(*USER_INFO_SERVICE_CANISTER_ID, &state.agent);
+    let canister_nsfw_info = NsfwInfo {
+        is_nsfw: nsfw_result.is_nsfw,
+        csam_detected: nsfw_result.csam_detected,
+        nsfw_gore: nsfw_result.nsfw_gore,
+        nsfw_ec: nsfw_result.nsfw_ec,
+    };
+    if let Err(e) = admin_user_info_service
+        .update_profile_picture_nsfw_info(user_principal, canister_nsfw_info)
+        .await
+    {
+        tracing::error!(
+            "Failed to update profile picture NSFW info for user {}: {}",
+            user_principal,
+            e
+        );
     }
 
     Ok(Json(UploadProfileImageResponse { profile_image_url }))
