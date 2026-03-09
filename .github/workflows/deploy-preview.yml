@@ -200,12 +200,12 @@ jobs:
             secret/data/off-chain-agent/SCRATCHPAD_DRAGONFLY_PASSWORD value | SCRATCHPAD_DRAGONFLY_PASSWORD ;
             secret/data/DRAGONFLY_CLUSTER_1_PASSWORD value | DRAGONFLY_PASSWORD ;
             secret/data/DRAGONFLY_CLUSTER_1_HOSTS value | DRAGONFLY_HOSTS ;
-            secret/data/DRAGONFLY_CLUSTER_1__CA_CERT value | DRAGONFLY_CA_CERT ;
+            secret/data/DRAGONFLY_CLUSTER_1_CA_CERT value | DRAGONFLY_CA_CERT ;
             secret/data/DRAGONFLY_CLUSTER_1_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
             secret/data/DRAGONFLY_CLUSTER_1_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
             secret/data/DRAGONFLY_CLUSTER_2_PASSWORD value | DRAGONFLY_2_PASSWORD ;
             secret/data/DRAGONFLY_CLUSTER_2_HOSTS value | DRAGONFLY_2_HOSTS ;
-            secret/data/DRAGONFLY_CLUSTER_2__CA_CERT value | DRAGONFLY_2_CA_CERT ;
+            secret/data/DRAGONFLY_CLUSTER_2_CA_CERT value | DRAGONFLY_2_CA_CERT ;
             secret/data/DRAGONFLY_CLUSTER_2_CLIENT_CERT value | DRAGONFLY_2_CLIENT_CERT ;
             secret/data/DRAGONFLY_CLUSTER_2_CLIENT_KEY value | DRAGONFLY_2_CLIENT_KEY ;
             secret/data/off-chain-agent/YRAL_MOBILE_SERVICE_ACCOUNT_KEY value | YRAL_MOBILE_SERVICE_ACCOUNT_KEY ;
