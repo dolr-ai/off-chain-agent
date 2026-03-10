@@ -70,7 +70,7 @@ pub struct AppState {
     pub qstash: QStashState,
     #[cfg(not(feature = "local-bin"))]
     pub bigquery_client: Client,
-    pub nsfw_detect_channel: Channel,
+    pub nsfw_detect_channel: Option<Channel>,
     pub qstash_client: QStashClient,
     #[cfg(not(feature = "local-bin"))]
     pub gcs_client: Arc<cloud_storage::Client>,
@@ -151,7 +151,7 @@ impl AppState {
             qstash: init_qstash(),
             #[cfg(not(feature = "local-bin"))]
             bigquery_client: init_bigquery_client().await,
-            nsfw_detect_channel: init_nsfw_detect_channel().await,
+            nsfw_detect_channel: init_nsfw_detect_channel().await.ok(),
             qstash_client: init_qstash_client().await,
             #[cfg(not(feature = "local-bin"))]
             gcs_client: Arc::new(cloud_storage::Client::default()),
@@ -382,14 +382,21 @@ pub async fn init_bigquery_client() -> Client {
     Client::new(config).await.unwrap()
 }
 
-pub async fn init_nsfw_detect_channel() -> Channel {
+pub async fn init_nsfw_detect_channel() -> Result<Channel, tonic::transport::Error> {
     let tls_config = ClientTlsConfig::new().with_webpki_roots();
-    Channel::from_static(NSFW_SERVER_URL)
+    let channel = Channel::from_static(NSFW_SERVER_URL)
         .tls_config(tls_config)
-        .expect("Couldn't update TLS config for nsfw agent")
+        .map_err(|e| {
+            log::warn!("Failed to configure TLS for nsfw agent: {e}");
+            e
+        })?
         .connect()
         .await
-        .expect("Couldn't connect to nsfw agent")
+        .map_err(|e| {
+            log::warn!("Failed to connect to nsfw agent: {e}, NSFW detection will be disabled");
+            e
+        })?;
+    Ok(channel)
 }
 
 pub async fn init_qstash_client() -> QStashClient {
