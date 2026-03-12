@@ -1,7 +1,6 @@
 use std::{env, error::Error};
 
 use candid::Principal;
-use http::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -18,7 +17,6 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     user_id: Principal,
 ) -> Result<(), Box<dyn Error>> {
     let video_fetch_response = reqwest::get(ai_video_url).await?;
-    let yral_cloudflare_worker_token = env::var("YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN")?;
 
     if !video_fetch_response.status().is_success() {
         let status = video_fetch_response.status();
@@ -39,10 +37,6 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     let client = reqwest::Client::new();
     let get_video_upload_res = client
         .post(get_video_upload_url)
-        .header(
-            AUTHORIZATION,
-            format!("Bearer {}", yral_cloudflare_worker_token),
-        )
         .json(&json!({
             "publisher_user_id": user_id.to_string(),
         }))
