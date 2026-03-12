@@ -74,6 +74,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
 
     #[derive(Deserialize)]
     pub struct UploadUrlData {
+        #[allow(dead_code)]
         pub video_id: Option<String>,
         pub upload_url: Option<String>,
     }
