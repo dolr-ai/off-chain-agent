@@ -16,7 +16,7 @@ pub static BIGQUERY_INGESTION_URL: Lazy<Url> = Lazy::new(|| {
 });
 
 pub static YRAL_UPLOAD_VIDEO_WORKER_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://yral-upload-video.go-bazzinga.workers.dev").unwrap());
+    Lazy::new(|| Url::parse("https://upload.yral.com").unwrap());
 
 #[allow(dead_code)]
 pub const PLATFORM_ORCHESTRATOR_ID: &str = "74zq4-iqaaa-aaaam-ab53a-cai";

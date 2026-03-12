@@ -36,7 +36,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     let video_bytes = video_fetch_response.bytes().await?;
 
     let get_video_upload_url =
-        YRAL_UPLOAD_VIDEO_WORKER_URL.join("/create_video_url_for_ai_draft")?;
+        YRAL_UPLOAD_VIDEO_WORKER_URL.join("/get-upload-url")?;
     let client = reqwest::Client::new();
     let get_video_upload_res = client
         .post(get_video_upload_url)
@@ -45,7 +45,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
             format!("Bearer {}", yral_cloudflare_worker_token),
         )
         .json(&json!({
-            "user_id": user_id.to_string(),
+            "publisher_user_id": user_id.to_string(),
         }))
         .send()
         .await?;
@@ -69,14 +69,12 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     pub struct UploadUrlResponse {
         pub data: Option<UploadUrlData>,
         pub success: bool,
-        pub message: Option<String>,
+        pub error_message: Option<String>,
     }
 
     #[derive(Deserialize)]
     pub struct UploadUrlData {
-        #[allow(dead_code)]
-        pub uid: Option<String>,
-        #[serde(rename = "uploadURL")]
+        pub video_id: Option<String>,
         pub upload_url: Option<String>,
     }
 
@@ -85,7 +83,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     if !yral_upload_video_get_url_result.success {
         return Err(format!(
             "Yral upload worker get url request failed: {}",
-            yral_upload_video_get_url_result.message.unwrap_or_default()
+            yral_upload_video_get_url_result.error_message.unwrap_or_default()
         )
         .into());
     }
