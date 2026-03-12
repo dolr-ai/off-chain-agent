@@ -163,6 +163,7 @@ pub struct NSFWInfo {
     pub csam_detected: bool,
 }
 
+#[allow(clippy::result_large_err)]
 #[instrument]
 pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
@@ -391,6 +392,7 @@ pub async fn nsfw_job_v2(
     ))
 }
 
+#[allow(clippy::result_large_err)]
 #[instrument]
 pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
