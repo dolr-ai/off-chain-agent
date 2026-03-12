@@ -223,9 +223,9 @@ jobs:
             secret/data/off-chain-agent/YRAL_HON_WORKER_JWT value | YRAL_HON_WORKER_JWT ;
             secret/data/off-chain-agent/LEADERBOARD_REDIS_URL value | LEADERBOARD_REDIS_URL ;
             secret/data/off-chain-agent/SERVICE_CANISTER_MIGRATION_REDIS_URL value | SERVICE_CANISTER_MIGRATION_REDIS_URL ;
-            secret/data/off-chain-agent/TEST_REDIS_URL value | TEST_REDIS_URL ;
             secret/data/off-chain-agent/HETZNER_S3_ACCESS_KEY value | HETZNER_S3_ACCESS_KEY ;
             secret/data/off-chain-agent/HETZNER_S3_SECRET_KEY value | HETZNER_S3_SECRET_KEY ;
+            secret/data/off-chain-agent/AI_VIDEO_DETECTOR_API_KEY value | AI_VIDEO_DETECTOR_API_KEY ;
             secret/data/off-chain-agent/REPLICATE_API_TOKEN value | REPLICATE_API_TOKEN ;
             secret/data/off-chain-agent/COMFYUI_API_URL value | COMFYUI_API_URL ;
             secret/data/off-chain-agent/COMFYUI_VIEW_URL value | COMFYUI_VIEW_URL ;
@@ -307,6 +307,7 @@ jobs:
           SERVICE_CANISTER_MIGRATION_REDIS_URL: ${{ env.SERVICE_CANISTER_MIGRATION_REDIS_URL }}
           HETZNER_S3_ACCESS_KEY: ${{ env.HETZNER_S3_ACCESS_KEY }}
           HETZNER_S3_SECRET_KEY: ${{ env.HETZNER_S3_SECRET_KEY }}
+          AI_VIDEO_DETECTOR_API_KEY: ${{ env.AI_VIDEO_DETECTOR_API_KEY }}
           REPLICATE_API_TOKEN: ${{ env.REPLICATE_API_TOKEN }}
           COMFYUI_API_URL: ${{ env.COMFYUI_API_URL }}
           COMFYUI_VIEW_URL: ${{ env.COMFYUI_VIEW_URL }}
@@ -376,6 +377,7 @@ jobs:
             CF_IMAGES_API_TOKEN='${CF_IMAGES_API_TOKEN} \
             NSFW_GRPC_TOKEN='${NSFW_GRPC_TOKEN}' \
             QSTASH_AUTH_TOKEN='${QSTASH_AUTH_TOKEN}' \
+            ML_FEED_CACHE_REDIS_URL='${ML_FEED_CACHE_REDIS_URL}' \
             STORJ_INTERFACE_TOKEN='${STORJ_INTERFACE_TOKEN}' \
             VIDEOHASH_BACKFILL_TOKEN='${VIDEOHASH_BACKFILL_TOKEN}' \
             STORJ_BACKUP_CANISTER_ACCESS_GRANT='${STORJ_BACKUP_CANISTER_ACCESS_GRANT} \
