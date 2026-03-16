@@ -6,6 +6,11 @@ on:
     branches:
       - main
 
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
 concurrency:
   group: deploy-baremetal-${{ github.ref }}
   cancel-in-progress: false
