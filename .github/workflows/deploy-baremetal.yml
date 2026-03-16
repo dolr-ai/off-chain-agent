@@ -197,6 +197,7 @@ jobs:
       - name: Sync deployment files to server
         run: |
           rsync -avz --delete \
+            --exclude='.ssh/' \
             ./deploy-baremetal/ \
             off-chain-agent@${{ matrix.server }}:/home/off-chain-agent/
 
