@@ -2,73 +2,41 @@ name: Setup off-chain-agent Deploy User
 
 on:
   workflow_dispatch:
-    inputs:
-      server_ip:
-        description: "Server IP to setup user on"
-        required: true
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  setup-user:
-    name: Setup off-chain-agent User
+  prepare-servers:
+    name: Prepare Server List
+    runs-on: ubuntu-latest
+    outputs:
+      servers: ${{ steps.parse.outputs.servers }}
+    steps:
+      - name: Parse server IPs
+        id: parse
+        run: |
+          IPS="${{ vars.BAREMETAL_SERVER_IPS }}"
+          JSON=$(echo "$IPS" | tr ',' '\n' | jq -R . | jq -s -c .)
+          echo "servers=$JSON" >> $GITHUB_OUTPUT
+
+  generate-and-store-key:
+    name: Generate SSH Key and Store in Vault
     runs-on: ubuntu-latest
 
+    outputs:
+      public_key: ${{ steps.keygen.outputs.public_key }}
+
     steps:
-      - name: Setup root SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
-
-      - name: Add server to known hosts
-        run: |
-          ssh-keyscan -H ${{ github.event.inputs.server_ip }} >> ~/.ssh/known_hosts
-
-      - name: Verify root connectivity
-        run: |
-          ssh -o ConnectTimeout=10 root@${{ github.event.inputs.server_ip }} \
-            "echo 'Root connection successful'"
-
       - name: Generate SSH key pair
+        id: keygen
         run: |
           ssh-keygen -t ed25519 \
             -C "off-chain-agent-deploy-$(date +%Y%m%d)" \
             -f /tmp/new_deploy_key \
             -N ""
-          echo "NEW_PUBLIC_KEY=$(cat /tmp/new_deploy_key.pub)" >> $GITHUB_ENV
-
-      - name: Create user and setup SSH on server
-        run: |
-          NEW_PUB_KEY="${{ env.NEW_PUBLIC_KEY }}"
-
-          ssh root@${{ github.event.inputs.server_ip }} "
-            set -e
-
-            # Create user if not exists
-            if id 'off-chain-agent' &>/dev/null; then
-              echo 'User off-chain-agent already exists, skipping creation'
-            else
-              useradd -m -s /bin/bash 'off-chain-agent'
-              echo 'User off-chain-agent created'
-            fi
-
-            # Setup .ssh directory
-            mkdir -p /home/off-chain-agent/.ssh
-            chmod 700 /home/off-chain-agent/.ssh
-
-            # Add public key
-            echo '$NEW_PUB_KEY' > /home/off-chain-agent/.ssh/authorized_keys
-            chmod 600 /home/off-chain-agent/.ssh/authorized_keys
-            chown -R off-chain-agent:off-chain-agent /home/off-chain-agent/.ssh
-
-            # Add to docker group
-            usermod -aG docker off-chain-agent
-            echo 'User off-chain-agent added to docker group'
-
-            echo 'Setup complete'
-          "
+          echo "public_key=$(cat /tmp/new_deploy_key.pub)" >> $GITHUB_OUTPUT
 
       - name: Install Vault CLI
         run: |
@@ -97,22 +65,83 @@ jobs:
         env:
           VAULT_ADDR: https://vault.yral.com
 
-      - name: Verify SSH access
-        run: |
-          ssh-add -D
-          ssh-add /tmp/new_deploy_key
-
-          ssh -o PasswordAuthentication=no \
-              off-chain-agent@${{ github.event.inputs.server_ip }} \
-              "echo 'SSH access verified'"
-
-      - name: Verify docker group membership
-        run: |
-          ssh off-chain-agent@${{ github.event.inputs.server_ip }} \
-            "groups | grep docker && echo 'Docker group verified' || echo 'WARNING: docker group not active yet, re-login required'"
-
       - name: Cleanup
         if: always()
         run: |
           rm -f /tmp/new_deploy_key /tmp/new_deploy_key.pub
-          ssh-add -D || true
+
+  setup-user:
+    name: Setup off-chain-agent on ${{ matrix.server }}
+    needs: [prepare-servers, generate-and-store-key]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        server: ${{ fromJson(needs.prepare-servers.outputs.servers) }}
+
+    steps:
+      - name: Setup root SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ matrix.server }} >> ~/.ssh/known_hosts
+
+      - name: Verify root connectivity
+        run: |
+          ssh -o ConnectTimeout=10 root@${{ matrix.server }} \
+            "echo 'Root connection successful on ${{ matrix.server }}'"
+
+      - name: Create user and setup SSH on server
+        run: |
+          PUB_KEY="${{ needs.generate-and-store-key.outputs.public_key }}"
+
+          ssh root@${{ matrix.server }} "
+            set -e
+
+            # Create user if not exists
+            if id 'off-chain-agent' &>/dev/null; then
+              echo 'User off-chain-agent already exists, skipping creation'
+            else
+              useradd -m -s /bin/bash 'off-chain-agent'
+              echo 'User off-chain-agent created'
+            fi
+
+            # Setup .ssh directory
+            mkdir -p /home/off-chain-agent/.ssh
+            chmod 700 /home/off-chain-agent/.ssh
+
+            # Add public key
+            echo '$PUB_KEY' > /home/off-chain-agent/.ssh/authorized_keys
+            chmod 600 /home/off-chain-agent/.ssh/authorized_keys
+            chown -R off-chain-agent:off-chain-agent /home/off-chain-agent/.ssh
+
+            # Add to docker group
+            usermod -aG docker off-chain-agent
+            echo 'User off-chain-agent added to docker group'
+
+            echo 'Setup complete on ${{ matrix.server }}'
+          "
+
+      - name: Import SSH key from Vault to verify
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: off-chain-agent-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/off-chain-agent/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
+
+      - name: Verify SSH access with new key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+
+      - name: Test SSH and docker group
+        run: |
+          ssh -o PasswordAuthentication=no \
+              off-chain-agent@${{ matrix.server }} \
+              "echo 'SSH verified on ${{ matrix.server }}' && groups | grep docker && echo 'Docker group verified' || echo 'WARNING: docker group not active yet'"
