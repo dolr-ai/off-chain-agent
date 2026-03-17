@@ -154,6 +154,7 @@ jobs:
       - name: Parse server IPs
         id: parse
         run: |
+          # Convert comma-separated IPs to JSON array
           IPS="${{ vars.BAREMETAL_SERVER_IPS }}"
           JSON=$(echo "$IPS" | tr ',' '\n' | jq -R . | jq -s -c .)
           echo "servers=$JSON" >> $GITHUB_OUTPUT
@@ -213,6 +214,7 @@ jobs:
           ALLOYDB_SERVICE_ACCOUNT_JSON: ${{ secrets.ALLOYDB_SERVICE_ACCOUNT_JSON_PROD }}
           YRAL_MOBILE_SERVICE_ACCOUNT_KEY: ${{ secrets.YRAL_MOBILE_SERVICE_ACCOUNT_KEY }}
         run: |
+          # Shell-escape JSON secrets
           GOOGLE_SA_KEY_ESCAPED=$(printf '%q' "$GOOGLE_SA_KEY")
           ALLOYDB_SA_JSON_ESCAPED=$(printf '%q' "$ALLOYDB_SERVICE_ACCOUNT_JSON")
           YRAL_MOBILE_SA_KEY_ESCAPED=$(printf '%q' "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY")
@@ -319,7 +321,6 @@ jobs:
             echo '=== Container Logs (last 20 lines) ==='
             docker compose logs --tail=20 offchain-agent 2>/dev/null || echo 'Logs not yet available'
           "
-
 
   deployment-summary:
     name: Deployment Summary
