@@ -105,10 +105,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         .map_err(|e| Box::<dyn Error>::from(format!("Failed to upload video: {e}")))?;
 
     if !stream_upload_result.status().is_success() {
-        let error_text = stream_upload_result
-            .text()
-            .await
-            .unwrap_or_default();
+        let error_text = stream_upload_result.text().await.unwrap_or_default();
         return Err(format!("Video upload failed with error: {}", error_text).into());
     }
 
