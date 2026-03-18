@@ -76,7 +76,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
 
     if !yral_upload_video_get_url_result.success {
         return Err(format!(
-            "Yral upload worker get url request failed: {}",
+            "Yral upload service get url request failed: {}",
             yral_upload_video_get_url_result
                 .error_message
                 .unwrap_or_default()
