@@ -4,7 +4,7 @@ use candid::Principal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::consts::YRAL_UPLOAD_VIDEO_WORKER_URL;
+use crate::consts::YRAL_UPLOAD_SERVICE;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UploadAiVideoToCanisterRequest {
@@ -33,7 +33,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
 
     let video_bytes = video_fetch_response.bytes().await?;
 
-    let get_video_upload_url = YRAL_UPLOAD_VIDEO_WORKER_URL.join("/get-upload-url")?;
+    let get_video_upload_url = YRAL_UPLOAD_SERVICE.join("/get-upload-url")?;
     let client = reqwest::Client::new();
     let get_video_upload_res = client
         .post(get_video_upload_url)
@@ -84,12 +84,12 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         .into());
     }
 
-    let cloudflare_video_upload_url = yral_upload_video_get_url_result
+    let video_upload_url = yral_upload_video_get_url_result
         .data
         .and_then(|data| data.upload_url)
         .ok_or_else(|| "Upload URL not found in response".to_string())?;
 
-    let cloudflare_stream_upload_form = reqwest::multipart::Form::new().part(
+    let stream_upload_form = reqwest::multipart::Form::new().part(
         "file",
         reqwest::multipart::Part::bytes(video_bytes.to_vec())
             .file_name("ai_generated_video.mp4")
@@ -97,19 +97,19 @@ pub async fn upload_ai_generated_video_to_canister_impl(
             .map_err(|e| Box::<dyn Error>::from(format!("Failed to set MIME type: {e}")))?,
     );
 
-    let cloudflare_stream_upload_result = client
-        .post(&cloudflare_video_upload_url)
-        .multipart(cloudflare_stream_upload_form)
+    let stream_upload_result = client
+        .post(&video_upload_url)
+        .multipart(stream_upload_form)
         .send()
         .await
-        .map_err(|e| Box::<dyn Error>::from(format!("Failed to upload to Cloudflare: {e}")))?;
+        .map_err(|e| Box::<dyn Error>::from(format!("Failed to upload video: {e}")))?;
 
-    if !cloudflare_stream_upload_result.status().is_success() {
-        let error_text = cloudflare_stream_upload_result
+    if !stream_upload_result.status().is_success() {
+        let error_text = stream_upload_result
             .text()
             .await
             .unwrap_or_default();
-        return Err(format!("Cloudflare upload failed with error: {}", error_text).into());
+        return Err(format!("Video upload failed with error: {}", error_text).into());
     }
 
     Ok(())
