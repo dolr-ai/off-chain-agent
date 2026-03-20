@@ -1,11 +1,10 @@
-use std::{env, error::Error};
+use std::error::Error;
 
 use candid::Principal;
-use http::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::consts::YRAL_UPLOAD_VIDEO_WORKER_URL;
+use crate::consts::YRAL_UPLOAD_SERVICE;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UploadAiVideoToCanisterRequest {
@@ -18,7 +17,6 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     user_id: Principal,
 ) -> Result<(), Box<dyn Error>> {
     let video_fetch_response = reqwest::get(ai_video_url).await?;
-    let yral_cloudflare_worker_token = env::var("YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN")?;
 
     if !video_fetch_response.status().is_success() {
         let status = video_fetch_response.status();
@@ -35,17 +33,12 @@ pub async fn upload_ai_generated_video_to_canister_impl(
 
     let video_bytes = video_fetch_response.bytes().await?;
 
-    let get_video_upload_url =
-        YRAL_UPLOAD_VIDEO_WORKER_URL.join("/create_video_url_for_ai_draft")?;
+    let get_video_upload_url = YRAL_UPLOAD_SERVICE.join("/get-upload-url")?;
     let client = reqwest::Client::new();
     let get_video_upload_res = client
         .post(get_video_upload_url)
-        .header(
-            AUTHORIZATION,
-            format!("Bearer {}", yral_cloudflare_worker_token),
-        )
         .json(&json!({
-            "user_id": user_id.to_string(),
+            "publisher_user_id": user_id.to_string(),
         }))
         .send()
         .await?;
@@ -69,14 +62,13 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     pub struct UploadUrlResponse {
         pub data: Option<UploadUrlData>,
         pub success: bool,
-        pub message: Option<String>,
+        pub error_message: Option<String>,
     }
 
     #[derive(Deserialize)]
     pub struct UploadUrlData {
         #[allow(dead_code)]
-        pub uid: Option<String>,
-        #[serde(rename = "uploadURL")]
+        pub video_id: Option<String>,
         pub upload_url: Option<String>,
     }
 
@@ -84,18 +76,20 @@ pub async fn upload_ai_generated_video_to_canister_impl(
 
     if !yral_upload_video_get_url_result.success {
         return Err(format!(
-            "Yral upload worker get url request failed: {}",
-            yral_upload_video_get_url_result.message.unwrap_or_default()
+            "Yral upload service get url request failed: {}",
+            yral_upload_video_get_url_result
+                .error_message
+                .unwrap_or_default()
         )
         .into());
     }
 
-    let cloudflare_video_upload_url = yral_upload_video_get_url_result
+    let video_upload_url = yral_upload_video_get_url_result
         .data
         .and_then(|data| data.upload_url)
         .ok_or_else(|| "Upload URL not found in response".to_string())?;
 
-    let cloudflare_stream_upload_form = reqwest::multipart::Form::new().part(
+    let stream_upload_form = reqwest::multipart::Form::new().part(
         "file",
         reqwest::multipart::Part::bytes(video_bytes.to_vec())
             .file_name("ai_generated_video.mp4")
@@ -103,19 +97,16 @@ pub async fn upload_ai_generated_video_to_canister_impl(
             .map_err(|e| Box::<dyn Error>::from(format!("Failed to set MIME type: {e}")))?,
     );
 
-    let cloudflare_stream_upload_result = client
-        .post(&cloudflare_video_upload_url)
-        .multipart(cloudflare_stream_upload_form)
+    let stream_upload_result = client
+        .post(&video_upload_url)
+        .multipart(stream_upload_form)
         .send()
         .await
-        .map_err(|e| Box::<dyn Error>::from(format!("Failed to upload to Cloudflare: {e}")))?;
+        .map_err(|e| Box::<dyn Error>::from(format!("Failed to upload video: {e}")))?;
 
-    if !cloudflare_stream_upload_result.status().is_success() {
-        let error_text = cloudflare_stream_upload_result
-            .text()
-            .await
-            .unwrap_or_default();
-        return Err(format!("Cloudflare upload failed with error: {}", error_text).into());
+    if !stream_upload_result.status().is_success() {
+        let error_text = stream_upload_result.text().await.unwrap_or_default();
+        return Err(format!("Video upload failed with error: {}", error_text).into());
     }
 
     Ok(())
