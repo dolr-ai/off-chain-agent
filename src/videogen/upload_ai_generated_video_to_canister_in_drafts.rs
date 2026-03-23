@@ -3,6 +3,7 @@ use std::error::Error;
 use candid::Principal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+#[allow(unused_imports)]
 use yral_canisters_client::user_post_service::UserPostService;
 
 use crate::{
