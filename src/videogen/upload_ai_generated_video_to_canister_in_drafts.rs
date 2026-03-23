@@ -16,6 +16,7 @@ pub struct UploadAiVideoToCanisterRequest {
     pub user_id: Principal,
 }
 
+#[allow(unused_variables)]
 pub async fn upload_ai_generated_video_to_canister_impl(
     ai_video_url: &str,
     user_id: Principal,
