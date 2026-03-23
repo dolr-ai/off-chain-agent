@@ -215,6 +215,7 @@ pub async fn handle_video_gen_callback_internal(
                         UploadAiVideoToCanisterRequest {
                             ai_video_url: ai_video_url.clone(),
                             user_id: callback.request_key.principal,
+                            delegated_identity: callback.delegated_identity,
                         },
                     )
                     .await

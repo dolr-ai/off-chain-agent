@@ -88,6 +88,7 @@ pub async fn generate_with_context(
         "model": "ltx2",
         "principal": context.request_key.principal.to_string(),
         "counter": context.request_key.counter,
+        "delegated_identity": context.delegated_identity,
     });
 
     let response = comfyui_client

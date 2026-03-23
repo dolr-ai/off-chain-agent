@@ -15,13 +15,14 @@ use yral_canisters_client::user_post_service::UserPostService;
 pub struct UploadAiVideoToCanisterRequest {
     pub ai_video_url: String,
     pub user_id: Principal,
+    pub delegated_identity: Option<yral_types::delegated_identity::DelegatedIdentityWire>,
 }
 
-#[allow(unused_variables)]
 pub async fn upload_ai_generated_video_to_canister_impl(
     ai_video_url: &str,
     user_id: Principal,
     app_state: &AppState,
+    delegated_identity: Option<yral_types::delegated_identity::DelegatedIdentityWire>,
 ) -> Result<(), Box<dyn Error>> {
     let video_fetch_response = reqwest::get(ai_video_url).await?;
 
@@ -122,40 +123,42 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         return Err(format!("Video upload failed with error: {}", error_text).into());
     }
 
-    // // Call user post service to add the post
-    // let user_post_service =
-    //     UserPostService(*USER_POST_SERVICE_CANISTER_ID, &app_state.agent);
+    // Call upload service to update metadata and register post
+    let update_metadata_url = YRAL_UPLOAD_SERVICE.join("/update-video-metadata")?;
 
-    // log::info!(
-    //     "Calling add_post_v1 for video_id: {} and user_id: {}",
-    //     video_id,
-    //     user_id
-    // );
+    if let Some(identity) = delegated_identity {
+        log::info!(
+            "Calling /update-video-metadata for video_id: {} and user_id: {}",
+            video_id,
+            user_id
+        );
 
-    // use yral_canisters_client::user_post_service::{
-    //     PostDetailsFromFrontendV1, PostStatusFromFrontend, Result_ as CanisterResult,
-    // };
+        let post_details = json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "video_uid": video_id,
+            "creator_principal": user_id.to_string(),
+            "status": "Draft",
+            "hashtags": Vec::<String>::new(),
+            "description": ""
+        });
 
-    // let post_details = PostDetailsFromFrontendV1 {
-    //     id: uuid::Uuid::new_v4().to_string(),
-    //     status: PostStatusFromFrontend::Draft,
-    //     hashtags: vec![],
-    //     description: "".to_string(),
-    //     video_uid: video_id,
-    //     creator_principal: user_id,
-    // };
+        let update_req = json!({
+            "delegated_identity_wire": identity,
+            "meta": {},
+            "post_details": post_details
+        });
 
-    // match user_post_service.add_post_v1(post_details).await {
-    //     Ok(CanisterResult::Ok) => {
-    //         log::info!("Successfully registered video in canister");
-    //         Ok(())
-    //     }
-    //     Ok(CanisterResult::Err(e)) => Err(Box::<dyn Error>::from(format!(
-    //         "Failed to register video in canister: {e}"
-    //     ))),
-    //     Err(e) => Err(Box::<dyn Error>::from(format!(
-    //         "Failed to call canister: {e}"
-    //     ))),
-    // }
+        let update_res = client.post(update_metadata_url).json(&update_req).send().await?;
+
+        if !update_res.status().is_success() {
+            let error_text = update_res.text().await.unwrap_or_default();
+            return Err(format!("Failed to update video metadata: {}", error_text).into());
+        }
+
+        log::info!("Successfully updated video metadata and registered in canister via upload service");
+    } else {
+        log::warn!("No delegated identity found, skipping canister registration via upload service");
+    }
+
     Ok(())
 }

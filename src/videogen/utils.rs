@@ -310,6 +310,7 @@ pub async fn process_video_generation(
         deducted_amount,
         token_type,
         handle_video_upload,
+        delegated_identity: Some(delegated_identity_wire),
     };
 
     // Queue to Qstash with automatic rollback on failure
