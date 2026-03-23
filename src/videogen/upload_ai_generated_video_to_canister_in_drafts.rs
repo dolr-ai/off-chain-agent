@@ -3,8 +3,12 @@ use std::error::Error;
 use candid::Principal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use yral_canisters_client::user_post_service::UserPostService;
 
-use crate::consts::YRAL_UPLOAD_SERVICE;
+use crate::{
+    app_state::AppState,
+    consts::{USER_POST_SERVICE_CANISTER_ID, YRAL_UPLOAD_SERVICE},
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UploadAiVideoToCanisterRequest {
@@ -15,6 +19,7 @@ pub struct UploadAiVideoToCanisterRequest {
 pub async fn upload_ai_generated_video_to_canister_impl(
     ai_video_url: &str,
     user_id: Principal,
+    app_state: &AppState,
 ) -> Result<(), Box<dyn Error>> {
     let video_fetch_response = reqwest::get(ai_video_url).await?;
 
@@ -67,7 +72,6 @@ pub async fn upload_ai_generated_video_to_canister_impl(
 
     #[derive(Deserialize)]
     pub struct UploadUrlData {
-        #[allow(dead_code)]
         pub video_id: Option<String>,
         pub upload_url: Option<String>,
     }
@@ -84,10 +88,17 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         .into());
     }
 
-    let video_upload_url = yral_upload_video_get_url_result
+    let video_upload_data = yral_upload_video_get_url_result
         .data
-        .and_then(|data| data.upload_url)
+        .ok_or_else(|| "Upload data not found in response".to_string())?;
+
+    let video_upload_url = video_upload_data
+        .upload_url
         .ok_or_else(|| "Upload URL not found in response".to_string())?;
+    log::info!("Video upload url is {}",video_upload_url);
+    let video_id = video_upload_data
+        .video_id
+        .ok_or_else(|| "Video ID not found in response".to_string())?;
 
     let stream_upload_form = reqwest::multipart::Form::new().part(
         "file",
@@ -109,5 +120,40 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         return Err(format!("Video upload failed with error: {}", error_text).into());
     }
 
+    // // Call user post service to add the post
+    // let user_post_service =
+    //     UserPostService(*USER_POST_SERVICE_CANISTER_ID, &app_state.agent);
+
+    // log::info!(
+    //     "Calling add_post_v1 for video_id: {} and user_id: {}",
+    //     video_id,
+    //     user_id
+    // );
+
+    // use yral_canisters_client::user_post_service::{
+    //     PostDetailsFromFrontendV1, PostStatusFromFrontend, Result_ as CanisterResult,
+    // };
+
+    // let post_details = PostDetailsFromFrontendV1 {
+    //     id: uuid::Uuid::new_v4().to_string(),
+    //     status: PostStatusFromFrontend::Draft,
+    //     hashtags: vec![],
+    //     description: "".to_string(),
+    //     video_uid: video_id,
+    //     creator_principal: user_id,
+    // };
+
+    // match user_post_service.add_post_v1(post_details).await {
+    //     Ok(CanisterResult::Ok) => {
+    //         log::info!("Successfully registered video in canister");
+    //         Ok(())
+    //     }
+    //     Ok(CanisterResult::Err(e)) => Err(Box::<dyn Error>::from(format!(
+    //         "Failed to register video in canister: {e}"
+    //     ))),
+    //     Err(e) => Err(Box::<dyn Error>::from(format!(
+    //         "Failed to call canister: {e}"
+    //     ))),
+    // }
     Ok(())
 }
