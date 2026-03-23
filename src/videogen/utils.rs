@@ -276,6 +276,7 @@ pub async fn process_video_generation(
     // Create delegated identity for agent creation
     let identity: DelegatedIdentity =
         delegated_identity_wire
+            .clone()
             .try_into()
             .map_err(|e: k256::elliptic_curve::Error| {
                 log::error!("Failed to create delegated identity: {e}");

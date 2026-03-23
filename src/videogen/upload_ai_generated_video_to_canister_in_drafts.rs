@@ -21,7 +21,7 @@ pub struct UploadAiVideoToCanisterRequest {
 pub async fn upload_ai_generated_video_to_canister_impl(
     ai_video_url: &str,
     user_id: Principal,
-    app_state: &AppState,
+    _app_state: &AppState,
     delegated_identity: Option<yral_types::delegated_identity::DelegatedIdentityWire>,
 ) -> Result<(), Box<dyn Error>> {
     let video_fetch_response = reqwest::get(ai_video_url).await?;
