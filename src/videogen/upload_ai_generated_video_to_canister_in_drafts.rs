@@ -148,16 +148,24 @@ pub async fn upload_ai_generated_video_to_canister_impl(
             "post_details": post_details
         });
 
-        let update_res = client.post(update_metadata_url).json(&update_req).send().await?;
+        let update_res = client
+            .post(update_metadata_url)
+            .json(&update_req)
+            .send()
+            .await?;
 
         if !update_res.status().is_success() {
             let error_text = update_res.text().await.unwrap_or_default();
             return Err(format!("Failed to update video metadata: {}", error_text).into());
         }
 
-        log::info!("Successfully updated video metadata and registered in canister via upload service");
+        log::info!(
+            "Successfully updated video metadata and registered in canister via upload service"
+        );
     } else {
-        log::warn!("No delegated identity found, skipping canister registration via upload service");
+        log::warn!(
+            "No delegated identity found, skipping canister registration via upload service"
+        );
     }
 
     Ok(())
