@@ -1,15 +1,15 @@
 use std::error::Error;
 
-use candid::Principal;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-#[allow(unused_imports)]
-use yral_canisters_client::user_post_service::UserPostService;
 #[allow(unused_imports)]
 use crate::{
     app_state::AppState,
     consts::{USER_POST_SERVICE_CANISTER_ID, YRAL_UPLOAD_SERVICE},
 };
+use candid::Principal;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+#[allow(unused_imports)]
+use yral_canisters_client::user_post_service::UserPostService;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UploadAiVideoToCanisterRequest {
@@ -97,7 +97,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     let video_upload_url = video_upload_data
         .upload_url
         .ok_or_else(|| "Upload URL not found in response".to_string())?;
-    log::info!("Video upload url is {}",video_upload_url);
+    log::info!("Video upload url is {}", video_upload_url);
     let video_id = video_upload_data
         .video_id
         .ok_or_else(|| "Video ID not found in response".to_string())?;
