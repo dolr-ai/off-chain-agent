@@ -301,12 +301,17 @@ pub async fn process_video_generation(
         user_agent.as_ref(),
     )
     .await?;
-    
+
     // Encrypt identity for stateless preservation across asynchronous flows
-    let encrypted_identity = super::crypto::encrypt_identity(&delegated_identity_wire)
-        .map_err(|e| {
+    let encrypted_identity =
+        super::crypto::encrypt_identity(&delegated_identity_wire).map_err(|e| {
             log::error!("Failed to encrypt identity: {e}");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(VideoGenError::ProviderError("Failed to secure identity".to_string())))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(VideoGenError::ProviderError(
+                    "Failed to secure identity".to_string(),
+                )),
+            )
         })?;
 
     // Prepare Qstash request
