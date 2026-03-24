@@ -301,6 +301,13 @@ pub async fn process_video_generation(
         user_agent.as_ref(),
     )
     .await?;
+    
+    // Encrypt identity for stateless preservation across asynchronous flows
+    let encrypted_identity = super::crypto::encrypt_identity(&delegated_identity_wire)
+        .map_err(|e| {
+            log::error!("Failed to encrypt identity: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(VideoGenError::ProviderError("Failed to secure identity".to_string())))
+        })?;
 
     // Prepare Qstash request
     let qstash_request = super::qstash_types::QstashVideoGenRequest {
@@ -311,7 +318,7 @@ pub async fn process_video_generation(
         deducted_amount,
         token_type,
         handle_video_upload,
-        delegated_identity: Some(delegated_identity_wire),
+        encrypted_identity: Some(encrypted_identity),
     };
 
     // Queue to Qstash with automatic rollback on failure

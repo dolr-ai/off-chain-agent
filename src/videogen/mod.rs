@@ -1,5 +1,6 @@
 pub mod comfyui_client;
 pub mod comfyui_webhook;
+pub mod crypto;
 pub mod handlers;
 pub mod handlers_v2;
 pub mod models;

@@ -190,11 +190,11 @@ pub async fn handle_replicate_webhook(
                     .and_then(|a| a.parse::<u64>().ok()),
                 token_type,
                 handle_video_upload: params.handle_video_upload,
-                delegated_identity: payload
+                encrypted_identity: payload
                     .metadata
                     .as_ref()
-                    .and_then(|m| m.get("delegated_identity"))
-                    .and_then(|v| serde_json::from_value(v.clone()).ok()),
+                    .and_then(|m| m.get("encrypted_identity"))
+                    .and_then(|v| v.as_str().map(|s| s.to_string())),
             };
 
             // Use existing callback handler logic

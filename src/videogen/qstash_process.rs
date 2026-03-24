@@ -91,7 +91,7 @@ pub async fn process_video_generation(
         deducted_amount: request.deducted_amount,
         token_type: request.token_type,
         handle_video_upload: request.handle_video_upload,
-        delegated_identity: request.delegated_identity,
+        encrypted_identity: request.encrypted_identity,
     };
 
     // For webhook-based models, only handle failures here

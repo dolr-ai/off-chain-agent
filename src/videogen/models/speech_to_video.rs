@@ -140,7 +140,7 @@ pub async fn generate_with_context(
         },
         webhook: Some(webhook_url),
         metadata: Some(serde_json::json!({
-            "delegated_identity": context.delegated_identity
+            "encrypted_identity": context.encrypted_identity
         })),
     };
 

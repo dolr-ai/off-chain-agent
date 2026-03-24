@@ -130,14 +130,10 @@ pub async fn handle_comfyui_webhook(
             .and_then(|a| a.parse::<u64>().ok()),
         token_type,
         handle_video_upload: params.handle_video_upload,
-        delegated_identity: serde_json::from_value(
-            payload
-                .extra
-                .get("delegated_identity")
-                .cloned()
-                .unwrap_or_default(),
-        )
-        .ok(),
+        encrypted_identity: payload
+            .extra
+            .get("encrypted_identity")
+            .and_then(|v| v.as_str().map(|s| s.to_string())),
     };
 
     // Use existing callback handler logic

@@ -64,6 +64,8 @@ utoipa = "5.3.1"
 utoipa-axum = "0.2.0"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 tower-http = { version = "0.6.2", features = ["cors", "limit"] }
+aes-gcm = "0.10.3"
+aead = "0.5.2"
 image = "0.25"
 rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
