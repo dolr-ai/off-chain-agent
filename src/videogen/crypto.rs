@@ -1,10 +1,10 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
+    aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use rand::{rngs::OsRng, RngCore};
+use rand::RngCore;
 use std::env;
 use yral_types::delegated_identity::DelegatedIdentityWire;
 
@@ -35,7 +35,7 @@ pub fn encrypt_identity(identity: &DelegatedIdentityWire) -> Result<String> {
 
     // Generate 96-bit random nonce
     let mut nonce_bytes = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce_bytes);
+    rand::rng().fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher
@@ -77,22 +77,23 @@ mod tests {
 
     #[test]
     fn test_identity_encryption_roundtrip() {
+        use ic_agent::identity::SignedDelegation;
+        use k256::elliptic_curve::JwkEcKey;
+
+        // Generate a random Secp256k1 secret key and convert to JWK for to_secret
+        let secret = k256::SecretKey::random(&mut rand::rng());
+        let to_secret: JwkEcKey = secret.to_jwk();
+
         let identity = DelegatedIdentityWire {
-            delegation: yral_types::delegated_identity::DelegationWire {
-                pubkey: vec![1, 2, 3],
-                expiration: 123456789,
-                targets: None,
-            },
-            signature: vec![4, 5, 6],
+            from_key: vec![1, 2, 3, 4, 5],
+            to_secret,
+            delegation_chain: vec![],
         };
 
         let encrypted = encrypt_identity(&identity).expect("Encryption failed");
         let decrypted = decrypt_identity(&encrypted).expect("Decryption failed");
 
-        assert_eq!(
-            identity.delegation.expiration,
-            decrypted.delegation.expiration
-        );
-        assert_eq!(identity.signature, decrypted.signature);
+        assert_eq!(identity.from_key, decrypted.from_key);
+        assert_eq!(identity.delegation_chain.len(), decrypted.delegation_chain.len());
     }
 }
