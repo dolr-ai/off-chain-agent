@@ -94,6 +94,9 @@ mod tests {
         let decrypted = decrypt_identity(&encrypted).expect("Decryption failed");
 
         assert_eq!(identity.from_key, decrypted.from_key);
-        assert_eq!(identity.delegation_chain.len(), decrypted.delegation_chain.len());
+        assert_eq!(
+            identity.delegation_chain.len(),
+            decrypted.delegation_chain.len()
+        );
     }
 }
