@@ -121,7 +121,6 @@ pub async fn process_video_generation(
 }
 
 pub async fn upload_ai_generated_video_to_canister_in_drafts(
-    State(state): State<Arc<AppState>>,
     Json(request): Json<UploadAiVideoToCanisterRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     match upload_ai_generated_video_to_canister_impl(
