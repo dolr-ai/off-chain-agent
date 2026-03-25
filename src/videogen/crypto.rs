@@ -8,18 +8,10 @@ use rand::RngCore;
 use std::env;
 use yral_types::delegated_identity::DelegatedIdentityWire;
 
-/// Internal secret key for identity encryption.
-/// In production, this MUST be set via INTERNAL_ENCRYPTION_SECRET environment variable.
-/// NOTE: This is temporary to test in preview, I will change it properly before merging.
-const DEFAULT_SECRET: &str = "temporary-secret-key-for-dev-only-32-chars-!!";
-
 fn get_encryption_key() -> [u8; 32] {
-    let secret = env::var("INTERNAL_ENCRYPTION_SECRET").unwrap_or_else(|_| {
-        log::warn!(
-            "INTERNAL_ENCRYPTION_SECRET not set, using default key. DO NOT USE IN PRODUCTION."
-        );
-        DEFAULT_SECRET.to_string()
-    });
+    let secret = env::var("INTERNAL_ENCRYPTION_SECRET").expect(
+        "INTERNAL_ENCRYPTION_SECRET environment variable NOT SET. Mandatory for identity encryption."
+    );
 
     let mut key = [0u8; 32];
     let secret_bytes = secret.as_bytes();

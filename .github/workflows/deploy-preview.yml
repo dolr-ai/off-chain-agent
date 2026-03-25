@@ -105,6 +105,7 @@ jobs:
             secret/data/off-chain-agent/QSTASH_TOKEN value | QSTASH_AUTH_TOKEN ;
             secret/data/off-chain-agent/ML_FEED_CACHE_REDIS_URL value | ML_FEED_CACHE_REDIS_URL ;
             secret/data/off-chain-agent/STORJ_INTERFACE_TOKEN value | STORJ_INTERFACE_TOKEN ;
+            secret/data/off-chain-agent/INTERNAL_ENCRYPTION_SECRET value | INTERNAL_ENCRYPTION_SECRET ;
             secret/data/off-chain-agent/VIDEOHASH_BACKFILL_TOKEN value | VIDEOHASH_BACKFILL_TOKEN ;
             secret/data/off-chain-agent/STORJ_BACKUP_CANISTER_ACCESS_GRANT value | STORJ_BACKUP_CANISTER_ACCESS_GRANT ;
             secret/data/off-chain-agent/CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL value | CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL ;
@@ -229,6 +230,7 @@ jobs:
           CF_IMAGES_API_TOKEN: ${{ env.CF_IMAGES_API_TOKEN }}
           NSFW_GRPC_TOKEN: ${{ env.NSFW_GRPC_TOKEN }}
           QSTASH_AUTH_TOKEN: ${{ env.QSTASH_AUTH_TOKEN }}
+          INTERNAL_ENCRYPTION_SECRET: ${{ env.INTERNAL_ENCRYPTION_SECRET }}
           ML_FEED_CACHE_REDIS_URL: ${{ env.ML_FEED_CACHE_REDIS_URL }}
           STORJ_INTERFACE_TOKEN: ${{ env.STORJ_INTERFACE_TOKEN }}
           VIDEOHASH_BACKFILL_TOKEN: ${{ env.VIDEOHASH_BACKFILL_TOKEN }}
@@ -306,6 +308,7 @@ jobs:
             --arg cf_images_api_token "$CF_IMAGES_API_TOKEN" \
             --arg nsfw_grpc_token "$NSFW_GRPC_TOKEN" \
             --arg qstash_auth_token "$QSTASH_AUTH_TOKEN" \
+            --arg internal_encryption_secret "$INTERNAL_ENCRYPTION_SECRET" \
             --arg ml_feed_cache_redis_url "$ML_FEED_CACHE_REDIS_URL" \
             --arg storj_interface_token "$STORJ_INTERFACE_TOKEN" \
             --arg videohash_backfill_token "$VIDEOHASH_BACKFILL_TOKEN" \
@@ -379,6 +382,7 @@ jobs:
               { "key": "CF_IMAGES_API_TOKEN", "value": $cf_images_api_token, "is_literal": true},
               { "key": "NSFW_GRPC_TOKEN", "value": $nsfw_grpc_token, "is_literal": true},
               { "key": "QSTASH_AUTH_TOKEN", "value": $qstash_auth_token, "is_literal": true},
+              { "key": "INTERNAL_ENCRYPTION_SECRET", "value": $internal_encryption_secret, "is_literal": true},
               { "key": "ML_FEED_CACHE_REDIS_URL", "value": $ml_feed_cache_redis_url,  "is_literal": true},
               { "key": "STORJ_INTERFACE_TOKEN", 	"value": $storj_interface_token, 	"is_literal": true},
               {	"key": "VIDEOHASH_BACKFILL_TOKEN", "value": $videohash_backfill_token, "is_literal": true},
