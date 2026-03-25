@@ -140,7 +140,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     let stream_upload_form = reqwest::multipart::Form::new().part(
         "file",
         reqwest::multipart::Part::bytes(video_bytes.to_vec())
-            .file_name("ai_generated_video.mp4")
+            .file_name(format!("{}.mp4", video_id))
             .mime_str("video/mp4")
             .map_err(|e| Box::<dyn Error>::from(format!("Failed to set MIME type: {e}")))?,
     );
@@ -153,14 +153,16 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         .await
         .map_err(|e| Box::<dyn Error>::from(format!("Failed to upload video: {e}")))?;
 
+    let status = stream_upload_result.status();
+    let body_text = stream_upload_result.text().await.unwrap_or_default();
     log::info!(
-        "Video upload response status: {}",
-        stream_upload_result.status()
+        "Video upload response status: {}. Body: {}",
+        status,
+        body_text
     );
 
-    if !stream_upload_result.status().is_success() {
-        let error_text = stream_upload_result.text().await.unwrap_or_default();
-        return Err(format!("Video upload failed with error: {}", error_text).into());
+    if !status.is_success() {
+        return Err(format!("Video upload failed with error: {}", body_text).into());
     }
 
     // Call upload service to update metadata and register post
