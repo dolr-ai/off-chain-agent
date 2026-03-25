@@ -39,7 +39,41 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         .into());
     }
 
+    let content_type = video_fetch_response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown")
+        .to_string();
+
+    log::info!(
+        "Fetched video from URL: {}. Status: {}. Content-Type: {}",
+        ai_video_url,
+        video_fetch_response.status(),
+        content_type
+    );
+
+    if !content_type.contains("video/") && !content_type.contains("application/octet-stream") {
+        log::warn!(
+            "Unexpected Content-Type for video from {}: {}. The URL might be returning an error page or HTML.",
+            ai_video_url,
+            content_type
+        );
+    }
+
     let video_bytes = video_fetch_response.bytes().await?;
+    log::info!("Fetched {} bytes from {}", video_bytes.len(), ai_video_url);
+
+    if video_bytes.is_empty() {
+        return Err(format!("Fetched video is empty from URL: {}", ai_video_url).into());
+    }
+
+    if video_bytes.len() < 1000 && content_type.contains("text/html") {
+        return Err(format!(
+            "Fetched content from {} appears to be HTML ({} bytes) instead of a video. Please check your Cloudflare Tunnel authentication.",
+            ai_video_url, video_bytes.len()
+        ).into());
+    }
 
     let get_video_upload_url = YRAL_UPLOAD_SERVICE.join("/get-upload-url")?;
     let client = reqwest::Client::new();
