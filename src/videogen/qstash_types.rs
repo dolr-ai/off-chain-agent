@@ -19,6 +19,8 @@ pub struct QstashVideoGenRequest {
     pub token_type: TokenType,
     /// Mode of video upload: Draft mode (publish video to canister in draft), Client Mode (client will handle video upload)
     pub handle_video_upload: Option<VideoUploadHandling>,
+    /// Encrypted delegated identity for user registration in canister
+    pub encrypted_identity: Option<String>,
 }
 
 /// Key structure matching rate limit canister
@@ -44,6 +46,8 @@ pub struct QstashVideoGenCallback {
 
     /// Mode of video upload: Draft mode (publish video to canister in draft), Client Mode (client will handle video upload)
     pub handle_video_upload: Option<VideoUploadHandling>,
+    /// Encrypted delegated identity for user registration in canister
+    pub encrypted_identity: Option<String>,
 }
 
 /// Result types for callback

@@ -101,7 +101,9 @@ pub async fn generate_with_context(
             enable_prompt_expansion: true,
         },
         webhook: Some(webhook_url),
-        metadata: None,
+        metadata: Some(serde_json::json!({
+            "encrypted_identity": context.encrypted_identity
+        })),
     };
 
     // Submit prediction

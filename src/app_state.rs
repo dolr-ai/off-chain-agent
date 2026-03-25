@@ -9,6 +9,7 @@ use crate::rewards::RewardsModule;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
+use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
     get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis,
     init_dragonfly_redis_2, DragonflyPool,
@@ -103,6 +104,8 @@ pub struct AppState {
 
     /// ComfyUI client for self-hosted video generation (optional)
     pub comfyui_client: Option<ComfyUIClient>,
+
+    pub crypto: Crypto,
 }
 
 impl AppState {
@@ -183,6 +186,7 @@ impl AppState {
             scratchpad_client,
             mixpanel_client: MixpanelClient::new(),
             comfyui_client,
+            crypto: Crypto::default(),
         }
     }
 

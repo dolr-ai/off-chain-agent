@@ -209,12 +209,20 @@ pub async fn handle_video_gen_callback_internal(
     if let VideoGenRequestStatus::Complete(ai_video_url) = &status {
         match callback.handle_video_upload {
             Some(VideoUploadHandling::ServerDraft) => {
+                // Decrypt identity from callback blob
+                let delegated_identity = if let Some(encrypted) = &callback.encrypted_identity {
+                    state.crypto.decrypt_identity(encrypted).ok()
+                } else {
+                    None
+                };
+
                 state
                     .qstash_client
                     .upload_ai_generated_video_to_canister_in_drafts(
                         UploadAiVideoToCanisterRequest {
                             ai_video_url: ai_video_url.clone(),
                             user_id: callback.request_key.principal,
+                            delegated_identity,
                         },
                     )
                     .await

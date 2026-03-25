@@ -276,6 +276,7 @@ pub async fn process_video_generation(
     // Create delegated identity for agent creation
     let identity: DelegatedIdentity =
         delegated_identity_wire
+            .clone()
             .try_into()
             .map_err(|e: k256::elliptic_curve::Error| {
                 log::error!("Failed to create delegated identity: {e}");
@@ -301,6 +302,20 @@ pub async fn process_video_generation(
     )
     .await?;
 
+    // Encrypt identity for stateless preservation across asynchronous flows
+    let encrypted_identity = app_state
+        .crypto
+        .encrypt_identity(&delegated_identity_wire)
+        .map_err(|e| {
+            log::error!("Failed to encrypt identity: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(VideoGenError::ProviderError(
+                    "Failed to secure identity".to_string(),
+                )),
+            )
+        })?;
+
     // Prepare Qstash request
     let qstash_request = super::qstash_types::QstashVideoGenRequest {
         user_principal,
@@ -310,6 +325,7 @@ pub async fn process_video_generation(
         deducted_amount,
         token_type,
         handle_video_upload,
+        encrypted_identity: Some(encrypted_identity),
     };
 
     // Queue to Qstash with automatic rollback on failure

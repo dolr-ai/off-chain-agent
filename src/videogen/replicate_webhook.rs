@@ -28,6 +28,7 @@ pub struct ReplicateWebhookPayload {
     pub output: Option<serde_json::Value>,
     pub error: Option<String>,
     pub webhook_completed: Option<String>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Query parameters for webhook URL
@@ -189,6 +190,11 @@ pub async fn handle_replicate_webhook(
                     .and_then(|a| a.parse::<u64>().ok()),
                 token_type,
                 handle_video_upload: params.handle_video_upload,
+                encrypted_identity: payload
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| m.get("encrypted_identity"))
+                    .and_then(|v| v.as_str().map(|s| s.to_string())),
             };
 
             // Use existing callback handler logic
@@ -244,6 +250,7 @@ mod tests {
             output: Some(json!("https://example.com/video.mp4")),
             error: None,
             webhook_completed: Some("2023-01-01T00:00:00Z".to_string()),
+            metadata: None,
         }
     }
 
