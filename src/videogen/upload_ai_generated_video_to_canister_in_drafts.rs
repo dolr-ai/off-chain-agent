@@ -137,14 +137,26 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         .video_id
         .ok_or_else(|| "Video ID not found in response".to_string())?;
 
+    let stream_upload_form = reqwest::multipart::Form::new().part(
+        "file",
+        reqwest::multipart::Part::bytes(video_bytes.to_vec())
+            .file_name("ai_generated_video.mp4")
+            .mime_str("video/mp4")
+            .map_err(|e| Box::<dyn Error>::from(format!("Failed to set MIME type: {e}")))?,
+    );
+
     let stream_upload_result = client
         .post(&video_upload_url)
-        .header("Content-Type", "application/octet-stream")
         .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
-        .body(video_bytes.to_vec())
+        .multipart(stream_upload_form)
         .send()
         .await
         .map_err(|e| Box::<dyn Error>::from(format!("Failed to upload video: {e}")))?;
+
+    log::info!(
+        "Video upload response status: {}",
+        stream_upload_result.status()
+    );
 
     if !stream_upload_result.status().is_success() {
         let error_text = stream_upload_result.text().await.unwrap_or_default();
