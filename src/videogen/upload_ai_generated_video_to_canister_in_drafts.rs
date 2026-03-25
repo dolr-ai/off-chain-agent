@@ -43,6 +43,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         .unwrap_or("unknown")
         .to_string();
 
+    let video_bytes = video_fetch_response.bytes().await?;
     let get_video_upload_url = YRAL_UPLOAD_SERVICE.join("/get-upload-url")?;
     let client = reqwest::Client::new();
     let get_video_upload_res = client

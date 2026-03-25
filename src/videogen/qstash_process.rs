@@ -127,7 +127,6 @@ pub async fn upload_ai_generated_video_to_canister_in_drafts(
     match upload_ai_generated_video_to_canister_impl(
         &request.ai_video_url,
         request.user_id,
-        &state,
         request.delegated_identity,
     )
     .await
