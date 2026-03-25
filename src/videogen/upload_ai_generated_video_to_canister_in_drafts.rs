@@ -177,7 +177,10 @@ pub async fn upload_ai_generated_video_to_canister_impl(
             "post_details": post_details
         });
 
-        log::info!("Sending metadata update request: {}", serde_json::to_string_pretty(&update_req)?);
+        log::info!(
+            "Sending metadata update request: {}",
+            serde_json::to_string_pretty(&update_req)?
+        );
 
         let update_res = client
             .post(update_metadata_url)
