@@ -166,7 +166,7 @@ pub async fn upload_ai_generated_video_to_canister_impl(
             video_id,
             user_id
         );
-        log::info!("Identity {}",identity);
+        log::info!("Identity {:?}",identity);
 
         let post_details = json!({
             "id": uuid::Uuid::new_v4().to_string(),
