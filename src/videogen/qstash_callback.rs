@@ -211,7 +211,7 @@ pub async fn handle_video_gen_callback_internal(
             Some(VideoUploadHandling::ServerDraft) => {
                 // Decrypt identity from callback blob
                 let delegated_identity = if let Some(encrypted) = &callback.encrypted_identity {
-                    crate::videogen::crypto::decrypt_identity(encrypted).ok()
+                    state.crypto.decrypt_identity(encrypted).ok()
                 } else {
                     None
                 };
