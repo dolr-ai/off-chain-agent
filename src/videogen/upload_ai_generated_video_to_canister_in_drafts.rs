@@ -3,7 +3,7 @@ use std::error::Error;
 #[allow(unused_imports)]
 use crate::{
     app_state::AppState,
-    consts::{USER_POST_SERVICE_CANISTER_ID, YRAL_UPLOAD_SERVICE},
+    consts::{STORJ_INTERFACE_TOKEN, USER_POST_SERVICE_CANISTER_ID, YRAL_UPLOAD_SERVICE},
 };
 use candid::Principal;
 use serde::{Deserialize, Serialize};
@@ -137,17 +137,11 @@ pub async fn upload_ai_generated_video_to_canister_impl(
         .video_id
         .ok_or_else(|| "Video ID not found in response".to_string())?;
 
-    let stream_upload_form = reqwest::multipart::Form::new().part(
-        "file",
-        reqwest::multipart::Part::bytes(video_bytes.to_vec())
-            .file_name("ai_generated_video.mp4")
-            .mime_str("video/mp4")
-            .map_err(|e| Box::<dyn Error>::from(format!("Failed to set MIME type: {e}")))?,
-    );
-
     let stream_upload_result = client
         .post(&video_upload_url)
-        .multipart(stream_upload_form)
+        .header("Content-Type", "application/octet-stream")
+        .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
+        .body(video_bytes.to_vec())
         .send()
         .await
         .map_err(|e| Box::<dyn Error>::from(format!("Failed to upload video: {e}")))?;
@@ -182,6 +176,8 @@ pub async fn upload_ai_generated_video_to_canister_impl(
             "meta": {},
             "post_details": post_details
         });
+
+        log::info!("Sending metadata update request: {}", serde_json::to_string_pretty(&update_req)?);
 
         let update_res = client
             .post(update_metadata_url)
