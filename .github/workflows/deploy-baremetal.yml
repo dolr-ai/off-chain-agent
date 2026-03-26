@@ -6,6 +6,11 @@ on:
     branches:
       - main
 
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
 concurrency:
   group: deploy-baremetal-${{ github.ref }}
   cancel-in-progress: false
@@ -138,7 +143,6 @@ jobs:
             echo "${output_name}=$REDIS_PASSWORD" >> $GITHUB_OUTPUT
             echo "Password for $db_name fetched successfully"
           }
-
           # Fetch password
           fetch_redis_password "yral-ml-feed-cache" "ml_feed_password"
 
@@ -172,10 +176,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Import SSH key from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: off-chain-agent-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/off-chain-agent/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
+
       - name: Setup SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
 
       - name: Add server to known hosts
         run: |
@@ -183,7 +197,7 @@ jobs:
 
       - name: Check server connectivity
         run: |
-          ssh -o ConnectTimeout=10 root@${{ matrix.server }} "echo 'Server ${{ matrix.server }} connection successful'"
+          ssh -o ConnectTimeout=10 off-chain-agent@${{ matrix.server }} "echo 'Server ${{ matrix.server }} connection successful'"
 
       - name: Import Secrets from Vault
         uses: hashicorp/vault-action@v3
@@ -264,12 +278,13 @@ jobs:
       - name: Sync deployment files to server
         run: |
           rsync -avz --delete \
+            --exclude='.ssh/' \
             ./deploy-baremetal/ \
-            root@${{ matrix.server }}:/home/offchain-agent/
+            off-chain-agent@${{ matrix.server }}:/home/off-chain-agent/
 
       - name: Log in to GHCR on server
         run: |
-          ssh root@${{ matrix.server }} "
+          ssh off-chain-agent@${{ matrix.server }} "
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           "
 
@@ -347,8 +362,8 @@ jobs:
           ALLOYDB_SA_JSON_ESCAPED=$(printf '%q' "$ALLOYDB_SERVICE_ACCOUNT_JSON")
           YRAL_MOBILE_SA_KEY_ESCAPED=$(printf '%q' "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY")
 
-          ssh root@${{ matrix.server }} "
-            cd /home/offchain-agent
+          ssh off-chain-agent@${{ matrix.server }} "
+            cd /home/off-chain-agent
 
             echo 'Pulling latest images...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
@@ -442,8 +457,8 @@ jobs:
 
       - name: Verify deployment
         run: |
-          ssh root@${{ matrix.server }} "
-            cd /home/offchain-agent
+          ssh off-chain-agent@${{ matrix.server }} "
+            cd /home/off-chain-agent
             echo '=== Container Status ==='
             docker compose ps
             echo ''
