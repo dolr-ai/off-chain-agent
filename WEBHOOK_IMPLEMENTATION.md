@@ -89,7 +89,6 @@ Webhook requests include metadata to track internal state:
 Currently implemented for:
 - ✅ WAN 2.5 (`wan2_5.rs`)
 - ✅ WAN 2.5 Fast (`wan2_5_fast.rs`)
-- ⚠️ LumaLabs (still uses polling - future enhancement)
 - ⚠️ IntTest (still uses polling - future enhancement)
 
 ## Migration Path

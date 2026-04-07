@@ -115,7 +115,6 @@ jobs:
             secret/data/off-chain-agent/CANISTER_BACKUP_CACHE_REDIS_URL value | CANISTER_BACKUP_CACHE_REDIS_URL ;
             secret/data/off-chain-agent/YRAL_METADATA_NOTIFICATION_API_KEY value | YRAL_METADATA_NOTIFICATION_API_KEY ;
             secret/data/off-chain-agent/ML_FEED_CACHE_MEMORYSTORE_URL value | ML_FEED_CACHE_MEMORYSTORE_URL ;
-            secret/data/off-chain-agent/VIDEOGEN_PROVIDER_LUMALABS_API_KEY value | LUMALABS_API_KEY ;
             secret/data/off-chain-agent/YRAL_HON_WORKER_JWT value | YRAL_HON_WORKER_JWT ;
             secret/data/off-chain-agent/LEADERBOARD_REDIS_URL value | LEADERBOARD_REDIS_URL ;
             secret/data/off-chain-agent/SERVICE_CANISTER_MIGRATION_REDIS_URL value | SERVICE_CANISTER_MIGRATION_REDIS_URL ;
@@ -242,7 +241,6 @@ jobs:
           CANISTER_BACKUP_CACHE_REDIS_URL: ${{ env.CANISTER_BACKUP_CACHE_REDIS_URL }}
           YRAL_METADATA_NOTIFICATION_API_KEY: ${{ env.YRAL_METADATA_NOTIFICATION_API_KEY }}
           ML_FEED_CACHE_MEMORYSTORE_URL: ${{ env.ML_FEED_CACHE_MEMORYSTORE_URL }}
-          LUMALABS_API_KEY: ${{ env.LUMALABS_API_KEY }}
           YRAL_HON_WORKER_JWT: ${{ env.YRAL_HON_WORKER_JWT }}
           LEADERBOARD_REDIS_URL: ${{ env.LEADERBOARD_REDIS_URL }}
           SERVICE_CANISTER_MIGRATION_REDIS_URL: ${{ env.SERVICE_CANISTER_MIGRATION_REDIS_URL }}
@@ -320,7 +318,6 @@ jobs:
             --arg canister_backup_cache_redis_url "$CANISTER_BACKUP_CACHE_REDIS_URL" \
             --arg yral_metadata_notification_api_key "$YRAL_METADATA_NOTIFICATION_API_KEY" \
             --arg ml_feed_cache_memorystore_url "$ML_FEED_CACHE_MEMORYSTORE_URL" \
-            --arg lumalabs_api_key "$LUMALABS_API_KEY" \
             --arg yral_hon_worker_jwt "$YRAL_HON_WORKER_JWT" \
             --arg leaderboard_redis_url "$LEADERBOARD_REDIS_URL" \
             --arg service_canister_migration_redis_url "$SERVICE_CANISTER_MIGRATION_REDIS_URL" \
@@ -394,7 +391,6 @@ jobs:
               { "key": "CANISTER_BACKUP_CACHE_REDIS_URL", "value": $canister_backup_cache_redis_url, "is_literal": true},
               { "key": "YRAL_METADATA_NOTIFICATION_API_KEY", "value": $yral_metadata_notification_api_key, "is_literal": true},
               { "key": "ML_FEED_CACHE_MEMORYSTORE_URL", "value": $ml_feed_cache_memorystore_url, "is_literal": true},
-              { "key": "LUMALABS_API_KEY", "value": $lumalabs_api_key, "is_literal": true},
               { "key": "YRAL_HON_WORKER_JWT", "value": $yral_hon_worker_jwt, "is_literal": true},
               { "key": "LEADERBOARD_REDIS_URL", "value": $leaderboard_redis_url, "is_literal": true},
               { "key": "SERVICE_CANISTER_MIGRATION_REDIS_URL", "value": $service_canister_migration_redis_url, "is_literal": true},
