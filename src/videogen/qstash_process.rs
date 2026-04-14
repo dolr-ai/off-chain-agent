@@ -42,10 +42,6 @@ pub async fn process_video_generation(
 
     // Route to appropriate model handler based on the input type
     let result = match request.input {
-        VideoGenInput::LumaLabs(_) => {
-            let input = request.input.clone();
-            crate::videogen::models::lumalabs::generate(input, &state).await
-        }
         VideoGenInput::IntTest(_) => {
             let input = request.input.clone();
             crate::videogen::models::inttest::generate(input, &state).await
