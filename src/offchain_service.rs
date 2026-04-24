@@ -1,8 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
     app_state::AppState,
-    consts::GOOGLE_CHAT_REPORT_SPACE_URL,
+    consts::{GOOGLE_CHAT_REPORT_SPACE_URL, OFF_CHAIN_AGENT_URL, USER_POST_SERVICE_CANISTER_ID},
     events::{event::Event, warehouse_events::WarehouseEvent},
     posts::report_post::repost_post_common_impl,
     AppError,
@@ -14,10 +14,7 @@ use http::HeaderMap;
 use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
-use yral_canisters_client::{
-    ic::USER_POST_SERVICE_ID,
-    user_post_service::{Post, PostStatus, Result2, UserPostService},
-};
+use yral_canisters_client::user_post_service::{Post, PostStatus, Result2, UserPostService};
 
 use crate::offchain_service::off_chain::{Empty, ReportPostRequest};
 use off_chain::off_chain_server::OffChain;
@@ -146,10 +143,20 @@ pub async fn send_message_gchat_webhook(request_url: &str, data: Value) -> Resul
     Ok(())
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 struct GoogleJWT {
     #[allow(dead_code)]
     aud: String,
+    #[allow(dead_code)]
+    iss: String,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+struct GoogleChatIdTokenClaims {
+    #[allow(dead_code)]
+    aud: String,
+    email: String,
+    email_verified: bool,
     #[allow(dead_code)]
     iss: String,
 }
@@ -194,6 +201,132 @@ struct GChatPayloadActionParameter {
     value: String,
 }
 
+const GOOGLE_CHAT_ISSUER: &str = "chat@system.gserviceaccount.com";
+const GOOGLE_CHAT_LEGACY_PROJECT_AUDIENCE: &str = "1035262663512";
+const GOOGLE_OAUTH_CERTS_URL: &str = "https://www.googleapis.com/oauth2/v1/certs";
+const GOOGLE_CHAT_CERTS_URL: &str =
+    "https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com";
+
+async fn fetch_google_certs(certs_url: &str) -> Result<HashMap<String, String>> {
+    let client = reqwest::Client::new();
+    let res = client
+        .get(certs_url)
+        .send()
+        .await
+        .with_context(|| format!("Failed to fetch Google certs from {certs_url}"))?;
+    let res_body = res
+        .text()
+        .await
+        .with_context(|| format!("Failed to read Google certs response from {certs_url}"))?;
+
+    serde_json::from_str(&res_body)
+        .with_context(|| format!("Failed to parse Google certs response from {certs_url}"))
+}
+
+fn google_chat_auth_audiences() -> Vec<String> {
+    let mut audiences = Vec::new();
+
+    if let Ok(configured) = env::var("GOOGLE_CHAT_AUTH_AUDIENCES") {
+        audiences.extend(
+            configured
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned),
+        );
+    }
+
+    if let Ok(callback_url) = OFF_CHAIN_AGENT_URL.join("report-approved") {
+        audiences.push(callback_url.to_string());
+    }
+
+    audiences.push(GOOGLE_CHAT_LEGACY_PROJECT_AUDIENCE.to_string());
+    audiences.sort();
+    audiences.dedup();
+    audiences
+}
+
+fn verify_token_with_certs<T>(
+    auth_token: &str,
+    certs: &HashMap<String, String>,
+    audience: &str,
+    issuers: &[&str],
+) -> bool
+where
+    T: serde::de::DeserializeOwned + Clone,
+{
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
+    validation.set_audience(&[audience]);
+    validation.set_issuer(issuers);
+
+    certs.values().any(|cert| {
+        let Ok(decoding_key) = DecodingKey::from_rsa_pem(cert.as_bytes()) else {
+            return false;
+        };
+        jsonwebtoken::decode::<T>(
+            auth_token,
+            &decoding_key,
+            &validation,
+        )
+        .is_ok()
+    })
+}
+
+fn verify_chat_id_token(
+    auth_token: &str,
+    certs: &HashMap<String, String>,
+    audience: &str,
+) -> bool {
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
+    validation.set_audience(&[audience]);
+    validation.set_issuer(&["accounts.google.com", "https://accounts.google.com"]);
+
+    certs.values().any(|cert| {
+        let Ok(decoding_key) = DecodingKey::from_rsa_pem(cert.as_bytes()) else {
+            return false;
+        };
+        jsonwebtoken::decode::<GoogleChatIdTokenClaims>(
+            auth_token,
+            &decoding_key,
+            &validation,
+        )
+        .map(|token| {
+            let claims = token.claims;
+            claims.email_verified && claims.email == GOOGLE_CHAT_ISSUER
+        })
+        .unwrap_or(false)
+    })
+}
+
+async fn verify_google_chat_bearer_token(auth_token: &str) -> Result<()> {
+    let audiences = google_chat_auth_audiences();
+    let chat_certs = fetch_google_certs(GOOGLE_CHAT_CERTS_URL).await?;
+
+    if audiences.iter().any(|audience| {
+        verify_token_with_certs::<GoogleJWT>(
+            auth_token,
+            &chat_certs,
+            audience,
+            &[GOOGLE_CHAT_ISSUER],
+        )
+    }) {
+        return Ok(());
+    }
+
+    let oauth_certs = fetch_google_certs(GOOGLE_OAUTH_CERTS_URL).await?;
+    if audiences
+        .iter()
+        .any(|audience| verify_chat_id_token(auth_token, &oauth_certs, audience))
+    {
+        return Ok(());
+    }
+
+    Err(anyhow::anyhow!(
+        "Invalid Google Chat bearer token for configured audiences: {:?}",
+        audiences
+    ))
+}
+
 pub async fn report_approved_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -223,43 +356,10 @@ pub async fn report_approved_handler(
             .context("Failed to parse Bearer token")?;
         log::info!("Auth token extracted");
 
-        // get PUBLIC_CERTS from GET https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com
-
-        let client = reqwest::Client::new();
-        let res = client
-            .get("https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com")
-            .send()
-            .await?;
-        let res_body = res.text().await?;
-        log::info!("Fetched Google Chat public certs");
-
-        let certs: HashMap<String, String> = serde_json::from_str(&res_body)?;
-
-        // verify the JWT using jsonwebtoken crate
-
-        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
-        validation.set_issuer(&["chat@system.gserviceaccount.com"]);
-        validation.set_audience(&["1035262663512"]);
-
-        let mut valid = false;
-
-        for v in certs.values() {
-            let jwt = jsonwebtoken::decode::<GoogleJWT>(
-                auth_token,
-                &DecodingKey::from_rsa_pem(v.as_bytes())?,
-                &validation,
-            );
-
-            if jwt.is_ok() {
-                valid = true;
-                break;
-            }
-        }
-        if !valid {
-            log::error!("Invalid JWT token from Google Chat");
-            return Err(anyhow::anyhow!("Invalid JWT").into());
-        }
-        log::info!("JWT validation successful");
+        verify_google_chat_bearer_token(auth_token)
+            .await
+            .context("Failed to verify Google Chat bearer token")?;
+        log::info!("Google Chat bearer token validation successful");
     } else {
         log::info!("Request from Apps Script proxy - skipping JWT validation");
     }
@@ -294,25 +394,27 @@ pub async fn report_approved_handler(
 
     log::info!("View type: {}", view_type);
 
-    // view_type format : "canister_id post_id(int)"
-    let view_type: Vec<&str> = view_type.split(" ").collect();
-    let canister_id = view_type[0];
-    let post_id = view_type[1];
+    let (canister_id, post_id) = view_type
+        .split_once(' ')
+        .context("Invalid viewType payload, expected '<canister_id> <post_id>'")?;
     log::info!(
         "Banning post: canister_id={}, post_id={}",
         canister_id,
         post_id
     );
 
-    let user_post_service = UserPostService(USER_POST_SERVICE_ID, &state.agent);
+    let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &state.agent);
+
+    let post_details = user_post_service
+        .get_individual_post_details_by_id(post_id.to_string())
+        .await
+        .with_context(|| format!("Failed to fetch post details for {canister_id}/{post_id}"))?;
 
     let Result2::Ok(Post {
         video_uid,
         creator_principal,
         ..
-    }) = user_post_service
-        .get_individual_post_details_by_id(post_id.to_string())
-        .await?
+    }) = post_details
     else {
         return Err(anyhow::anyhow!(
             "Failed to fetch post details for {}/{}",
@@ -324,15 +426,20 @@ pub async fn report_approved_handler(
 
     user_post_service
         .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
-        .await?;
+        .await
+        .with_context(|| format!("Failed to ban post {canister_id}/{post_id}"))?;
     log::info!("Post status updated to banned");
 
     // send confirmation to Google Chat
     let confirmation_msg = json!({
         "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
     });
-    send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
-    log::info!("Sent confirmation message to Google Chat");
+    if let Err(e) = send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await
+    {
+        log::error!("Failed to send confirmation message to Google Chat: {e:?}");
+    } else {
+        log::info!("Sent confirmation message to Google Chat");
+    }
 
     let params = json!({
         "video_id": video_uid,

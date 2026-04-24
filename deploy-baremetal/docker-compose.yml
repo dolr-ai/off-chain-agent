@@ -114,6 +114,7 @@ services:
 
       # === Google Chat App (for interactive buttons) ===
       YRAL_MOBILE_SERVICE_ACCOUNT_KEY: ${YRAL_MOBILE_SERVICE_ACCOUNT_KEY}
+      GOOGLE_CHAT_AUTH_AUDIENCES: ${GOOGLE_CHAT_AUTH_AUDIENCES}
 
       # === Migration & Backfill ===
       VIDEOHASH_BACKFILL_TOKEN: ${VIDEOHASH_BACKFILL_TOKEN}
