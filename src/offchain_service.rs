@@ -263,20 +263,11 @@ where
         let Ok(decoding_key) = DecodingKey::from_rsa_pem(cert.as_bytes()) else {
             return false;
         };
-        jsonwebtoken::decode::<T>(
-            auth_token,
-            &decoding_key,
-            &validation,
-        )
-        .is_ok()
+        jsonwebtoken::decode::<T>(auth_token, &decoding_key, &validation).is_ok()
     })
 }
 
-fn verify_chat_id_token(
-    auth_token: &str,
-    certs: &HashMap<String, String>,
-    audience: &str,
-) -> bool {
+fn verify_chat_id_token(auth_token: &str, certs: &HashMap<String, String>, audience: &str) -> bool {
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     validation.set_audience(&[audience]);
     validation.set_issuer(&["accounts.google.com", "https://accounts.google.com"]);
@@ -285,16 +276,12 @@ fn verify_chat_id_token(
         let Ok(decoding_key) = DecodingKey::from_rsa_pem(cert.as_bytes()) else {
             return false;
         };
-        jsonwebtoken::decode::<GoogleChatIdTokenClaims>(
-            auth_token,
-            &decoding_key,
-            &validation,
-        )
-        .map(|token| {
-            let claims = token.claims;
-            claims.email_verified && claims.email == GOOGLE_CHAT_ISSUER
-        })
-        .unwrap_or(false)
+        jsonwebtoken::decode::<GoogleChatIdTokenClaims>(auth_token, &decoding_key, &validation)
+            .map(|token| {
+                let claims = token.claims;
+                claims.email_verified && claims.email == GOOGLE_CHAT_ISSUER
+            })
+            .unwrap_or(false)
     })
 }
 
@@ -434,7 +421,8 @@ pub async fn report_approved_handler(
     let confirmation_msg = json!({
         "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
     });
-    if let Err(e) = send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await
+    if let Err(e) =
+        send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await
     {
         log::error!("Failed to send confirmation message to Google Chat: {e:?}");
     } else {
