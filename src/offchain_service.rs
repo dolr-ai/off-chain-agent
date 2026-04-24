@@ -303,9 +303,7 @@ fn verify_chat_id_token(
             .map(|token| {
                 let claims = token.claims;
                 claims.email_verified
-                    && allowed_emails
-                        .iter()
-                        .any(|allowed_email| claims.email == *allowed_email)
+                    && allowed_emails.contains(&claims.email)
             })
             .unwrap_or(false)
     })
