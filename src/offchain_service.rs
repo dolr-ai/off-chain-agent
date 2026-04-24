@@ -302,10 +302,7 @@ fn verify_chat_id_token(
         jsonwebtoken::decode::<GoogleChatIdTokenClaims>(auth_token, &decoding_key, &validation)
             .map(|token| {
                 let claims = token.claims;
-                claims.email_verified
-                    && allowed_emails
-                        .iter()
-                        .any(|allowed_email| claims.email == *allowed_email)
+                claims.email_verified && allowed_emails.contains(&claims.email)
             })
             .unwrap_or(false)
     })
@@ -328,9 +325,10 @@ async fn verify_google_chat_bearer_token(auth_token: &str) -> Result<()> {
     }
 
     let oauth_certs = fetch_google_certs(GOOGLE_OAUTH_CERTS_URL).await?;
-    if audiences.iter().any(|audience| {
-        verify_chat_id_token(auth_token, &oauth_certs, audience, &allowed_emails)
-    }) {
+    if audiences
+        .iter()
+        .any(|audience| verify_chat_id_token(auth_token, &oauth_certs, audience, &allowed_emails))
+    {
         return Ok(());
     }
 
