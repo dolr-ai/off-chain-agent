@@ -246,6 +246,24 @@ fn google_chat_auth_audiences() -> Vec<String> {
     audiences
 }
 
+fn google_chat_allowed_emails() -> Vec<String> {
+    let mut emails = vec![GOOGLE_CHAT_ISSUER.to_string()];
+
+    if let Ok(configured) = env::var("GOOGLE_CHAT_ALLOWED_EMAILS") {
+        emails.extend(
+            configured
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned),
+        );
+    }
+
+    emails.sort();
+    emails.dedup();
+    emails
+}
+
 fn verify_token_with_certs<T>(
     auth_token: &str,
     certs: &HashMap<String, String>,
@@ -267,7 +285,12 @@ where
     })
 }
 
-fn verify_chat_id_token(auth_token: &str, certs: &HashMap<String, String>, audience: &str) -> bool {
+fn verify_chat_id_token(
+    auth_token: &str,
+    certs: &HashMap<String, String>,
+    audience: &str,
+    allowed_emails: &[String],
+) -> bool {
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     validation.set_audience(&[audience]);
     validation.set_issuer(&["accounts.google.com", "https://accounts.google.com"]);
@@ -279,7 +302,10 @@ fn verify_chat_id_token(auth_token: &str, certs: &HashMap<String, String>, audie
         jsonwebtoken::decode::<GoogleChatIdTokenClaims>(auth_token, &decoding_key, &validation)
             .map(|token| {
                 let claims = token.claims;
-                claims.email_verified && claims.email == GOOGLE_CHAT_ISSUER
+                claims.email_verified
+                    && allowed_emails
+                        .iter()
+                        .any(|allowed_email| claims.email == *allowed_email)
             })
             .unwrap_or(false)
     })
@@ -287,6 +313,7 @@ fn verify_chat_id_token(auth_token: &str, certs: &HashMap<String, String>, audie
 
 async fn verify_google_chat_bearer_token(auth_token: &str) -> Result<()> {
     let audiences = google_chat_auth_audiences();
+    let allowed_emails = google_chat_allowed_emails();
     let chat_certs = fetch_google_certs(GOOGLE_CHAT_CERTS_URL).await?;
 
     if audiences.iter().any(|audience| {
@@ -301,16 +328,16 @@ async fn verify_google_chat_bearer_token(auth_token: &str) -> Result<()> {
     }
 
     let oauth_certs = fetch_google_certs(GOOGLE_OAUTH_CERTS_URL).await?;
-    if audiences
-        .iter()
-        .any(|audience| verify_chat_id_token(auth_token, &oauth_certs, audience))
-    {
+    if audiences.iter().any(|audience| {
+        verify_chat_id_token(auth_token, &oauth_certs, audience, &allowed_emails)
+    }) {
         return Ok(());
     }
 
     Err(anyhow::anyhow!(
-        "Invalid Google Chat bearer token for configured audiences: {:?}",
-        audiences
+        "Invalid Google Chat bearer token for configured audiences {:?} and allowed emails {:?}",
+        audiences,
+        allowed_emails
     ))
 }
 
