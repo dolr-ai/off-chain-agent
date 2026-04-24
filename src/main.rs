@@ -213,7 +213,7 @@ fn main() {
         .expect("Failed to install rustls crypto provider");
 
     let _guard = sentry::init((
-        "https://e84a6dc4e0dfbaf7bd99b4a285a3e5b3@apm.yral.com/2",
+        "https://74c54bb79be1ec22926da1ec2ed0464e@sentry.naitik.yral.com/6",
         sentry::ClientOptions {
             release: sentry::release_name!(),
             // debug: true, // use when debugging sentry issues
