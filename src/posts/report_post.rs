@@ -207,8 +207,8 @@ pub async fn repost_post_common_impl(
     payload: ReportPostRequestV3,
 ) -> anyhow::Result<()> {
     let video_url = format!(
-        "https://yral.com/hot-or-not/{}/{}",
-        payload.canister_id, payload.post_id
+        "https://console.hetzner.com/projects/10422147/buckets/6462466/files/{}",
+        payload.publisher_principal
     );
 
     let text_str = format!(
