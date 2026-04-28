@@ -376,31 +376,25 @@ impl SentinelConnectionManager {
             );
 
             match channel.as_str() {
-                "+switch-master" => {
-                    if payload.starts_with(&self.master_name) {
-                        tracing::warn!(
-                            payload = %payload,
-                            "Master switched! Triggering failover handling"
-                        );
-                        self.on_failover_detected().await;
-                    }
+                "+switch-master" if payload.starts_with(&self.master_name) => {
+                    tracing::warn!(
+                        payload = %payload,
+                        "Master switched! Triggering failover handling"
+                    );
+                    self.on_failover_detected().await;
                 }
-                "+odown" => {
-                    if payload.contains("master") && payload.contains(&self.master_name) {
-                        tracing::warn!(
-                            payload = %payload,
-                            "Master is objectively down, failover imminent"
-                        );
-                        self.on_failover_detected().await;
-                    }
+                "+odown" if payload.contains("master") && payload.contains(&self.master_name) => {
+                    tracing::warn!(
+                        payload = %payload,
+                        "Master is objectively down, failover imminent"
+                    );
+                    self.on_failover_detected().await;
                 }
-                "+sdown" => {
-                    if payload.contains("master") && payload.contains(&self.master_name) {
-                        tracing::warn!(
-                            payload = %payload,
-                            "Master is subjectively down"
-                        );
-                    }
+                "+sdown" if payload.contains("master") && payload.contains(&self.master_name) => {
+                    tracing::warn!(
+                        payload = %payload,
+                        "Master is subjectively down"
+                    );
                 }
                 _ => {
                     // Other events (-sdown, -odown) are informational
