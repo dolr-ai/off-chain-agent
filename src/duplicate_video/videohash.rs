@@ -396,27 +396,33 @@ impl VideoHash {
                     }
                 }
 
-                if pixel_count > 0 {
-                    let avg_r = (r_sum / pixel_count) as u8;
-                    let avg_g = (g_sum / pixel_count) as u8;
-                    let avg_b = (b_sum / pixel_count) as u8;
-
-                    let r_dominance = avg_r > avg_g && avg_r > avg_b;
-                    let g_dominance = avg_g > avg_r && avg_g > avg_b;
-                    let b_dominance = avg_b > avg_r && avg_b > avg_g;
-
-                    if r_dominance {
-                        hash_bits.push(avg_r > 128);
-                    } else if g_dominance {
-                        hash_bits.push(avg_g > 128);
-                    } else if b_dominance {
-                        hash_bits.push(avg_b > 128);
-                    } else {
-                        let brightness = (avg_r as u32 + avg_g as u32 + avg_b as u32) / 3;
-                        hash_bits.push(brightness > 128);
+                let (avg_r, avg_g, avg_b) = match (
+                    r_sum.checked_div(pixel_count),
+                    g_sum.checked_div(pixel_count),
+                    b_sum.checked_div(pixel_count),
+                ) {
+                    (Some(avg_r), Some(avg_g), Some(avg_b)) => {
+                        (avg_r as u8, avg_g as u8, avg_b as u8)
                     }
+                    _ => {
+                        hash_bits.push(false);
+                        continue;
+                    }
+                };
+
+                let r_dominance = avg_r > avg_g && avg_r > avg_b;
+                let g_dominance = avg_g > avg_r && avg_g > avg_b;
+                let b_dominance = avg_b > avg_r && avg_b > avg_g;
+
+                if r_dominance {
+                    hash_bits.push(avg_r > 128);
+                } else if g_dominance {
+                    hash_bits.push(avg_g > 128);
+                } else if b_dominance {
+                    hash_bits.push(avg_b > 128);
                 } else {
-                    hash_bits.push(false);
+                    let brightness = (avg_r as u32 + avg_g as u32 + avg_b as u32) / 3;
+                    hash_bits.push(brightness > 128);
                 }
             }
         }
