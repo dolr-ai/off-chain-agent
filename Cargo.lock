@@ -6422,8 +6422,8 @@ dependencies = [
  "videogen-common",
  "yral-canisters-client",
  "yral-canisters-common",
- "yral-metadata-client 0.1.0 (git+https://github.com/dolr-ai/yral-metadata.git?branch=master)",
- "yral-metadata-types 0.1.0 (git+https://github.com/dolr-ai/yral-metadata.git?branch=master)",
+ "yral-metadata-client 0.1.0 (git+https://github.com/dolr-ai/yral-metadata.git?rev=4810b23c268b369e79337be577d1480b217fa955)",
+ "yral-metadata-types 0.1.0 (git+https://github.com/dolr-ai/yral-metadata.git?rev=4810b23c268b369e79337be577d1480b217fa955)",
  "yral-metrics",
  "yral-qstash-types",
  "yral-types",
@@ -10703,18 +10703,6 @@ dependencies = [
 [[package]]
 name = "yral-metadata-client"
 version = "0.1.0"
-source = "git+https://github.com/dolr-ai/yral-metadata.git?branch=master#4534b71fbd789dfb7e3c6abbca14a02a36eb37c1"
-dependencies = [
- "ic-agent",
- "reqwest 0.12.28",
- "thiserror 1.0.69",
- "yral-identity",
- "yral-metadata-types 0.1.0 (git+https://github.com/dolr-ai/yral-metadata.git?branch=master)",
-]
-
-[[package]]
-name = "yral-metadata-client"
-version = "0.1.0"
 source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#c8db8ef3163646ba033808c1d8abb7586203bd43"
 dependencies = [
  "ic-agent",
@@ -10725,9 +10713,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "yral-metadata-client"
+version = "0.1.0"
+source = "git+https://github.com/dolr-ai/yral-metadata.git?rev=4810b23c268b369e79337be577d1480b217fa955#4810b23c268b369e79337be577d1480b217fa955"
+dependencies = [
+ "ic-agent",
+ "reqwest 0.12.28",
+ "thiserror 1.0.69",
+ "yral-identity",
+ "yral-metadata-types 0.1.0 (git+https://github.com/dolr-ai/yral-metadata.git?rev=4810b23c268b369e79337be577d1480b217fa955)",
+]
+
+[[package]]
 name = "yral-metadata-types"
 version = "0.1.0"
-source = "git+https://github.com/dolr-ai/yral-metadata.git?branch=master#4534b71fbd789dfb7e3c6abbca14a02a36eb37c1"
+source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#c8db8ef3163646ba033808c1d8abb7586203bd43"
 dependencies = [
  "candid",
  "chrono",
@@ -10742,7 +10742,7 @@ dependencies = [
 [[package]]
 name = "yral-metadata-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#c8db8ef3163646ba033808c1d8abb7586203bd43"
+source = "git+https://github.com/dolr-ai/yral-metadata.git?rev=4810b23c268b369e79337be577d1480b217fa955#4810b23c268b369e79337be577d1480b217fa955"
 dependencies = [
  "candid",
  "chrono",

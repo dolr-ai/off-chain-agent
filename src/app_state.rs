@@ -106,6 +106,9 @@ pub struct AppState {
     pub comfyui_client: Option<ComfyUIClient>,
 
     pub crypto: Crypto,
+
+    /// indicates the environment of the app
+    pub app_environment: String,
 }
 
 impl AppState {
@@ -187,6 +190,7 @@ impl AppState {
             mixpanel_client: MixpanelClient::new(),
             comfyui_client,
             crypto: Crypto::default(),
+            app_environment: env::var("APP_ENVIRONMENT").unwrap_or("production".to_string()),
         }
     }
 

@@ -574,6 +574,7 @@ async fn send_tournament_start_broadcast(
             ..Default::default()
         }),
         apns: None,
+        environment: app_state.app_environment.to_string(),
         ..Default::default()
     };
 

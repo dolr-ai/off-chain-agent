@@ -34,7 +34,7 @@ reqwest = { version = "0.12.3", features = [
 once_cell = "1.19.0"
 yup-oauth2 = "11.0.0"
 log = "0.4.21"
-yral-metadata-client = { git = "https://github.com/dolr-ai/yral-metadata.git", branch = "master", features = [
+yral-metadata-client = { git = "https://github.com/dolr-ai/yral-metadata.git", rev = "4810b23c268b369e79337be577d1480b217fa955", features = [
     "rustls-tls",
 ], default-features = false }
 config = { version = "0.14.0", features = ["toml"] }
@@ -71,7 +71,7 @@ rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
 storj-interface = { git = "https://github.com/dolr-ai/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
 # yral-metrics = { path = "../yral-common/metrics" }
-yral-metadata-types = { git = "https://github.com/dolr-ai/yral-metadata", branch = "master", version = "0.1.0" }
+yral-metadata-types = { git = "https://github.com/dolr-ai/yral-metadata", rev = "4810b23c268b369e79337be577d1480b217fa955" }
 sentry = { version = "0.37.0", default-features = false, features = [
     "rustls",
     "sentry-anyhow",
