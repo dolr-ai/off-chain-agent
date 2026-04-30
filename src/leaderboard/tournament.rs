@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use aws_config::environment;
 use candid::Principal;
 use chrono::Utc;
 use futures::stream::{self, StreamExt};

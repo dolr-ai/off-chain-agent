@@ -1,4 +1,3 @@
-use aws_config::environment;
 use candid::Principal;
 use serde_json::Value;
 use yral_canisters_client::notification_store::{
