@@ -432,6 +432,7 @@ jobs:
             GOOGLE_CHAT_ALLOWED_EMAILS='${GOOGLE_CHAT_ALLOWED_EMAILS}' \
             YRAL_MOBILE_SERVICE_ACCOUNT_KEY=$YRAL_MOBILE_SA_KEY_ESCAPED \
             GOOGLE_CHAT_REPORT_SPACE_URL='${GOOGLE_CHAT_REPORT_SPACE_URL}' \
+            APP_ENVIRONMENT='production' \
             docker compose up -d
 
             echo 'Waiting for services to start...'

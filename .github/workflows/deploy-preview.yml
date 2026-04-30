@@ -284,6 +284,7 @@ jobs:
           ALLOYDB_DB_NAME: "postgres"
           ALLOYDB_DB_USER: "postgres"
           PORT: "8080"
+          APP_ENVIRONMENT: "staging"
         run: |
           APP_UUID="${{ steps.coolify_app.outputs.app_uuid }}"
           flatten() { echo "$1" | tr -d '\n\r'; }
@@ -361,6 +362,7 @@ jobs:
             --arg alloydb_db_name "$ALLOYDB_DB_NAME" \
             --arg alloydb_db_user "$ALLOYDB_DB_USER" \
             --arg port "$PORT" \
+            --arg app_environment "$APP_ENVIRONMENT" \
             '[
               { "key": "APP_URL", "value": $app_url,  "is_literal": true},
               { "key": "OFF_CHAIN_AGENT_URL", "value": $off_chain_agent_url, "is_literal": true},
@@ -433,7 +435,8 @@ jobs:
               { "key": "SENTRY_ENVIRONMENT", "value": $sentry_environment, "is_literal": true},
               { "key": "ALLOYDB_DB_NAME", "value": $alloydb_db_name, "is_literal": true},
               { "key": "ALLOYDB_DB_USER", "value": $alloydb_db_user, "is_literal": true},
-              { "key": "PORT", "value": $port, "is_literal": true}
+              { "key": "PORT", "value": $port, "is_literal": true},
+              { "key": "APP_ENVIRONMENT", "value": $app_environment, "is_literal": true}
             ]')
 
           RESPONSE=$(curl -s -o /tmp/curl_response.txt -w "%{http_code}" -X PATCH \
