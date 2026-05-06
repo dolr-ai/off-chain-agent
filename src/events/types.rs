@@ -955,7 +955,6 @@ impl EventPayload {
                         })),
                         ..Default::default()
                     }),
-                    environment: app_state.app_environment.clone(),
                     ..Default::default()
                 };
 
@@ -1035,7 +1034,6 @@ impl EventPayload {
                         })),
                         ..Default::default()
                     }),
-                    environment: app_state.app_environment.clone(),
                     ..Default::default()
                 };
 
@@ -1087,7 +1085,6 @@ impl EventPayload {
                         ..Default::default()
                     }),
                     apns: None,
-                    environment: app_state.app_environment.clone(),
                     ..Default::default()
                 };
 
@@ -1158,7 +1155,6 @@ impl EventPayload {
                         })),
                         ..Default::default()
                     }),
-                    environment: app_state.app_environment.clone(),
                     ..Default::default()
                 };
 
@@ -1239,7 +1235,6 @@ impl EventPayload {
                         })),
                         ..Default::default()
                     }),
-                    environment: app_state.app_environment.clone(),
                     ..Default::default()
                 };
 
@@ -1310,7 +1305,6 @@ impl EventPayload {
                         })),
                         ..Default::default()
                     }),
-                    environment: app_state.app_environment.clone(),
                     ..Default::default()
                 };
 
@@ -1375,7 +1369,6 @@ impl EventPayload {
                         })),
                         ..Default::default()
                     }),
-                    environment: app_state.app_environment.clone(),
                     ..Default::default()
                 };
 
