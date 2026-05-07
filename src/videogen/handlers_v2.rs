@@ -239,7 +239,7 @@ pub async fn get_in_progress_videos(
 
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
 
-    let (requests,) = rate_limits_client
+    let requests = rate_limits_client
         .get_user_video_generation_requests(user_principal, None, None)
         .await
         .map_err(|e| {
@@ -320,7 +320,7 @@ pub async fn get_all_video_status(
 
     let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
 
-    let (requests,) = rate_limits_client
+    let requests = rate_limits_client
         .get_user_video_generation_requests(user_principal, None, None)
         .await
         .map_err(|e| {
