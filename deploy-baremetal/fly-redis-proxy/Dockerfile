@@ -2,7 +2,7 @@
 FROM alpine:3.19
 
 # Install dependencies
-RUN apk add --no-cache expect curl netcat-openbsd
+RUN apk add --no-cache expect curl netcat-openbsd bash
 
 # Install flyctl
 RUN curl -L https://fly.io/install.sh | sh
