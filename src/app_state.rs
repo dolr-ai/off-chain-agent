@@ -11,8 +11,7 @@ use crate::types::RedisPool;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
-    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis,
-    init_dragonfly_redis_2, DragonflyPool,
+    DragonflyPool, get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, get_redis_store_ca_cert, init_dragonfly_redis, init_dragonfly_redis_2
 };
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -84,6 +83,8 @@ pub struct AppState {
     pub notification_client: NotificationClient,
     #[cfg(not(feature = "local-bin"))]
     pub yral_auth_dragonfly: Arc<DragonflyPool>,
+    #[cfg(not(feature = "local-bin"))]
+    pub yral_redis_store_dragonfly: Arc<DragonflyPool>,
     pub leaderboard_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
     pub rewards_module: RewardsModule,
@@ -142,6 +143,10 @@ impl AppState {
             log::info!("ComfyUI client initialized from environment variables");
         }
 
+        //Initialize central redis data store for auth, metadata and rewards/impressions.
+        #[cfg(not(feature = "local-bin"))]
+        let dragonfly_redis_store = init_dragonfly_redis_store_pool().await;
+
         AppState {
             admin_identity: init_identity(),
             yral_metadata_client: init_yral_metadata_client(&app_config),
@@ -169,6 +174,8 @@ impl AppState {
             ),
             #[cfg(not(feature = "local-bin"))]
             yral_auth_dragonfly: init_dragonfly_redis_pool().await,
+            #[cfg(not(feature = "local-bin"))]
+            yral_redis_store_dragonfly: init_dragonfly_redis_store_pool().await,
             leaderboard_redis_pool,
             #[cfg(not(feature = "local-bin"))]
             rewards_module,
@@ -469,6 +476,18 @@ async fn init_dragonfly_redis_pool() -> Arc<DragonflyPool> {
 
     dragonfly_pool
 }
+
+async fn init_dragonfly_redis_store_pool() -> Arc<DragonflyPool> {
+    let ca_cert_bytes = get_redis_store_ca_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CA_CERT");
+    let client_cert_bytes = get_redis_store_client_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_CERT");
+    let client_key_bytes = get_redis_store_client_key().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_KEY");
+    let dragonfly_pool: Arc<DragonflyPool> =
+        init_dragonfly_redis_store(ca_cert_bytes, client_cert_bytes, client_key_bytes)
+            .await
+            .expect("failed to initalize DragonflyPool");
+    dragonfly_pool
+}
+
 
 #[cfg(not(feature = "local-bin"))]
 async fn init_milvus_client(app_config: &AppConfig) -> Option<MilvusClient> {

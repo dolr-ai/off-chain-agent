@@ -17,6 +17,7 @@ pub const REDIS_SENTINEL_PORT: u16 = 26379;
 pub const SENTINEL_SERVICE_NAME: &str = "mymaster";
 
 pub const TEST_KEY_PREFIX: &str = "test";
+pub const YRAL_AUTH_REDIS_KEY_PREFIX: &str = "yral_auth";
 
 const SENTINEL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
 
