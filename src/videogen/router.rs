@@ -20,6 +20,8 @@ pub fn videogen_router_v2<S>(state: Arc<AppState>) -> OpenApiRouter<S> {
         .routes(routes!(handlers_v2::get_providers))
         .routes(routes!(handlers_v2::get_providers_all))
         .routes(routes!(handlers_v2::generate_video_with_identity_v2))
+        .routes(routes!(handlers_v2::get_in_progress_videos))
+        .routes(routes!(handlers_v2::get_all_video_status))
         .with_state(state)
 }
 
