@@ -114,6 +114,10 @@ impl AppState {
         let leaderboard_redis_pool = init_leaderboard_redis_pool().await;
         let agent = init_agent().await;
 
+        //Initialize central redis data store for auth, metadata and rewards/impressions.
+        #[cfg(not(feature = "local-bin"))]
+        let dragonfly_redis_store = init_dragonfly_redis_store_pool().await;
+
         // Initialize Dragonfly cluster 2 for rewards/impressions
         #[cfg(not(feature = "local-bin"))]
         let rewards_dragonfly_pool = init_dragonfly_redis_2()
@@ -121,7 +125,7 @@ impl AppState {
             .expect("Failed to initialize Dragonfly cluster 2 for rewards");
 
         #[cfg(not(feature = "local-bin"))]
-        let mut rewards_module = RewardsModule::new(rewards_dragonfly_pool, agent.clone()).await;
+        let mut rewards_module = RewardsModule::new(rewards_dragonfly_pool, dragonfly_redis_store.clone(), agent.clone()).await;
 
         // Initialize the rewards module (loads Lua scripts)
         #[cfg(not(feature = "local-bin"))]
@@ -143,9 +147,7 @@ impl AppState {
             log::info!("ComfyUI client initialized from environment variables");
         }
 
-        //Initialize central redis data store for auth, metadata and rewards/impressions.
-        #[cfg(not(feature = "local-bin"))]
-        let dragonfly_redis_store = init_dragonfly_redis_store_pool().await;
+        
 
         AppState {
             admin_identity: init_identity(),
@@ -175,7 +177,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             yral_auth_dragonfly: init_dragonfly_redis_pool().await,
             #[cfg(not(feature = "local-bin"))]
-            yral_redis_store_dragonfly: init_dragonfly_redis_store_pool().await,
+            yral_redis_store_dragonfly: dragonfly_redis_store,
             leaderboard_redis_pool,
             #[cfg(not(feature = "local-bin"))]
             rewards_module,

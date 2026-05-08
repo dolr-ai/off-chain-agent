@@ -13,11 +13,12 @@ use yral_canisters_client::{
 #[derive(Clone)]
 pub struct UserVerification {
     dragonfly_pool: Arc<DragonflyPool>,
+    dragonfly_redis_store: Arc<DragonflyPool>,
 }
 
 impl UserVerification {
-    pub fn new(dragonfly_pool: Arc<DragonflyPool>) -> Self {
-        Self { dragonfly_pool }
+    pub fn new(dragonfly_pool: Arc<DragonflyPool>, dragonfly_redis_store: Arc<DragonflyPool>) -> Self {
+        Self { dragonfly_pool, dragonfly_redis_store }
     }
 
     pub async fn is_registered_user(

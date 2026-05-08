@@ -22,15 +22,17 @@ pub enum FraudCheck {
 #[derive(Clone)]
 pub struct FraudDetector {
     dragonfly_pool: Arc<DragonflyPool>,
+    dragonfly_redis_store: Arc<DragonflyPool>,
     threshold: usize,
     time_window: i64,
     shadow_ban_duration: u64,
 }
 
 impl FraudDetector {
-    pub fn new(dragonfly_pool: Arc<DragonflyPool>) -> Self {
+    pub fn new(dragonfly_pool: Arc<DragonflyPool>, dragonfly_redis_store: Arc<DragonflyPool>) -> Self {
         Self {
             dragonfly_pool,
+            dragonfly_redis_store,
             threshold: DEFAULT_FRAUD_THRESHOLD,
             time_window: DEFAULT_TIME_WINDOW,
             shadow_ban_duration: DEFAULT_SHADOW_BAN_DURATION,
@@ -39,11 +41,13 @@ impl FraudDetector {
 
     pub fn with_config(
         dragonfly_pool: Arc<DragonflyPool>,
+        dragonfly_redis_store: Arc<DragonflyPool>,
         threshold: usize,
         shadow_ban_duration: u64,
     ) -> Self {
         Self {
             dragonfly_pool,
+            dragonfly_redis_store,
             threshold,
             time_window: DEFAULT_TIME_WINDOW,
             shadow_ban_duration,
@@ -241,7 +245,7 @@ mod tests {
                 .expect("Failed to build Redis pool");
 
             let test_prefix = format!("test_fraud_{}", Uuid::new_v4().to_string());
-            let detector = FraudDetector::with_config(pool, 3, 60);
+            let detector = FraudDetector::with_config(pool, pool.clone(), 3, 60);
 
             Self {
                 detector,
