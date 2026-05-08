@@ -21,7 +21,19 @@ pub async fn upload_ai_generated_video_to_canister_impl(
     user_id: Principal,
     delegated_identity: Option<yral_types::delegated_identity::DelegatedIdentityWire>,
 ) -> Result<(), Box<dyn Error>> {
-    let video_fetch_response = reqwest::get(ai_video_url).await?;
+    let mut request = reqwest::Client::new().get(ai_video_url);
+
+    // If fetching from our ComfyUI instance, we need to pass the API token for authentication
+    if let Ok(view_url) = std::env::var("COMFYUI_VIEW_URL") {
+        let view_url_base = view_url.trim_end_matches('/');
+        if ai_video_url.starts_with(view_url_base) {
+            if let Ok(token) = std::env::var("COMFYUI_API_TOKEN") {
+                request = request.bearer_auth(token);
+            }
+        }
+    }
+
+    let video_fetch_response = request.send().await?;
 
     if !video_fetch_response.status().is_success() {
         let status = video_fetch_response.status();
