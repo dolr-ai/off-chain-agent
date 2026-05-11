@@ -1,5 +1,5 @@
 use crate::{
-    app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, yral_auth::dragonfly::{self, DragonflyPool},
+    app_state::AppState, consts::USER_INFO_SERVICE_CANISTER_ID, yral_auth::dragonfly::DragonflyPool,
 };
 use anyhow::Result;
 use candid::Principal;
