@@ -1,4 +1,3 @@
-use candid::Principal;
 use futures::StreamExt;
 use redis::aio::MultiplexedConnection;
 use redis::sentinel::SentinelClient;
@@ -255,7 +254,8 @@ impl DragonflyPool {
     pub async fn delete_principal(&self, principal: String) -> Result<(), RedisError> {
         let result: () = self
             .execute_with_retry(|mut conn| {
-                async move { conn.del::<String, ()>(principal).await }
+                let key = principal.clone();
+                async move { conn.del::<String, ()>(key).await }
             })
             .await?;
 
