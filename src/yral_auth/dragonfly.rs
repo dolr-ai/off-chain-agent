@@ -78,22 +78,24 @@ pub fn get_client_key_pem_2() -> Result<Vec<u8>, anyhow::Error> {
 
 pub fn get_redis_store_ca_cert() -> Result<Vec<u8>, anyhow::Error> {
     Ok(normalize_pem(
-        std::env::var("DRAGONFLY_REDIS_STORE_CA_CERT").expect("DRAGONFLY_REDIS_STORE_CA_CERT env var not set"),
+        std::env::var("DRAGONFLY_REDIS_STORE_CA_CERT")
+            .expect("DRAGONFLY_REDIS_STORE_CA_CERT env var not set"),
     ))
 }
 
 pub fn get_redis_store_client_cert() -> Result<Vec<u8>, anyhow::Error> {
     Ok(normalize_pem(
-        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_CERT").expect("DRAGONFLY_REDIS_STORE_CLIENT_CERT env var not set"),
+        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_CERT")
+            .expect("DRAGONFLY_REDIS_STORE_CLIENT_CERT env var not set"),
     ))
 }
 
 pub fn get_redis_store_client_key() -> Result<Vec<u8>, anyhow::Error> {
     Ok(normalize_pem(
-        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_KEY").expect("DRAGONFLY_REDIS_STORE_CLIENT_KEY env var not set"),
+        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_KEY")
+            .expect("DRAGONFLY_REDIS_STORE_CLIENT_KEY env var not set"),
     ))
 }
-
 
 fn build_tls_certs(
     ca_cert_bytes: Vec<u8>,
@@ -541,9 +543,11 @@ pub async fn init_dragonfly_redis(
 }
 
 /// Initialize common draonfly connection pool
-pub async fn init_dragonfly_redis_store(ca_cert_bytes: Vec<u8>,
+pub async fn init_dragonfly_redis_store(
+    ca_cert_bytes: Vec<u8>,
     client_cert_bytes: Vec<u8>,
-    client_key_bytes: Vec<u8>,) -> Result<Arc<DragonflyPool>, anyhow::Error> {
+    client_key_bytes: Vec<u8>,
+) -> Result<Arc<DragonflyPool>, anyhow::Error> {
     rustls::crypto::ring::default_provider()
         .install_default()
         .ok();

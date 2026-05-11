@@ -11,7 +11,9 @@ use crate::types::RedisPool;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
-    DragonflyPool, get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, get_redis_store_ca_cert, init_dragonfly_redis, init_dragonfly_redis_2, init_dragonfly_redis_store,get_redis_store_client_cert, get_redis_store_client_key
+    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, get_redis_store_ca_cert,
+    get_redis_store_client_cert, get_redis_store_client_key, init_dragonfly_redis,
+    init_dragonfly_redis_2, init_dragonfly_redis_store, DragonflyPool,
 };
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -125,7 +127,12 @@ impl AppState {
             .expect("Failed to initialize Dragonfly cluster 2 for rewards");
 
         #[cfg(not(feature = "local-bin"))]
-        let mut rewards_module = RewardsModule::new(rewards_dragonfly_pool, dragonfly_redis_store.clone(), agent.clone()).await;
+        let mut rewards_module = RewardsModule::new(
+            rewards_dragonfly_pool,
+            dragonfly_redis_store.clone(),
+            agent.clone(),
+        )
+        .await;
 
         // Initialize the rewards module (loads Lua scripts)
         #[cfg(not(feature = "local-bin"))]
@@ -146,8 +153,6 @@ impl AppState {
         if comfyui_client.is_some() {
             log::info!("ComfyUI client initialized from environment variables");
         }
-
-        
 
         AppState {
             admin_identity: init_identity(),
@@ -480,17 +485,19 @@ async fn init_dragonfly_redis_pool() -> Arc<DragonflyPool> {
 }
 
 async fn init_dragonfly_redis_store_pool() -> Arc<DragonflyPool> {
-    let ca_cert_bytes = get_redis_store_ca_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CA_CERT");
-    let client_cert_bytes = get_redis_store_client_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_CERT");
-    let client_key_bytes = get_redis_store_client_key().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_KEY");
-    
+    let ca_cert_bytes =
+        get_redis_store_ca_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CA_CERT");
+    let client_cert_bytes =
+        get_redis_store_client_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_CERT");
+    let client_key_bytes =
+        get_redis_store_client_key().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_KEY");
+
     let dragonfly_pool: Arc<DragonflyPool> =
         init_dragonfly_redis_store(ca_cert_bytes, client_cert_bytes, client_key_bytes)
             .await
             .expect("failed to initalize DragonflyPool");
     dragonfly_pool
 }
-
 
 #[cfg(not(feature = "local-bin"))]
 async fn init_milvus_client(app_config: &AppConfig) -> Option<MilvusClient> {

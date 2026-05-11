@@ -34,8 +34,14 @@ pub struct HistoryTracker {
 }
 
 impl HistoryTracker {
-    pub fn new(dragonfly_pool: Arc<DragonflyPool>, dragonfly_redis_store: Arc<DragonflyPool>) -> Self {
-        Self { dragonfly_pool, dragonfly_redis_store }
+    pub fn new(
+        dragonfly_pool: Arc<DragonflyPool>,
+        dragonfly_redis_store: Arc<DragonflyPool>,
+    ) -> Self {
+        Self {
+            dragonfly_pool,
+            dragonfly_redis_store,
+        }
     }
 
     /// Record a view in history (non-atomic, best effort)
@@ -71,7 +77,7 @@ impl HistoryTracker {
                     }
                 })
                 .await;
-            
+
             let _ = dragonfly_redis_store
                 .execute_with_retry(|mut conn| {
                     let key = video_key.clone();

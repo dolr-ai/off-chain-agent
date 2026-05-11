@@ -33,11 +33,18 @@ pub struct RewardEngine {
 }
 
 impl RewardEngine {
-    pub fn new(dragonfly_pool: Arc<DragonflyPool>, dragonfly_redis_store: Arc<DragonflyPool>, admin_agent: ic_agent::Agent) -> Self {
+    pub fn new(
+        dragonfly_pool: Arc<DragonflyPool>,
+        dragonfly_redis_store: Arc<DragonflyPool>,
+        admin_agent: ic_agent::Agent,
+    ) -> Self {
         let view_tracker = ViewTracker::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
-        let user_verification = UserVerification::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
-        let history_tracker = HistoryTracker::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
-        let fraud_detector = FraudDetector::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
+        let user_verification =
+            UserVerification::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
+        let history_tracker =
+            HistoryTracker::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
+        let fraud_detector =
+            FraudDetector::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
         let btc_converter = BtcConverter::new();
         let wallet = WalletIntegration::new(admin_agent);
         Self {
@@ -59,8 +66,10 @@ impl RewardEngine {
         config: RewardConfig,
     ) -> Self {
         let view_tracker = ViewTracker::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
-        let user_verification = UserVerification::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
-        let history_tracker = HistoryTracker::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
+        let user_verification =
+            UserVerification::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
+        let history_tracker =
+            HistoryTracker::new(dragonfly_pool.clone(), dragonfly_redis_store.clone());
         let fraud_detector = FraudDetector::with_config(
             dragonfly_pool.clone(),
             dragonfly_redis_store.clone(),
@@ -74,7 +83,9 @@ impl RewardEngine {
             let dragonfly_pool = dragonfly_pool.clone();
             let dragonfly_redis_store = dragonfly_redis_store.clone();
             async move {
-                if let Err(e) = update_config_fn(&dragonfly_pool, &dragonfly_redis_store, config).await {
+                if let Err(e) =
+                    update_config_fn(&dragonfly_pool, &dragonfly_redis_store, config).await
+                {
                     log::error!("Failed to initialize config in Dragonfly: {}", e);
                 }
             }
@@ -617,15 +628,22 @@ impl RewardEngine {
 
     /// Get current configuration
     pub async fn get_config(&self) -> RewardConfig {
-        get_config(&self.dragonfly_pool, &self.dragonfly_redis_store).await.unwrap_or_else(|e| {
-            log::error!("Failed to get config: {}", e);
-            RewardConfig::default()
-        })
+        get_config(&self.dragonfly_pool, &self.dragonfly_redis_store)
+            .await
+            .unwrap_or_else(|e| {
+                log::error!("Failed to get config: {}", e);
+                RewardConfig::default()
+            })
     }
 
     /// Update configuration
     pub async fn update_config(&self, new_config: RewardConfig) -> Result<()> {
-        update_config_fn(&self.dragonfly_pool, &self.dragonfly_redis_store, new_config).await?;
+        update_config_fn(
+            &self.dragonfly_pool,
+            &self.dragonfly_redis_store,
+            new_config,
+        )
+        .await?;
         log::info!("Reward configuration updated");
         Ok(())
     }

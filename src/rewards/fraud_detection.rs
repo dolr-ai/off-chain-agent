@@ -29,7 +29,10 @@ pub struct FraudDetector {
 }
 
 impl FraudDetector {
-    pub fn new(dragonfly_pool: Arc<DragonflyPool>, dragonfly_redis_store: Arc<DragonflyPool>) -> Self {
+    pub fn new(
+        dragonfly_pool: Arc<DragonflyPool>,
+        dragonfly_redis_store: Arc<DragonflyPool>,
+    ) -> Self {
         Self {
             dragonfly_pool,
             dragonfly_redis_store,
@@ -144,7 +147,11 @@ impl FraudDetector {
                             })
                             .await
                     {
-                        log::error!("Failed to shadow ban creator {}: {} in redis store", creator_id_str, e);
+                        log::error!(
+                            "Failed to shadow ban creator {}: {} in redis store",
+                            creator_id_str,
+                            e
+                        );
                     }
 
                     log::warn!(
