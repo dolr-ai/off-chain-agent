@@ -1,4 +1,4 @@
-use crate::yral_auth::dragonfly::{self, DragonflyPool};
+use crate::yral_auth::dragonfly::DragonflyPool;
 use anyhow::{Context, Result};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};

@@ -21,7 +21,7 @@ use crate::{
     consts::{USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID},
     posts::{delete_post::bulk_insert_video_delete_rows_v2, types::UserPostV2},
 };
-use crate::yral_auth::dragonfly::YRAL_AUTH_REDIS_KEY_PREFIX;
+use crate::yral_auth::dragonfly::{YRAL_AUTH_REDIS_KEY_PREFIX, format_to_dragonfly_key};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -66,12 +66,12 @@ pub async fn delete_canister_data(
         let dragonfly_redis_store = &state.yral_redis_store_dragonfly;
         let principal_text = user_principal.to_text();
 
-        dragonfly.delete_principal(user_principal).await?;
-        dragonfly_redis_store.delete_principal(format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, user_principal)).await?;
+        dragonfly.delete_principal(principal_text.clone()).await?;
+        dragonfly_redis_store.delete_principal(format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &principal_text)).await?;
 
         // First try the reverse lookup in Redis
         let reverse_key = format!("ai-account:{principal_text}");
-        let formatted_reverse_key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, reverse_key.clone());
+        let formatted_reverse_key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &reverse_key);
 
         let bot_owner: Option<String> = dragonfly
             .execute_with_retry(|mut conn| {
@@ -82,7 +82,7 @@ pub async fn delete_canister_data(
         
         let _bot_owner: Option<String> = dragonfly_redis_store
             .execute_with_retry(|mut conn| {
-                let key = reverse_key.clone();
+                let key = formatted_reverse_key.clone();
                 async move { conn.hget::<_, _, Option<String>>(key, "auth").await }
             })
             .await?;
@@ -175,7 +175,7 @@ pub async fn delete_canister_data(
 
                         let _: () = dragonfly_redis_store
                             .execute_with_retry(|mut conn| {
-                                let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, slot_key.clone());
+                                let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &slot_key);
                                 async move { conn.del(key).await }
                             })
                             .await?;
@@ -193,7 +193,7 @@ pub async fn delete_canister_data(
 
                 let _: () = dragonfly_redis_store
                     .execute_with_retry(|mut conn| {
-                        let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, reverse_key.clone());
+                        let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &reverse_key);
                         async move { conn.del(key).await }
                     })
                     .await?;
@@ -221,7 +221,7 @@ pub async fn delete_canister_data(
 
                             let _: () = dragonfly_redis_store
                                 .execute_with_retry(|mut conn| {
-                                    let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, bot_reverse_key.clone());
+                                    let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &bot_reverse_key);
                                     async move { conn.del(key).await }
                                 })
                                 .await?;
@@ -238,7 +238,7 @@ pub async fn delete_canister_data(
 
                     let _: () = dragonfly_redis_store
                         .execute_with_retry(|mut conn| {
-                            let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, slot_key.clone());
+                            let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &slot_key);
                             async move { conn.del(key).await }
                         })
                         .await?;

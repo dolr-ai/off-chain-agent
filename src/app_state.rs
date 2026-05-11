@@ -11,7 +11,7 @@ use crate::types::RedisPool;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
-    DragonflyPool, get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, get_redis_store_ca_cert, init_dragonfly_redis, init_dragonfly_redis_2
+    DragonflyPool, get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, get_redis_store_ca_cert, init_dragonfly_redis, init_dragonfly_redis_2, init_dragonfly_redis_store,get_redis_store_client_cert, get_redis_store_client_key
 };
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -483,6 +483,7 @@ async fn init_dragonfly_redis_store_pool() -> Arc<DragonflyPool> {
     let ca_cert_bytes = get_redis_store_ca_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CA_CERT");
     let client_cert_bytes = get_redis_store_client_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_CERT");
     let client_key_bytes = get_redis_store_client_key().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_KEY");
+    
     let dragonfly_pool: Arc<DragonflyPool> =
         init_dragonfly_redis_store(ca_cert_bytes, client_cert_bytes, client_key_bytes)
             .await

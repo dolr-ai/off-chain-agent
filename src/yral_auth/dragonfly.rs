@@ -252,11 +252,10 @@ impl DragonflyPool {
     }
 
     // can be only use with cluster 1 (auth) since it do not have key prefix
-    pub async fn delete_principal(&self, principal: Principal) -> Result<(), RedisError> {
+    pub async fn delete_principal(&self, principal: String) -> Result<(), RedisError> {
         let result: () = self
             .execute_with_retry(|mut conn| {
-                let key = principal.to_string();
-                async move { conn.del::<String, ()>(key).await }
+                async move { conn.del::<String, ()>(principal).await }
             })
             .await?;
 
@@ -542,15 +541,12 @@ pub async fn init_dragonfly_redis(
 }
 
 /// Initialize common draonfly connection pool
-pub async fn init_dragonfly_redis_store() -> Result<Arc<DragonflyPool>, anyhow::Error> {
+pub async fn init_dragonfly_redis_store(ca_cert_bytes: Vec<u8>,
+    client_cert_bytes: Vec<u8>,
+    client_key_bytes: Vec<u8>,) -> Result<Arc<DragonflyPool>, anyhow::Error> {
     rustls::crypto::ring::default_provider()
         .install_default()
         .ok();
-
-    let ca_cert_bytes = get_redis_store_ca_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CA_CERT");
-    let client_cert_bytes =
-        get_redis_store_client_cert().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_CERT");
-    let client_key_bytes = get_redis_store_client_key().expect("Failed to read DRAGONFLY_REDIS_STORE_CLIENT_KEY");
 
     let tls_certs = build_tls_certs(ca_cert_bytes, client_cert_bytes, client_key_bytes);
 
