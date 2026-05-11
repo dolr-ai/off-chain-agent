@@ -60,6 +60,7 @@ impl FraudDetector {
         let current_timestamp = Utc::now().timestamp();
 
         let dragonfly_pool = self.dragonfly_pool.clone();
+        let dragonfly_redis_store = self.dragonfly_redis_store.clone();
         let threshold = self.threshold;
         let time_window = self.time_window;
         let shadow_ban_duration = self.shadow_ban_duration;
@@ -70,6 +71,17 @@ impl FraudDetector {
             // Add current timestamp and trim list
             let key_clone = key.clone();
             let add_result = dragonfly_pool
+                .execute_with_retry(|mut conn| {
+                    let k = key_clone.clone();
+                    async move {
+                        conn.lpush::<_, _, ()>(&k, current_timestamp).await?;
+                        conn.ltrim::<_, ()>(&k, 0, 100).await?; // Keep last 100 rewards
+                        conn.expire::<_, ()>(&k, 3600).await // 1 hour TTL
+                    }
+                })
+                .await;
+
+            let _add_result = dragonfly_redis_store
                 .execute_with_retry(|mut conn| {
                     let k = key_clone.clone();
                     async move {
@@ -120,6 +132,19 @@ impl FraudDetector {
                             .await
                     {
                         log::error!("Failed to shadow ban creator {}: {}", creator_id_str, e);
+                    }
+
+                    if let Err(e) =
+                        dragonfly_redis_store
+                            .execute_with_retry(|mut conn| {
+                                let k = ban_key_clone.clone();
+                                async move {
+                                    conn.set_ex::<_, _, ()>(&k, "1", shadow_ban_duration).await
+                                }
+                            })
+                            .await
+                    {
+                        log::error!("Failed to shadow ban creator {}: {} in redis store", creator_id_str, e);
                     }
 
                     log::warn!(
