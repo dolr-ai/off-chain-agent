@@ -30,11 +30,18 @@ pub struct RewardRecord {
 #[derive(Clone)]
 pub struct HistoryTracker {
     dragonfly_pool: Arc<DragonflyPool>,
+    dragonfly_redis_store: Arc<DragonflyPool>,
 }
 
 impl HistoryTracker {
-    pub fn new(dragonfly_pool: Arc<DragonflyPool>) -> Self {
-        Self { dragonfly_pool }
+    pub fn new(
+        dragonfly_pool: Arc<DragonflyPool>,
+        dragonfly_redis_store: Arc<DragonflyPool>,
+    ) -> Self {
+        Self {
+            dragonfly_pool,
+            dragonfly_redis_store,
+        }
     }
 
     /// Record a view in history (non-atomic, best effort)
@@ -44,6 +51,7 @@ impl HistoryTracker {
         let user_history_key = format!("impressions:rewards:user:{}:view_history", record.user_id);
 
         let dragonfly_pool = self.dragonfly_pool.clone();
+        let dragonfly_redis_store = self.dragonfly_redis_store.clone();
         let record_clone = record.clone();
 
         // Fire and forget - don't block on history storage
@@ -60,6 +68,17 @@ impl HistoryTracker {
             let video_key = video_history_key.clone();
             let video_json_clone = video_json.clone();
             let _ = dragonfly_pool
+                .execute_with_retry(|mut conn| {
+                    let key = video_key.clone();
+                    let json = video_json_clone.clone();
+                    async move {
+                        conn.lpush::<_, _, ()>(&key, &json).await?;
+                        conn.ltrim::<_, ()>(&key, 0, 9999).await // Keep last 10k
+                    }
+                })
+                .await;
+
+            let _ = dragonfly_redis_store
                 .execute_with_retry(|mut conn| {
                     let key = video_key.clone();
                     let json = video_json_clone.clone();
@@ -93,6 +112,18 @@ impl HistoryTracker {
                 })
                 .await;
 
+            let _ = dragonfly_redis_store
+                .execute_with_retry(|mut conn| {
+                    let key = user_key_clone.clone();
+                    let json = user_json_clone.clone();
+                    async move {
+                        conn.lpush::<_, _, ()>(&key, &json).await?;
+                        conn.ltrim::<_, ()>(&key, 0, 999).await?; // Keep last 1k per user
+                        conn.expire::<_, ()>(&key, 7776000).await // 90 days TTL
+                    }
+                })
+                .await;
+
             log::debug!(
                 "Recorded view history for video {} by user {}",
                 record_clone.video_id,
@@ -111,6 +142,7 @@ impl HistoryTracker {
         );
 
         let dragonfly_pool = self.dragonfly_pool.clone();
+        let dragonfly_redis_store = self.dragonfly_redis_store.clone();
         let json = match serde_json::to_string(&record) {
             Ok(j) => j,
             Err(e) => {
@@ -140,6 +172,20 @@ impl HistoryTracker {
                 })
                 .await;
 
+            let _ = dragonfly_redis_store
+                .execute_with_retry(|mut conn| {
+                    let u_key = user_key_clone.clone();
+                    let c_key = creator_key_clone.clone();
+                    let j = json_clone.clone();
+                    async move {
+                        conn.lpush::<_, _, ()>(&u_key, &j).await?;
+                        conn.lpush::<_, _, ()>(&c_key, &j).await?;
+                        conn.ltrim::<_, ()>(&u_key, 0, 999).await?; // Keep last 1k
+                        conn.ltrim::<_, ()>(&c_key, 0, 9999).await // Keep last 10k for creators
+                    }
+                })
+                .await;
+
             log::debug!("Recorded reward history for creator {}", creator_id_clone);
         });
     }
@@ -156,6 +202,15 @@ impl HistoryTracker {
                 async move { conn.lrange(&k, 0, lim - 1).await }
             })
             .await?;
+
+        // let _history: Vec<String> = self
+        //     .dragonfly_redis_store
+        //     .execute_with_retry(|mut conn| {
+        //         let k = key.clone();
+        //         let lim = limit as isize;
+        //         async move { conn.lrange(&k, 0, lim - 1).await }
+        //     })
+        //     .await?;
 
         let mut records = Vec::new();
         for item in history {

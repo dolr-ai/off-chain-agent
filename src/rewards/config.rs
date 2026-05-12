@@ -82,7 +82,10 @@ impl Default for RewardConfig {
 }
 
 /// Get the current reward configuration from Dragonfly
-pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardConfig> {
+pub async fn get_config(
+    dragonfly_pool: &Arc<DragonflyPool>,
+    dragonfly_redis_store_pool: &Arc<DragonflyPool>,
+) -> Result<RewardConfig> {
     let config_key = "impressions:rewards:config".to_string();
 
     let config_str: Option<String> = dragonfly_pool
@@ -116,6 +119,15 @@ pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardCon
                         .await
                         .context("Failed to persist migrated V2 config")?;
 
+                    dragonfly_redis_store_pool
+                        .execute_with_retry(|mut conn| {
+                            let key = config_key.clone();
+                            let json = v2_json.clone();
+                            async move { conn.set::<_, _, ()>(&key, json).await }
+                        })
+                        .await
+                        .context("Failed to persist migrated V2 config")?;
+
                     v2_config
                 }
             };
@@ -125,7 +137,7 @@ pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardCon
         None => {
             // If no config exists, initialize with default
             let default_config = RewardConfig::default();
-            initialize_config(dragonfly_pool, &default_config).await?;
+            initialize_config(dragonfly_pool, dragonfly_redis_store_pool, &default_config).await?;
             Ok(default_config)
         }
     }
@@ -134,6 +146,7 @@ pub async fn get_config(dragonfly_pool: &Arc<DragonflyPool>) -> Result<RewardCon
 /// Update the reward configuration in Dragonfly
 pub async fn update_config(
     dragonfly_pool: &Arc<DragonflyPool>,
+    dragonfly_redis_store_pool: &Arc<DragonflyPool>,
     new_config: RewardConfig,
 ) -> Result<()> {
     let config_version_key = "impressions:rewards:config:version".to_string();
@@ -148,6 +161,14 @@ pub async fn update_config(
         .await
         .context("Failed to increment config version")?;
 
+    let _version: u64 = dragonfly_redis_store_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_version_key.clone();
+            async move { conn.incr(&key, 1).await }
+        })
+        .await
+        .context("Failed to increment config version")?;
+
     // Update config with new version
     let mut config = new_config;
     config.config_version = version;
@@ -155,6 +176,15 @@ pub async fn update_config(
     let config_json = serde_json::to_string(&config)?;
 
     dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_key.clone();
+            let json = config_json.clone();
+            async move { conn.set::<_, _, ()>(&key, json).await }
+        })
+        .await
+        .context("Failed to store config in Dragonfly")?;
+
+    dragonfly_redis_store_pool
         .execute_with_retry(|mut conn| {
             let key = config_key.clone();
             let json = config_json.clone();
@@ -186,6 +216,7 @@ pub async fn get_config_version(dragonfly_pool: &Arc<DragonflyPool>) -> Result<u
 /// Initialize config in Dragonfly if it doesn't exist
 async fn initialize_config(
     dragonfly_pool: &Arc<DragonflyPool>,
+    dragonfly_redis_store_pool: &Arc<DragonflyPool>,
     config: &RewardConfig,
 ) -> Result<()> {
     let config_version_key = "impressions:rewards:config:version".to_string();
@@ -194,6 +225,14 @@ async fn initialize_config(
 
     // Set initial version if not exists
     let _: bool = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_version_key.clone();
+            async move { conn.set_nx(&key, version).await }
+        })
+        .await
+        .context("Failed to initialize config version")?;
+
+    let _: bool = dragonfly_redis_store_pool
         .execute_with_retry(|mut conn| {
             let key = config_version_key.clone();
             async move { conn.set_nx(&key, version).await }
@@ -212,6 +251,15 @@ async fn initialize_config(
         .await
         .context("Failed to initialize config")?;
 
+    let _: bool = dragonfly_redis_store_pool
+        .execute_with_retry(|mut conn| {
+            let key = config_key.clone();
+            let json = config_json.clone();
+            async move { conn.set_nx(&key, json).await }
+        })
+        .await
+        .context("Failed to initialize config")?;
+
     log::info!("Initialized reward config with defaults: {:?}", config);
     Ok(())
 }
@@ -222,6 +270,7 @@ mod tests {
 
     struct TestConfig {
         redis_pool: RedisPool,
+        redis_pool_2: RedisPool,
         cleanup_keys: Vec<String>,
     }
 
@@ -237,8 +286,16 @@ mod tests {
                 .await
                 .expect("Failed to build Redis pool");
 
+            let manager_2 = bb8_redis::RedisConnectionManager::new(redis_url)
+                .expect("Failed to create Redis connection manager");
+            let pool_2 = bb8::Pool::builder()
+                .build(manager_2)
+                .await
+                .expect("Failed to build Redis pool");
+
             Self {
                 redis_pool: pool,
+                redis_pool_2: pool_2,
                 cleanup_keys: vec![
                     "impressions:rewards:config".to_string(),
                     "impressions:rewards:config:version".to_string(),
@@ -279,7 +336,9 @@ mod tests {
         test_config.cleanup().await.unwrap();
 
         // First get should initialize with defaults
-        let config = get_config(&test_config.redis_pool).await.unwrap();
+        let config = get_config(&test_config.redis_pool, &test_config.redis_pool_2)
+            .await
+            .unwrap();
         assert!(matches!(config.reward_mode, RewardMode::InrAmount { .. }));
         assert_eq!(config.view_milestone, 100);
         assert_eq!(config.config_version, 1);
@@ -310,12 +369,18 @@ mod tests {
             reward_token: RewardTokenType::default(),
         };
 
-        update_config(&test_config.redis_pool, new_config)
-            .await
-            .unwrap();
+        update_config(
+            &test_config.redis_pool,
+            &test_config.redis_pool_2,
+            new_config,
+        )
+        .await
+        .unwrap();
 
         // Verify the config was updated
-        let retrieved_config = get_config(&test_config.redis_pool).await.unwrap();
+        let retrieved_config = get_config(&test_config.redis_pool, &test_config.redis_pool_2)
+            .await
+            .unwrap();
         assert!(matches!(
             retrieved_config.reward_mode,
             RewardMode::InrAmount {
@@ -342,7 +407,9 @@ mod tests {
         test_config.cleanup().await.unwrap();
 
         // Initialize
-        let _ = get_config(&test_config.redis_pool).await.unwrap();
+        let _ = get_config(&test_config.redis_pool, &test_config.redis_pool_2)
+            .await
+            .unwrap();
         let initial_version = get_config_version(&test_config.redis_pool).await.unwrap();
 
         // Update config multiple times
@@ -353,7 +420,7 @@ mod tests {
                 },
                 ..Default::default()
             };
-            update_config(&test_config.redis_pool, config)
+            update_config(&test_config.redis_pool, &test_config.redis_pool_2, config)
                 .await
                 .unwrap();
         }
@@ -384,11 +451,17 @@ mod tests {
             reward_token: RewardTokenType::default(),
         };
 
-        update_config(&test_config.redis_pool, config.clone())
+        update_config(
+            &test_config.redis_pool,
+            &test_config.redis_pool_2,
+            config.clone(),
+        )
+        .await
+        .unwrap();
+
+        let retrieved = get_config(&test_config.redis_pool, &test_config.redis_pool_2)
             .await
             .unwrap();
-
-        let retrieved = get_config(&test_config.redis_pool).await.unwrap();
         assert_eq!(retrieved.reward_mode, config.reward_mode);
         assert_eq!(retrieved.view_milestone, config.view_milestone);
         assert_eq!(retrieved.min_watch_duration, config.min_watch_duration);
@@ -406,7 +479,9 @@ mod tests {
         test_config.cleanup().await.unwrap();
 
         // Initialize
-        let _ = get_config(&test_config.redis_pool).await.unwrap();
+        let _ = get_config(&test_config.redis_pool, &test_config.redis_pool_2)
+            .await
+            .unwrap();
         let initial_version = get_config_version(&test_config.redis_pool).await.unwrap();
 
         // Spawn multiple concurrent update tasks
@@ -420,7 +495,7 @@ mod tests {
                     },
                     ..Default::default()
                 };
-                update_config(&pool, config).await
+                update_config(&pool, &test_config.redis_pool_2, config).await
             });
             handles.push(handle);
         }
@@ -461,7 +536,9 @@ mod tests {
             .unwrap();
 
         // First read should trigger migration and persist V2
-        let config = get_config(&test_config.redis_pool).await.unwrap();
+        let config = get_config(&test_config.redis_pool, &test_config.redis_pool_2)
+            .await
+            .unwrap();
 
         assert!(matches!(
             config.reward_mode,
@@ -503,11 +580,17 @@ mod tests {
             reward_token: RewardTokenType::Btc,
         };
 
-        update_config(&test_config.redis_pool, config.clone())
+        update_config(
+            &test_config.redis_pool,
+            &test_config.redis_pool_2,
+            config.clone(),
+        )
+        .await
+        .unwrap();
+
+        let retrieved = get_config(&test_config.redis_pool, &test_config.redis_pool_2)
             .await
             .unwrap();
-
-        let retrieved = get_config(&test_config.redis_pool).await.unwrap();
         assert!(matches!(
             retrieved.reward_mode,
             RewardMode::InrAmount {
@@ -537,11 +620,17 @@ mod tests {
             reward_token: RewardTokenType::Dolr,
         };
 
-        update_config(&test_config.redis_pool, config.clone())
+        update_config(
+            &test_config.redis_pool,
+            &test_config.redis_pool_2,
+            config.clone(),
+        )
+        .await
+        .unwrap();
+
+        let retrieved = get_config(&test_config.redis_pool, &test_config.redis_pool_2)
             .await
             .unwrap();
-
-        let retrieved = get_config(&test_config.redis_pool).await.unwrap();
         assert!(matches!(
             retrieved.reward_mode,
             RewardMode::DirectTokenE8s {

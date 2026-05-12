@@ -13,11 +13,18 @@ use yral_canisters_client::{
 #[derive(Clone)]
 pub struct UserVerification {
     dragonfly_pool: Arc<DragonflyPool>,
+    dragonfly_redis_store: Arc<DragonflyPool>,
 }
 
 impl UserVerification {
-    pub fn new(dragonfly_pool: Arc<DragonflyPool>) -> Self {
-        Self { dragonfly_pool }
+    pub fn new(
+        dragonfly_pool: Arc<DragonflyPool>,
+        dragonfly_redis_store: Arc<DragonflyPool>,
+    ) -> Self {
+        Self {
+            dragonfly_pool,
+            dragonfly_redis_store,
+        }
     }
 
     pub async fn is_registered_user(
@@ -46,6 +53,7 @@ impl UserVerification {
         // Cache the result (fire and forget)
         let cache_key_clone = cache_key.clone();
         let dragonfly_pool = self.dragonfly_pool.clone();
+        let dragonfly_redis_store = self.dragonfly_redis_store.clone();
         let principal_text = principal.to_text();
         tokio::spawn(async move {
             let value = if is_registered { "true" } else { "false" };
@@ -68,6 +76,21 @@ impl UserVerification {
             {
                 log::error!(
                     "Failed to cache user registration status for {}: {}",
+                    principal_text,
+                    e
+                );
+            }
+
+            if let Err(e) = dragonfly_redis_store
+                .execute_with_retry(|mut conn| {
+                    let key = cache_key_clone.clone();
+                    let val = value_str.clone();
+                    async move { conn.set_ex::<_, _, ()>(&key, val, 60).await }
+                })
+                .await
+            {
+                log::error!(
+                    "Failed to cache user registration status for {}: {} in redis store",
                     principal_text,
                     e
                 );
