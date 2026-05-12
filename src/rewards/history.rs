@@ -203,14 +203,14 @@ impl HistoryTracker {
             })
             .await?;
 
-        let _history: Vec<String> = self
-            .dragonfly_redis_store
-            .execute_with_retry(|mut conn| {
-                let k = key.clone();
-                let lim = limit as isize;
-                async move { conn.lrange(&k, 0, lim - 1).await }
-            })
-            .await?;
+        // let _history: Vec<String> = self
+        //     .dragonfly_redis_store
+        //     .execute_with_retry(|mut conn| {
+        //         let k = key.clone();
+        //         let lim = limit as isize;
+        //         async move { conn.lrange(&k, 0, lim - 1).await }
+        //     })
+        //     .await?;
 
         let mut records = Vec::new();
         for item in history {
