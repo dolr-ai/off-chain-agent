@@ -191,3 +191,165 @@ fn validate_delegated_identity_v2(
     log::info!("Identity verified for user {user_principal} (V2 API)");
     Ok(user_principal)
 }
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct InProgressVideoItem {
+    pub counter: u64,
+    pub model_name: String,
+    pub prompt: String,
+    pub created_at: u64,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct InProgressVideoResponse {
+    pub videos: Vec<InProgressVideoItem>,
+}
+
+/// Get in-progress video generations for a given principal
+#[utoipa::path(
+    get,
+    path = "/in-progress/{principal}",
+    params(
+        ("principal" = String, Path, description = "User Principal ID")
+    ),
+    responses(
+        (status = 200, description = "List of in-progress videos", body = InProgressVideoResponse),
+        (status = 400, description = "Invalid principal", body = VideoGenError),
+        (status = 502, description = "Canister error", body = VideoGenError),
+    ),
+    tag = "VideoGen V2"
+)]
+#[debug_handler]
+pub async fn get_in_progress_videos(
+    State(app_state): State<Arc<AppState>>,
+    axum::extract::Path(principal): axum::extract::Path<String>,
+) -> Result<Json<InProgressVideoResponse>, (StatusCode, Json<VideoGenError>)> {
+    use crate::consts::RATE_LIMITS_CANISTER_ID;
+    use std::str::FromStr;
+    use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequestStatus};
+
+    let user_principal = candid::Principal::from_str(&principal).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(VideoGenError::InvalidInput(format!(
+                "Invalid principal: {e}"
+            ))),
+        )
+    })?;
+
+    let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
+
+    let requests = rate_limits_client
+        .get_user_video_generation_requests(user_principal, None, None)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(VideoGenError::NetworkError(format!(
+                    "Failed to fetch video generation requests: {e}"
+                ))),
+            )
+        })?;
+
+    let in_progress_videos = requests
+        .into_iter()
+        .filter(|(_, req)| {
+            matches!(
+                req.status,
+                VideoGenRequestStatus::Pending | VideoGenRequestStatus::Processing
+            )
+        })
+        .map(|(key, req)| InProgressVideoItem {
+            counter: key.counter,
+            model_name: req.model_name,
+            prompt: req.prompt,
+            created_at: req.created_at,
+        })
+        .collect();
+
+    Ok(Json(InProgressVideoResponse {
+        videos: in_progress_videos,
+    }))
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct VideoStatusItem {
+    pub counter: u64,
+    pub model_name: String,
+    pub prompt: String,
+    pub status: String,
+    pub created_at: u64,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct AllVideoStatusResponse {
+    pub videos: Vec<VideoStatusItem>,
+}
+
+/// Get all video generation statuses for a given principal
+#[utoipa::path(
+    get,
+    path = "/status/{principal}/all",
+    params(
+        ("principal" = String, Path, description = "User Principal ID")
+    ),
+    responses(
+        (status = 200, description = "List of all video statuses", body = AllVideoStatusResponse),
+        (status = 400, description = "Invalid principal", body = VideoGenError),
+        (status = 502, description = "Canister error", body = VideoGenError),
+    ),
+    tag = "VideoGen V2"
+)]
+#[debug_handler]
+pub async fn get_all_video_status(
+    State(app_state): State<Arc<AppState>>,
+    axum::extract::Path(principal): axum::extract::Path<String>,
+) -> Result<Json<AllVideoStatusResponse>, (StatusCode, Json<VideoGenError>)> {
+    use crate::consts::RATE_LIMITS_CANISTER_ID;
+    use std::str::FromStr;
+    use yral_canisters_client::rate_limits::{RateLimits, VideoGenRequestStatus};
+
+    let user_principal = candid::Principal::from_str(&principal).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(VideoGenError::InvalidInput(format!(
+                "Invalid principal: {e}"
+            ))),
+        )
+    })?;
+
+    let rate_limits_client = RateLimits(*RATE_LIMITS_CANISTER_ID, &app_state.agent);
+
+    let requests = rate_limits_client
+        .get_user_video_generation_requests(user_principal, None, None)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(VideoGenError::NetworkError(format!(
+                    "Failed to fetch video generation requests: {e}"
+                ))),
+            )
+        })?;
+
+    let all_videos = requests
+        .into_iter()
+        .map(|(key, req)| {
+            let status_str = match req.status {
+                VideoGenRequestStatus::Failed(reason) => format!("Failed: {}", reason),
+                VideoGenRequestStatus::Complete(url) => format!("Complete: {}", url),
+                VideoGenRequestStatus::Processing => "Processing".to_string(),
+                VideoGenRequestStatus::Pending => "Pending".to_string(),
+            };
+            VideoStatusItem {
+                counter: key.counter,
+                model_name: req.model_name,
+                prompt: req.prompt,
+                status: status_str,
+                created_at: req.created_at,
+            }
+        })
+        .collect();
+
+    Ok(Json(AllVideoStatusResponse { videos: all_videos }))
+}
