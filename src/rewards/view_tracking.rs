@@ -53,35 +53,21 @@ fn calculate_script_sha(script: &str) -> String {
 
 #[derive(Clone)]
 pub struct ViewTracker {
-    pool: Arc<DragonflyPool>,
-    redis_store: Arc<DragonflyPool>,
+    redis_store_pool: Arc<DragonflyPool>,
     script_sha: Option<String>,
 }
 
 impl ViewTracker {
-    pub fn new(pool: Arc<DragonflyPool>, redis_store: Arc<DragonflyPool>) -> Self {
+    pub fn new(redis_store_pool: Arc<DragonflyPool>) -> Self {
         Self {
-            pool,
-            redis_store,
+            redis_store_pool,
             script_sha: None,
         }
     }
 
     pub async fn load_lua_scripts(&mut self) -> Result<String> {
         let sha: String = self
-            .pool
-            .execute_with_retry(|mut conn| async move {
-                redis::cmd("SCRIPT")
-                    .arg("LOAD")
-                    .arg(LUA_ATOMIC_VIEW_SCRIPT)
-                    .query_async(&mut conn)
-                    .await
-            })
-            .await
-            .context("Failed to load Lua script")?;
-
-        let _sha: String = self
-            .redis_store
+            .redis_store_pool
             .execute_with_retry(|mut conn| async move {
                 redis::cmd("SCRIPT")
                     .arg("LOAD")
@@ -116,14 +102,7 @@ impl ViewTracker {
         // Fast path for non-logged-in: just increment total_count_all
         if !is_logged_in {
             let video_hash_key = format!("impressions:rewards:video:{}", video_id);
-            self.pool
-                .execute_with_retry(|mut conn| {
-                    let key = video_hash_key.clone();
-                    async move { conn.hincr::<_, _, _, ()>(&key, "total_count_all", 1).await }
-                })
-                .await?;
-
-            self.redis_store
+            self.redis_store_pool
                 .execute_with_retry(|mut conn| {
                     let key = video_hash_key.clone();
                     async move { conn.hincr::<_, _, _, ()>(&key, "total_count_all", 1).await }
@@ -142,61 +121,6 @@ impl ViewTracker {
 
         // Try to use the loaded script SHA, fallback to EVAL if not loaded
         let result: Option<u64> = self
-            .pool
-            .execute_with_retry(|mut conn| {
-                let views_key = views_set_key.clone();
-                let video_key = video_hash_key.clone();
-                let config_key = config_version_key.clone();
-                let user = user_id_str.clone();
-                let script_sha = sha.clone();
-
-                async move {
-                    if let Some(sha_str) = &script_sha {
-                        // Use EVALSHA for better performance
-                        let evalsha_result = redis::cmd("EVALSHA")
-                            .arg(sha_str)
-                            .arg(3) // number of keys
-                            .arg(&views_key)
-                            .arg(&video_key)
-                            .arg(&config_key)
-                            .arg(&user)
-                            .query_async(&mut conn)
-                            .await;
-
-                        match evalsha_result {
-                            Ok(result) => Ok(result),
-                            Err(e) => {
-                                // If script not in cache, use EVAL
-                                log::warn!("EVALSHA failed, falling back to EVAL: {}", e);
-                                redis::cmd("EVAL")
-                                    .arg(LUA_ATOMIC_VIEW_SCRIPT)
-                                    .arg(3)
-                                    .arg(&views_key)
-                                    .arg(&video_key)
-                                    .arg(&config_key)
-                                    .arg(&user)
-                                    .query_async(&mut conn)
-                                    .await
-                            }
-                        }
-                    } else {
-                        // Script not loaded, use EVAL
-                        redis::cmd("EVAL")
-                            .arg(LUA_ATOMIC_VIEW_SCRIPT)
-                            .arg(3)
-                            .arg(&views_key)
-                            .arg(&video_key)
-                            .arg(&config_key)
-                            .arg(&user)
-                            .query_async(&mut conn)
-                            .await
-                    }
-                }
-            })
-            .await
-            .context("Failed to execute view tracking script")?;
-
-        let _result: Option<u64> = self
             .redis_store
             .execute_with_retry(|mut conn| {
                 let views_key = views_set_key.clone();
@@ -257,47 +181,32 @@ impl ViewTracker {
     pub async fn get_view_count(&self, video_id: &str) -> Result<u64> {
         let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         let count: Option<String> = self
-            .pool
+            .redis_store_pool
             .execute_with_retry(|mut conn| {
                 let key = video_hash_key.clone();
                 async move { conn.hget(&key, "count").await }
             })
             .await?;
 
-        // let _count: Option<String> = self
-        //     .redis_store
-        //     .execute_with_retry(|mut conn| {
-        //         let key = video_hash_key.clone();
-        //         async move { conn.hget(&key, "count").await }
-        //     })
-        //     .await?;
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn get_last_milestone(&self, video_id: &str) -> Result<u64> {
         let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         let milestone: Option<String> = self
-            .pool
+            .redis_store_pool
             .execute_with_retry(|mut conn| {
                 let key = video_hash_key.clone();
                 async move { conn.hget(&key, "last_milestone").await }
             })
             .await?;
 
-        // let _milestone: Option<String> = self
-        //     .redis_store
-        //     .execute_with_retry(|mut conn| {
-        //         let key = video_hash_key.clone();
-        //         async move { conn.hget(&key, "last_milestone").await }
-        //     })
-        //     .await?;
-
         Ok(milestone.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn set_last_milestone(&self, video_id: &str, milestone: u64) -> Result<()> {
         let video_hash_key = format!("impressions:rewards:video:{}", video_id);
-        self.pool
+        self.redis_store_pool
             .execute_with_retry(|mut conn| {
                 let key = video_hash_key.clone();
                 async move {
@@ -307,54 +216,32 @@ impl ViewTracker {
             })
             .await?;
 
-        self.redis_store
-            .execute_with_retry(|mut conn| {
-                let key = video_hash_key.clone();
-                async move {
-                    conn.hset::<_, _, _, ()>(&key, "last_milestone", milestone)
-                        .await
-                }
-            })
-            .await?;
         Ok(())
     }
 
     pub async fn get_total_count_loggedin(&self, video_id: &str) -> Result<u64> {
         let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         let count: Option<String> = self
-            .pool
+            .redis_store_pool
             .execute_with_retry(|mut conn| {
                 let key = video_hash_key.clone();
                 async move { conn.hget(&key, "total_count_loggedin").await }
             })
             .await?;
-        // let _count: Option<String> = self
-        //     .redis_store
-        //     .execute_with_retry(|mut conn| {
-        //         let key = video_hash_key.clone();
-        //         async move { conn.hget(&key, "total_count_loggedin").await }
-        //     })
-        //     .await?;
+        
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
     pub async fn get_total_count_all(&self, video_id: &str) -> Result<u64> {
         let video_hash_key = format!("impressions:rewards:video:{}", video_id);
         let count: Option<String> = self
-            .pool
+            .redis_store_pool
             .execute_with_retry(|mut conn| {
                 let key = video_hash_key.clone();
                 async move { conn.hget(&key, "total_count_all").await }
             })
             .await?;
 
-        // let _count: Option<String> = self
-        //     .redis_store
-        //     .execute_with_retry(|mut conn| {
-        //         let key = video_hash_key.clone();
-        //         async move { conn.hget(&key, "total_count_all").await }
-        //     })
-        //     .await?;
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 
@@ -364,20 +251,12 @@ impl ViewTracker {
 
         // Get all fields in one call
         let data: std::collections::HashMap<String, String> = self
-            .pool
+            .redis_store_pool
             .execute_with_retry(|mut conn| {
                 let key = video_hash_key.clone();
                 async move { conn.hgetall(&key).await }
             })
             .await?;
-
-        // let _data: std::collections::HashMap<String, String> = self
-        //     .redis_store
-        //     .execute_with_retry(|mut conn| {
-        //         let key = video_hash_key.clone();
-        //         async move { conn.hgetall(&key).await }
-        //     })
-        //     .await?;
 
         let count = data.get("count").and_then(|s| s.parse().ok()).unwrap_or(0);
         let total_count_loggedin = data
@@ -414,20 +293,12 @@ impl ViewTracker {
 
         // Execute pipeline - all commands in single round-trip
         let results: Vec<std::collections::HashMap<String, String>> = self
-            .pool
+            .redis_store_pool
             .execute_with_retry(|mut conn| {
                 let p = pipe.clone();
                 async move { p.query_async(&mut conn).await }
             })
             .await?;
-
-        // let _results: Vec<std::collections::HashMap<String, String>> = self
-        //     .redis_store
-        //     .execute_with_retry(|mut conn| {
-        //         let p = pipe.clone();
-        //         async move { p.query_async(&mut conn).await }
-        //     })
-        //     .await?;
 
         // Parse results
         let mut response = std::collections::HashMap::new();
@@ -495,10 +366,8 @@ mod tests {
                 .await
                 .expect("Failed to build Redis pool");
 
-            let pool_copy = pool.clone();
-
             let key_prefix = test_key_prefix();
-            let mut tracker = ViewTracker::new(pool, pool_copy);
+            let mut tracker = ViewTracker::new(pool);
             tracker
                 .load_lua_scripts()
                 .await

@@ -183,7 +183,6 @@ async fn get_video_views(
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<ViewHistoryResponse>, (StatusCode, String)> {
     let history_tracker = HistoryTracker::new(
-        state.rewards_module.dragonfly_pool.clone(),
         state.rewards_module.dragonfly_redis_store_pool.clone(),
     );
 
@@ -223,7 +222,6 @@ async fn get_user_view_history(
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
     let history_tracker = HistoryTracker::new(
-        state.rewards_module.dragonfly_pool.clone(),
         state.rewards_module.dragonfly_redis_store_pool.clone(),
     );
 
@@ -263,7 +261,6 @@ async fn get_user_reward_history(
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
     let history_tracker = HistoryTracker::new(
-        state.rewards_module.dragonfly_pool.clone(),
         state.rewards_module.dragonfly_redis_store_pool.clone(),
     );
 
@@ -303,7 +300,6 @@ async fn get_creator_reward_history(
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
     let history_tracker = HistoryTracker::new(
-        state.rewards_module.dragonfly_pool.clone(),
         state.rewards_module.dragonfly_redis_store_pool.clone(),
     );
 

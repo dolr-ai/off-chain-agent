@@ -21,7 +21,6 @@ pub enum FraudCheck {
 
 #[derive(Clone)]
 pub struct FraudDetector {
-    dragonfly_pool: Arc<DragonflyPool>,
     dragonfly_redis_store: Arc<DragonflyPool>,
     threshold: usize,
     time_window: i64,
@@ -30,11 +29,9 @@ pub struct FraudDetector {
 
 impl FraudDetector {
     pub fn new(
-        dragonfly_pool: Arc<DragonflyPool>,
         dragonfly_redis_store: Arc<DragonflyPool>,
     ) -> Self {
         Self {
-            dragonfly_pool,
             dragonfly_redis_store,
             threshold: DEFAULT_FRAUD_THRESHOLD,
             time_window: DEFAULT_TIME_WINDOW,
@@ -43,13 +40,11 @@ impl FraudDetector {
     }
 
     pub fn with_config(
-        dragonfly_pool: Arc<DragonflyPool>,
         dragonfly_redis_store: Arc<DragonflyPool>,
         threshold: usize,
         shadow_ban_duration: u64,
     ) -> Self {
         Self {
-            dragonfly_pool,
             dragonfly_redis_store,
             threshold,
             time_window: DEFAULT_TIME_WINDOW,
@@ -62,7 +57,6 @@ impl FraudDetector {
         let key = format!("impressions:rewards:user:{}:recent", creator_id);
         let current_timestamp = Utc::now().timestamp();
 
-        let dragonfly_pool = self.dragonfly_pool.clone();
         let dragonfly_redis_store = self.dragonfly_redis_store.clone();
         let threshold = self.threshold;
         let time_window = self.time_window;
@@ -73,18 +67,7 @@ impl FraudDetector {
         tokio::spawn(async move {
             // Add current timestamp and trim list
             let key_clone = key.clone();
-            let add_result = dragonfly_pool
-                .execute_with_retry(|mut conn| {
-                    let k = key_clone.clone();
-                    async move {
-                        conn.lpush::<_, _, ()>(&k, current_timestamp).await?;
-                        conn.ltrim::<_, ()>(&k, 0, 100).await?; // Keep last 100 rewards
-                        conn.expire::<_, ()>(&k, 3600).await // 1 hour TTL
-                    }
-                })
-                .await;
-
-            let _add_result = dragonfly_redis_store
+            let add_result = dragonfly_redis_store
                 .execute_with_retry(|mut conn| {
                     let k = key_clone.clone();
                     async move {
@@ -101,7 +84,7 @@ impl FraudDetector {
 
             // Get recent timestamps
             let key_clone2 = key.clone();
-            let recent_timestamps_result = dragonfly_pool
+            let recent_timestamps_result = dragonfly_redis_store
                 .execute_with_retry(|mut conn| {
                     let k = key_clone2.clone();
                     async move { conn.lrange::<_, Vec<i64>>(&k, 0, -1).await }
@@ -125,19 +108,6 @@ impl FraudDetector {
                     let ban_key_clone = ban_key.clone();
 
                     if let Err(e) =
-                        dragonfly_pool
-                            .execute_with_retry(|mut conn| {
-                                let k = ban_key_clone.clone();
-                                async move {
-                                    conn.set_ex::<_, _, ()>(&k, "1", shadow_ban_duration).await
-                                }
-                            })
-                            .await
-                    {
-                        log::error!("Failed to shadow ban creator {}: {}", creator_id_str, e);
-                    }
-
-                    if let Err(e) =
                         dragonfly_redis_store
                             .execute_with_retry(|mut conn| {
                                 let k = ban_key_clone.clone();
@@ -147,11 +117,7 @@ impl FraudDetector {
                             })
                             .await
                     {
-                        log::error!(
-                            "Failed to shadow ban creator {}: {} in redis store",
-                            creator_id_str,
-                            e
-                        );
+                        log::error!("Failed to shadow ban creator {}: {}", creator_id_str, e);
                     }
 
                     log::warn!(
@@ -171,7 +137,7 @@ impl FraudDetector {
         // For the immediate check, we need to check if already shadow banned
         let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
         if let Ok(is_banned) = self
-            .dragonfly_pool
+            .dragonfly_redis_store
             .execute_with_retry(|mut conn| {
                 let key = ban_key.clone();
                 async move { conn.exists::<_, bool>(&key).await }
@@ -190,7 +156,7 @@ impl FraudDetector {
     pub async fn is_shadow_banned(&self, creator_id: &Principal) -> Result<bool> {
         let ban_key = format!("impressions:rewards:shadow_ban:{}", creator_id);
         let is_banned: bool = self
-            .dragonfly_pool
+            .dragonfly_redis_store
             .execute_with_retry(|mut conn| {
                 let key = ban_key.clone();
                 async move { conn.exists(&key).await }
@@ -277,7 +243,7 @@ mod tests {
                 .expect("Failed to build Redis pool");
 
             let test_prefix = format!("test_fraud_{}", Uuid::new_v4().to_string());
-            let detector = FraudDetector::with_config(pool, pool.clone(), 3, 60);
+            let detector = FraudDetector::with_config(pool, 3, 60);
 
             Self {
                 detector,
@@ -286,7 +252,7 @@ mod tests {
         }
 
         async fn cleanup(&self) -> Result<()> {
-            let mut conn = self.detector.dragonfly_pool.get().await?;
+            let mut conn = self.detector.dragonfly_redis_store.get().await?;
 
             let patterns = vec![
                 format!("impressions:rewards:user:*:recent"),
