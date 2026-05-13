@@ -11,8 +11,8 @@ use crate::types::RedisPool;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
-    get_redis_store_ca_cert,
-    get_redis_store_client_cert, get_redis_store_client_key, init_dragonfly_redis_store, DragonflyPool,
+    get_redis_store_ca_cert, get_redis_store_client_cert, get_redis_store_client_key,
+    init_dragonfly_redis_store, DragonflyPool,
 };
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;

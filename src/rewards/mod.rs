@@ -29,10 +29,7 @@ pub struct RewardsModule {
 }
 
 impl RewardsModule {
-    pub async fn new(
-        dragonfly_pool: Arc<DragonflyPool>,
-        admin_agent: ic_agent::Agent,
-    ) -> Self {
+    pub async fn new(dragonfly_pool: Arc<DragonflyPool>, admin_agent: ic_agent::Agent) -> Self {
         let view_tracker = ViewTracker::new(dragonfly_pool.clone());
 
         // Fetch config from Dragonfly (or use defaults if not found)
@@ -43,8 +40,7 @@ impl RewardsModule {
                 config::RewardConfig::default()
             });
 
-        let reward_engine =
-            RewardEngine::with_config(dragonfly_pool.clone(), admin_agent, config);
+        let reward_engine = RewardEngine::with_config(dragonfly_pool.clone(), admin_agent, config);
         let btc_converter = BtcConverter::new();
 
         let icpswap_client = match IcpSwapClient::new().await {
