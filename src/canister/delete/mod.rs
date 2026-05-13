@@ -73,7 +73,7 @@ pub async fn delete_canister_data(
 
         let bot_owner: Option<String> = dragonfly
             .execute_with_retry(|mut conn| {
-                let key = reverse_key.clone();
+                let key = formatted_reverse_key.clone();
                 async move { conn.hget::<_, _, Option<String>>(key, "auth").await }
             })
             .await?;
@@ -123,7 +123,7 @@ pub async fn delete_canister_data(
             let slot_key = format!("{principal_text}-ai-account-{slot}");
             let jwk: Option<String> = dragonfly
                 .execute_with_retry(|mut conn| {
-                    let key = slot_key.clone();
+                    let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &slot_key);
                     async move { conn.hget::<_, _, Option<String>>(key, "auth").await }
                 })
                 .await?;
@@ -144,7 +144,7 @@ pub async fn delete_canister_data(
                     let slot_key = format!("{owner_text}-ai-account-{slot}");
                     let jwk_str: Option<String> = dragonfly
                         .execute_with_retry(|mut conn| {
-                            let key = slot_key.clone();
+                            let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &slot_key);
                             async move { conn.hget::<_, _, Option<String>>(key, "auth").await }
                         })
                         .await?;
@@ -159,7 +159,7 @@ pub async fn delete_canister_data(
                         log::info!("Deleting forward slot {slot} for bot {principal_text}");
                         let _: () = dragonfly
                             .execute_with_retry(|mut conn| {
-                                let key = slot_key.clone();
+                                let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &slot_key);
                                 async move { conn.del(key).await }
                             })
                             .await?;
@@ -169,7 +169,7 @@ pub async fn delete_canister_data(
                 // Delete reverse lookup AFTER forward slot is cleaned up
                 let _: () = dragonfly
                     .execute_with_retry(|mut conn| {
-                        let key = reverse_key.clone();
+                        let key = formatted_reverse_key.clone();
                         async move { conn.del(key).await }
                     })
                     .await?;
@@ -190,18 +190,17 @@ pub async fn delete_canister_data(
                             let bot_reverse_key = format!("ai-account:{}", bot_principal.to_text());
                             let _: () = dragonfly
                                 .execute_with_retry(|mut conn| {
-                                    let key = bot_reverse_key.clone();
+                                    let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &bot_reverse_key);
                                     async move { conn.del(key).await }
                                 })
                                 .await?;
-
                         }
                     }
 
                     let slot_key = format!("{principal_text}-ai-account-{slot}");
                     let _: () = dragonfly
                         .execute_with_retry(|mut conn| {
-                            let key = slot_key.clone();
+                            let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &slot_key);
                             async move { conn.del(key).await }
                         })
                         .await?;

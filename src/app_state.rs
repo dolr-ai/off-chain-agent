@@ -11,9 +11,8 @@ use crate::types::RedisPool;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
-    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, get_redis_store_ca_cert,
-    get_redis_store_client_cert, get_redis_store_client_key, init_dragonfly_redis,
-    init_dragonfly_redis_2, init_dragonfly_redis_store, DragonflyPool,
+    get_redis_store_ca_cert,
+    get_redis_store_client_cert, get_redis_store_client_key, init_dragonfly_redis_store, DragonflyPool,
 };
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -121,11 +120,8 @@ impl AppState {
         let dragonfly_redis_store = init_dragonfly_redis_store_pool().await;
 
         #[cfg(not(feature = "local-bin"))]
-        let mut rewards_module = RewardsModule::new(
-            dragonfly_redis_store.clone(),
-            agent.clone(),
-        )
-        .await;
+        let mut rewards_module =
+            RewardsModule::new(dragonfly_redis_store.clone(), agent.clone()).await;
 
         // Initialize the rewards module (loads Lua scripts)
         #[cfg(not(feature = "local-bin"))]

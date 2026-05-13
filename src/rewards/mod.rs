@@ -25,30 +25,26 @@ pub struct RewardsModule {
     pub reward_engine: RewardEngine,
     pub btc_converter: BtcConverter,
     pub icpswap_client: Option<IcpSwapClient>,
-    pub dragonfly_redis_store_pool: Arc<DragonflyPool>,
+    pub dragonfly_pool: Arc<DragonflyPool>,
 }
 
 impl RewardsModule {
     pub async fn new(
-        dragonfly_redis_store_pool: Arc<DragonflyPool>,
+        dragonfly_pool: Arc<DragonflyPool>,
         admin_agent: ic_agent::Agent,
     ) -> Self {
-        let view_tracker =
-            ViewTracker::new(dragonfly_redis_store_pool.clone());
+        let view_tracker = ViewTracker::new(dragonfly_pool.clone());
 
         // Fetch config from Dragonfly (or use defaults if not found)
-        let config = config::get_config(&dragonfly_redis_store_pool)
+        let config = config::get_config(&dragonfly_pool)
             .await
             .unwrap_or_else(|e| {
                 log::warn!("Failed to get config from Dragonfly, using defaults: {}", e);
                 config::RewardConfig::default()
             });
 
-        let reward_engine = RewardEngine::with_config(
-            dragonfly_redis_store_pool.clone(),
-            admin_agent,
-            config,
-        );
+        let reward_engine =
+            RewardEngine::with_config(dragonfly_pool.clone(), admin_agent, config);
         let btc_converter = BtcConverter::new();
 
         let icpswap_client = match IcpSwapClient::new().await {
@@ -67,7 +63,7 @@ impl RewardsModule {
             reward_engine,
             btc_converter,
             icpswap_client,
-            dragonfly_redis_store_pool,
+            dragonfly_pool,
         }
     }
 

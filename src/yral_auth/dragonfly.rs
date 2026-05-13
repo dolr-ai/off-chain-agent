@@ -75,7 +75,6 @@ fn build_tls_certs(
     }
 }
 
-
 fn get_redis_store_hosts() -> Vec<String> {
     let hosts_str = std::env::var("DRAGONFLY_REDIS_STORE_HOSTS")
         .expect("DRAGONFLY_REDIS_STORE_HOSTS environment variable not set")
@@ -196,7 +195,8 @@ impl DragonflyPool {
         let result: () = self
             .execute_with_retry(|mut conn| {
                 let key = principal.clone();
-                async move { conn.del::<String, ()>(key).await }
+                let formatted_key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &principal);
+                async move { conn.del::<String, ()>(formatted_key).await }
             })
             .await?;
 
@@ -479,7 +479,6 @@ pub async fn init_dragonfly_redis_store(
 
     Ok(pool)
 }
-
 
 pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>, anyhow::Error> {
     rustls::crypto::ring::default_provider()

@@ -16,9 +16,7 @@ pub struct UserVerification {
 }
 
 impl UserVerification {
-    pub fn new(
-        dragonfly_redis_store: Arc<DragonflyPool>,
-    ) -> Self {
+    pub fn new(dragonfly_redis_store: Arc<DragonflyPool>) -> Self {
         Self {
             dragonfly_redis_store,
         }
@@ -76,7 +74,6 @@ impl UserVerification {
                     e
                 );
             }
-
         });
 
         Ok(is_registered)

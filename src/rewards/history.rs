@@ -33,9 +33,7 @@ pub struct HistoryTracker {
 }
 
 impl HistoryTracker {
-    pub fn new(
-        dragonfly_redis_store: Arc<DragonflyPool>,
-    ) -> Self {
+    pub fn new(dragonfly_redis_store: Arc<DragonflyPool>) -> Self {
         Self {
             dragonfly_redis_store,
         }
@@ -160,7 +158,6 @@ impl HistoryTracker {
                 async move { conn.lrange(&k, 0, lim - 1).await }
             })
             .await?;
-
 
         let mut records = Vec::new();
         for item in history {

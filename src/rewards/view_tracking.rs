@@ -121,7 +121,7 @@ impl ViewTracker {
 
         // Try to use the loaded script SHA, fallback to EVAL if not loaded
         let result: Option<u64> = self
-            .redis_store
+            .redis_store_pool
             .execute_with_retry(|mut conn| {
                 let views_key = views_set_key.clone();
                 let video_key = video_hash_key.clone();
@@ -228,7 +228,7 @@ impl ViewTracker {
                 async move { conn.hget(&key, "total_count_loggedin").await }
             })
             .await?;
-        
+
         Ok(count.and_then(|s| s.parse().ok()).unwrap_or(0))
     }
 

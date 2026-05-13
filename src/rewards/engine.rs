@@ -32,17 +32,11 @@ pub struct RewardEngine {
 }
 
 impl RewardEngine {
-    pub fn new(
-        dragonfly_redis_store: Arc<DragonflyPool>,
-        admin_agent: ic_agent::Agent,
-    ) -> Self {
-        let view_tracker = ViewTracker::new( dragonfly_redis_store.clone());
-        let user_verification =
-            UserVerification::new(dragonfly_redis_store.clone());
-        let history_tracker =
-            HistoryTracker::new(dragonfly_redis_store.clone());
-        let fraud_detector =
-            FraudDetector::new(dragonfly_redis_store.clone());
+    pub fn new(dragonfly_redis_store: Arc<DragonflyPool>, admin_agent: ic_agent::Agent) -> Self {
+        let view_tracker = ViewTracker::new(dragonfly_redis_store.clone());
+        let user_verification = UserVerification::new(dragonfly_redis_store.clone());
+        let history_tracker = HistoryTracker::new(dragonfly_redis_store.clone());
+        let fraud_detector = FraudDetector::new(dragonfly_redis_store.clone());
         let btc_converter = BtcConverter::new();
         let wallet = WalletIntegration::new(admin_agent);
         Self {
@@ -62,10 +56,8 @@ impl RewardEngine {
         config: RewardConfig,
     ) -> Self {
         let view_tracker = ViewTracker::new(dragonfly_redis_store.clone());
-        let user_verification =
-            UserVerification::new(dragonfly_redis_store.clone());
-        let history_tracker =
-            HistoryTracker::new(dragonfly_redis_store.clone());
+        let user_verification = UserVerification::new(dragonfly_redis_store.clone());
+        let history_tracker = HistoryTracker::new(dragonfly_redis_store.clone());
         let fraud_detector = FraudDetector::with_config(
             dragonfly_redis_store.clone(),
             config.fraud_threshold,
@@ -77,9 +69,7 @@ impl RewardEngine {
         tokio::spawn({
             let dragonfly_redis_store = dragonfly_redis_store.clone();
             async move {
-                if let Err(e) =
-                    update_config_fn(&dragonfly_redis_store, config).await
-                {
+                if let Err(e) = update_config_fn(&dragonfly_redis_store, config).await {
                     log::error!("Failed to initialize config in Dragonfly: {}", e);
                 }
             }
@@ -621,7 +611,7 @@ impl RewardEngine {
 
     /// Get current configuration
     pub async fn get_config(&self) -> RewardConfig {
-        get_config( &self.dragonfly_redis_store)
+        get_config(&self.dragonfly_redis_store)
             .await
             .unwrap_or_else(|e| {
                 log::error!("Failed to get config: {}", e);
@@ -631,11 +621,7 @@ impl RewardEngine {
 
     /// Update configuration
     pub async fn update_config(&self, new_config: RewardConfig) -> Result<()> {
-        update_config_fn(
-            &self.dragonfly_redis_store,
-            new_config,
-        )
-        .await?;
+        update_config_fn(&self.dragonfly_redis_store, new_config).await?;
         log::info!("Reward configuration updated");
         Ok(())
     }

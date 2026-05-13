@@ -28,9 +28,7 @@ pub struct FraudDetector {
 }
 
 impl FraudDetector {
-    pub fn new(
-        dragonfly_redis_store: Arc<DragonflyPool>,
-    ) -> Self {
+    pub fn new(dragonfly_redis_store: Arc<DragonflyPool>) -> Self {
         Self {
             dragonfly_redis_store,
             threshold: DEFAULT_FRAUD_THRESHOLD,
