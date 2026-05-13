@@ -165,6 +165,7 @@ pub async fn delete_canister_data(
                                 async move { conn.del(key).await }
                             })
                             .await?;
+                        break;
                     }
                 }
 
