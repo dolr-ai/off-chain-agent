@@ -194,9 +194,8 @@ impl DragonflyPool {
     pub async fn delete_principal(&self, principal: String) -> Result<(), RedisError> {
         let result: () = self
             .execute_with_retry(|mut conn| {
-                let key = principal.clone();
-                let formatted_key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &principal);
-                async move { conn.del::<String, ()>(formatted_key).await }
+                let key = format_to_dragonfly_key(YRAL_AUTH_REDIS_KEY_PREFIX, &principal);
+                async move { conn.del::<String, ()>(key).await }
             })
             .await?;
 
