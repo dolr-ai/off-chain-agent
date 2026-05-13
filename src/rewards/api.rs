@@ -182,10 +182,7 @@ async fn get_video_views(
     Path(video_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<ViewHistoryResponse>, (StatusCode, String)> {
-    let history_tracker = HistoryTracker::new(
-        state.rewards_module.dragonfly_pool.clone(),
-        state.rewards_module.dragonfly_redis_store_pool.clone(),
-    );
+    let history_tracker = HistoryTracker::new(state.rewards_module.dragonfly_pool.clone());
 
     let views = history_tracker
         .get_video_views(&video_id, params.limit)
@@ -222,10 +219,7 @@ async fn get_user_view_history(
     let principal = Principal::from_text(&user_id)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
-    let history_tracker = HistoryTracker::new(
-        state.rewards_module.dragonfly_pool.clone(),
-        state.rewards_module.dragonfly_redis_store_pool.clone(),
-    );
+    let history_tracker = HistoryTracker::new(state.rewards_module.dragonfly_pool.clone());
 
     let views = history_tracker
         .get_user_view_history(&principal, params.limit)
@@ -262,10 +256,7 @@ async fn get_user_reward_history(
     let principal = Principal::from_text(&user_id)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
-    let history_tracker = HistoryTracker::new(
-        state.rewards_module.dragonfly_pool.clone(),
-        state.rewards_module.dragonfly_redis_store_pool.clone(),
-    );
+    let history_tracker = HistoryTracker::new(state.rewards_module.dragonfly_pool.clone());
 
     let rewards = history_tracker
         .get_user_reward_history(&principal, params.limit)
@@ -302,10 +293,7 @@ async fn get_creator_reward_history(
     let principal = Principal::from_text(&creator_id)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
-    let history_tracker = HistoryTracker::new(
-        state.rewards_module.dragonfly_pool.clone(),
-        state.rewards_module.dragonfly_redis_store_pool.clone(),
-    );
+    let history_tracker = HistoryTracker::new(state.rewards_module.dragonfly_pool.clone());
 
     let rewards = history_tracker
         .get_creator_reward_history(&principal, params.limit)

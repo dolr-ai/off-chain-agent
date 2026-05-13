@@ -149,16 +149,6 @@ jobs:
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_CLIENT_CERT value | DRAGONFLY_REDIS_STORE_CLIENT_CERT ;
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
-            secret/data/DRAGONFLY_CLUSTER_1_PASSWORD value | DRAGONFLY_PASSWORD ;
-            secret/data/DRAGONFLY_CLUSTER_1_HOSTS value | DRAGONFLY_HOSTS ;
-            secret/data/DRAGONFLY_CLUSTER_1_CA_CERT value | DRAGONFLY_CA_CERT ;
-            secret/data/DRAGONFLY_CLUSTER_1_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
-            secret/data/DRAGONFLY_CLUSTER_1_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
-            secret/data/DRAGONFLY_CLUSTER_2_PASSWORD value | DRAGONFLY_2_PASSWORD ;
-            secret/data/DRAGONFLY_CLUSTER_2_HOSTS value | DRAGONFLY_2_HOSTS ;
-            secret/data/DRAGONFLY_CLUSTER_2_CA_CERT value | DRAGONFLY_2_CA_CERT ;
-            secret/data/DRAGONFLY_CLUSTER_2_CLIENT_CERT value | DRAGONFLY_2_CLIENT_CERT ;
-            secret/data/DRAGONFLY_CLUSTER_2_CLIENT_KEY value | DRAGONFLY_2_CLIENT_KEY ;
             secret/data/COOLIFY_TOKEN value | COOLIFY_TOKEN ;
             secret/data/COOLIFY_PROJECT_UUID value | COOLIFY_PROJECT_UUID ;
             secret/data/COOLIFY_SERVER_UUID value | COOLIFY_SERVER_UUID ;
@@ -273,16 +263,6 @@ jobs:
           SCRATCHPAD_DRAGONFLY_HOST: ${{ env.SCRATCHPAD_DRAGONFLY_HOST }}
           SCRATCHPAD_DRAGONFLY_PORT: ${{ env.SCRATCHPAD_DRAGONFLY_PORT }}
           SCRATCHPAD_DRAGONFLY_PASSWORD: ${{ env.SCRATCHPAD_DRAGONFLY_PASSWORD }}
-          DRAGONFLY_PASSWORD: ${{ env.DRAGONFLY_PASSWORD }}
-          DRAGONFLY_HOSTS: ${{ env.DRAGONFLY_HOSTS }}
-          DRAGONFLY_CA_CERT: ${{ env.DRAGONFLY_CA_CERT }}
-          DRAGONFLY_CLIENT_CERT: ${{ env.DRAGONFLY_CLIENT_CERT }}
-          DRAGONFLY_CLIENT_KEY: ${{ env.DRAGONFLY_CLIENT_KEY }}
-          DRAGONFLY_2_PASSWORD: ${{ env.DRAGONFLY_2_PASSWORD }}
-          DRAGONFLY_2_HOSTS: ${{ env.DRAGONFLY_2_HOSTS }}
-          DRAGONFLY_2_CA_CERT: ${{ env.DRAGONFLY_2_CA_CERT }}
-          DRAGONFLY_2_CLIENT_CERT: ${{ env.DRAGONFLY_2_CLIENT_CERT }}
-          DRAGONFLY_2_CLIENT_KEY: ${{ env.DRAGONFLY_2_CLIENT_KEY }}
           YRAL_MOBILE_SERVICE_ACCOUNT_KEY: ${{ env.YRAL_MOBILE_SERVICE_ACCOUNT_KEY }}
           PROMPT_MODERATION_GEMINI_API_KEY: ${{ env.PROMPT_MODERATION_GEMINI_API_KEY }}
           DRAGONFLY_REDIS_STORE_PASSWORD: ${{ env.DRAGONFLY_REDIS_STORE_PASSWORD }}
@@ -355,16 +335,6 @@ jobs:
             --arg scratchpad_dragonfly_host "$SCRATCHPAD_DRAGONFLY_HOST" \
             --arg scratchpad_dragonfly_port "$SCRATCHPAD_DRAGONFLY_PORT" \
             --arg scratchpad_dragonfly_password "$SCRATCHPAD_DRAGONFLY_PASSWORD" \
-            --arg dragonfly_password "$DRAGONFLY_PASSWORD" \
-            --arg dragonfly_hosts "$DRAGONFLY_HOSTS" \
-            --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
-            --arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
-            --arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
-            --arg dragonfly_2_password "$DRAGONFLY_2_PASSWORD" \
-            --arg dragonfly_2_hosts "$DRAGONFLY_2_HOSTS" \
-            --arg dragonfly_2_ca_cert "$DRAGONFLY_2_CA_CERT" \
-            --arg dragonfly_2_client_cert "$DRAGONFLY_2_CLIENT_CERT" \
-            --arg dragonfly_2_client_key "$DRAGONFLY_2_CLIENT_KEY" \
             --arg yral_mobile_service_account_key "$(flatten "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY")" \
             --arg prompt_moderation_gemini_api_key "$PROMPT_MODERATION_GEMINI_API_KEY" \
             --arg dragonfly_redis_store_password "$DRAGONFLY_REDIS_STORE_PASSWORD" \
@@ -433,16 +403,6 @@ jobs:
               { "key": "SCRATCHPAD_DRAGONFLY_HOST", "value": $scratchpad_dragonfly_host, "is_literal": true},
               { "key": "SCRATCHPAD_DRAGONFLY_PORT", "value": $scratchpad_dragonfly_port, "is_literal": true},
               { "key": "SCRATCHPAD_DRAGONFLY_PASSWORD", "value": $scratchpad_dragonfly_password, "is_literal": true},
-              { "key": "DRAGONFLY_PASSWORD", "value": $dragonfly_password, "is_literal": true},
-              { "key": "DRAGONFLY_HOSTS", "value": $dragonfly_hosts, "is_literal": true},
-              { "key": "DRAGONFLY_CA_CERT", "value": $dragonfly_ca_cert, "is_multiline": true},
-              { "key": "DRAGONFLY_CLIENT_CERT", "value": $dragonfly_client_cert, "is_multiline": true},
-              { "key": "DRAGONFLY_CLIENT_KEY", "value": $dragonfly_client_key, "is_multiline": true},
-              { "key": "DRAGONFLY_2_PASSWORD", "value": $dragonfly_2_password, "is_literal": true},
-              { "key": "DRAGONFLY_2_HOSTS", "value": $dragonfly_2_hosts, "is_literal":true},
-              { "key": "DRAGONFLY_2_CA_CERT", "value": $dragonfly_2_ca_cert, "is_multiline": true},
-              { "key": "DRAGONFLY_2_CLIENT_CERT", "value": $dragonfly_2_client_cert, "is_multiline": true},
-              { "key": "DRAGONFLY_2_CLIENT_KEY", "value": $dragonfly_2_client_key, "is_multiline": true},
               { "key": "YRAL_MOBILE_SERVICE_ACCOUNT_KEY", "value": $yral_mobile_service_account_key, "is_literal": true},
               { "key": "PROMPT_MODERATION_GEMINI_API_KEY", "value": $prompt_moderation_gemini_api_key,"is_literal": true},
               { "key": "DRAGONFLY_REDIS_STORE_PASSWORD", "value": $dragonfly_redis_store_password, "is_literal": true},

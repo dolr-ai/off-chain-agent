@@ -11,9 +11,8 @@ use crate::types::RedisPool;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
-    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, get_redis_store_ca_cert,
-    get_redis_store_client_cert, get_redis_store_client_key, init_dragonfly_redis,
-    init_dragonfly_redis_2, init_dragonfly_redis_store, DragonflyPool,
+    get_redis_store_ca_cert, get_redis_store_client_cert, get_redis_store_client_key,
+    init_dragonfly_redis_store, DragonflyPool,
 };
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -120,19 +119,9 @@ impl AppState {
         #[cfg(not(feature = "local-bin"))]
         let dragonfly_redis_store = init_dragonfly_redis_store_pool().await;
 
-        // Initialize Dragonfly cluster 2 for rewards/impressions
         #[cfg(not(feature = "local-bin"))]
-        let rewards_dragonfly_pool = init_dragonfly_redis_2()
-            .await
-            .expect("Failed to initialize Dragonfly cluster 2 for rewards");
-
-        #[cfg(not(feature = "local-bin"))]
-        let mut rewards_module = RewardsModule::new(
-            rewards_dragonfly_pool,
-            dragonfly_redis_store.clone(),
-            agent.clone(),
-        )
-        .await;
+        let mut rewards_module =
+            RewardsModule::new(dragonfly_redis_store.clone(), agent.clone()).await;
 
         // Initialize the rewards module (loads Lua scripts)
         #[cfg(not(feature = "local-bin"))]
@@ -180,7 +169,7 @@ impl AppState {
                 env::var("YRAL_METADATA_NOTIFICATION_API_KEY").unwrap_or_default(),
             ),
             #[cfg(not(feature = "local-bin"))]
-            yral_auth_dragonfly: init_dragonfly_redis_pool().await,
+            yral_auth_dragonfly: dragonfly_redis_store.clone(),
             #[cfg(not(feature = "local-bin"))]
             yral_redis_store_dragonfly: dragonfly_redis_store,
             leaderboard_redis_pool,
@@ -470,18 +459,6 @@ async fn init_service_canister_migration_redis_pool() -> RedisPool {
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
     RedisPool::builder().build(manager).await.unwrap()
-}
-
-async fn init_dragonfly_redis_pool() -> Arc<DragonflyPool> {
-    let ca_cert_bytes = get_ca_cert_pem().expect("Failed to read DRAGONFLY_CA_CERT");
-    let client_cert_bytes = get_client_cert_pem().expect("Failed to read DRAGONFLY_CLIENT_CERT");
-    let client_key_bytes = get_client_key_pem().expect("Failed to read DRAGONFLY_CLIENT_KEY");
-    let dragonfly_pool: Arc<DragonflyPool> =
-        init_dragonfly_redis(ca_cert_bytes, client_cert_bytes, client_key_bytes)
-            .await
-            .expect("failed to initalize DragonflyPool");
-
-    dragonfly_pool
 }
 
 async fn init_dragonfly_redis_store_pool() -> Arc<DragonflyPool> {
