@@ -153,6 +153,7 @@ pub type BulkVideoStatsResponseV2 = Vec<VideoStatsV2>;
 pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
     OpenApiRouter::new()
         .routes(routes!(get_video_views))
+        .routes(routes!(get_video_view_count))
         .routes(routes!(get_user_view_history))
         .routes(routes!(get_user_reward_history))
         .routes(routes!(get_creator_reward_history))
