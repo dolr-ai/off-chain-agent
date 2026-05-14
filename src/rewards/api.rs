@@ -228,7 +228,6 @@ async fn get_video_view_count(
     Ok(Json(views))
 }
 
-
 #[utoipa::path(
     get,
     path = "/user/{user_id}/views",

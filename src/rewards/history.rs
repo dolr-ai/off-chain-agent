@@ -172,7 +172,7 @@ impl HistoryTracker {
 
         Ok(records)
     }
-    
+
     /// get total view count for a video
     pub async fn get_video_view_count(&self, video_id: &str) -> Result<usize> {
         let key = format!("impressions:rewards:video:{}:view_history", video_id);
