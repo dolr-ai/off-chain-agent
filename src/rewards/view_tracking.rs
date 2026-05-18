@@ -348,7 +348,6 @@ impl ViewTracker {
         // Example HTTP POST request to recsys endpoint
         let client = self.recsys_client.clone();
         let video_id = video_id.to_string();
-        let recsys_endpoint = RECSYS_ENDPOINT.clone();
 
         tokio::spawn(async move {
             let payload = serde_json::json!([{
@@ -366,13 +365,13 @@ impl ViewTracker {
             mac.update(b"\n");
             mac.update(b"POST");
             mac.update(b"\n");
-            mac.update(recsys_endpoint.as_bytes());
+            mac.update(RECSYS_ENDPOINT.as_bytes());
             mac.update(b"\n");
             mac.update(payload_str.as_bytes());
             let signature = hex::encode(mac.finalize().into_bytes());
 
             match client
-                .post(recsys_endpoint)
+                .post(RECSYS_ENDPOINT)
                 .header("x-internal-timestamp", timestamp)
                 .header("x-internal-signature", signature)
                 .header("Content-Type", "application/json")
