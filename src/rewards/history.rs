@@ -173,21 +173,6 @@ impl HistoryTracker {
         Ok(records)
     }
 
-    /// get total view count for a video
-    pub async fn get_video_view_count(&self, video_id: &str) -> Result<usize> {
-        let key = format!("impressions:rewards:video:{}:view_history", video_id);
-
-        let view_count: usize = self
-            .dragonfly_redis_store
-            .execute_with_retry(|mut conn| {
-                let k = key.clone();
-                async move { conn.llen(&k).await }
-            })
-            .await?;
-
-        Ok(view_count)
-    }
-
     /// Get user's view history
     pub async fn get_user_view_history(
         &self,

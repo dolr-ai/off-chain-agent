@@ -153,7 +153,6 @@ pub type BulkVideoStatsResponseV2 = Vec<VideoStatsV2>;
 pub fn rewards_router(state: Arc<AppState>) -> OpenApiRouter {
     OpenApiRouter::new()
         .routes(routes!(get_video_views))
-        .routes(routes!(get_video_view_count))
         .routes(routes!(get_user_view_history))
         .routes(routes!(get_user_reward_history))
         .routes(routes!(get_creator_reward_history))
@@ -196,36 +195,6 @@ async fn get_video_views(
     let total = views.len();
 
     Ok(Json(ViewHistoryResponse { views, total }))
-}
-
-#[utoipa::path(
-    get,
-    path = "/video/{video_id}/view_count",
-    params(
-        ("video_id" = String, Path, description = "Video ID")
-    ),
-    tag = "rewards",
-    responses(
-        (status = 200, description = "View history retrieved", body = usize),
-        (status = 500, description = "Internal server error"),
-    )
-)]
-#[cfg(not(feature = "local-bin"))]
-async fn get_video_view_count(
-    State(state): State<Arc<AppState>>,
-    Path(video_id): Path<String>,
-) -> Result<Json<usize>, (StatusCode, String)> {
-    let history_tracker = HistoryTracker::new(state.rewards_module.dragonfly_pool.clone());
-
-    let views = history_tracker
-        .get_video_view_count(&video_id)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to get video views: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        })?;
-
-    Ok(Json(views))
 }
 
 #[utoipa::path(

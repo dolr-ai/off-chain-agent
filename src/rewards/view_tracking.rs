@@ -1,9 +1,16 @@
 use crate::yral_auth::dragonfly::DragonflyPool;
 use anyhow::{Context, Result};
 use candid::Principal;
+use hmac::{Hmac, Mac};
 use redis::AsyncCommands;
+use reqwest::Client;
 use sha1::{Digest, Sha1};
+use sha2::Sha256;
 use std::sync::Arc;
+type HmacSha256 = Hmac<Sha256>;
+
+pub const RECSYS_ENDPOINT: &str =
+    "https://recsys-influencer-feed.ansuman.yral.com/api/v1/internal/feed-recsys/view-counts";
 
 const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     --!df flags=allow-undeclared-keys
@@ -55,13 +62,16 @@ fn calculate_script_sha(script: &str) -> String {
 pub struct ViewTracker {
     redis_store_pool: Arc<DragonflyPool>,
     script_sha: Option<String>,
+    recsys_client: Client,
 }
 
 impl ViewTracker {
     pub fn new(redis_store_pool: Arc<DragonflyPool>) -> Self {
+        let recsys_client = Client::new();
         Self {
             redis_store_pool,
             script_sha: None,
+            recsys_client,
         }
     }
 
@@ -326,6 +336,65 @@ impl ViewTracker {
         }
 
         Ok(response)
+    }
+
+    pub fn send_view_count_to_recsys(&self, video_id: &str, total_view_count: u64) {
+        log::info!(
+            "Sending total view count {} for video {} to recsys-system",
+            total_view_count,
+            video_id
+        );
+
+        // Example HTTP POST request to recsys endpoint
+        let client = self.recsys_client.clone();
+        let video_id = video_id.to_string();
+        let recsys_endpoint = RECSYS_ENDPOINT.clone();
+
+        tokio::spawn(async move {
+            let payload = serde_json::json!([{
+                "video_id": video_id,
+                "total_view_count": total_view_count,
+            }]);
+
+            let payload_str = payload.to_string();
+            let secret = std::env::var("RECSYS_INTERNAL_CALL_SECRET_KEY").unwrap_or_default();
+            let timestamp = chrono::Utc::now().timestamp().to_string();
+
+            let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+                .expect("HMAC can take key of any size");
+            mac.update(timestamp.as_bytes());
+            mac.update(b"\n");
+            mac.update(b"POST");
+            mac.update(b"\n");
+            mac.update(recsys_endpoint.as_bytes());
+            mac.update(b"\n");
+            mac.update(payload_str.as_bytes());
+            let signature = hex::encode(mac.finalize().into_bytes());
+
+            match client
+                .post(recsys_endpoint)
+                .header("x-internal-timestamp", timestamp)
+                .header("x-internal-signature", signature)
+                .header("Content-Type", "application/json")
+                .body(payload_str)
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        log::info!("Successfully sent view count to recsys-system");
+                    } else {
+                        log::error!(
+                            "Failed to send view count to recsys-system: HTTP {}",
+                            response.status()
+                        );
+                    }
+                }
+                Err(e) => {
+                    log::error!("Error sending view count to recsys-system: {}", e);
+                }
+            }
+        });
     }
 }
 
