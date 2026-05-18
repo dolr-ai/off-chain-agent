@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Path, Request, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -17,9 +17,13 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::kvrocks::KvrocksClient;
 use crate::{
-    app_state::AppState, consts::MODERATOR_PRINCIPALS, events::push_notifications::dispatch_notif,
+    app_state::AppState,
+    consts::{GOOGLE_CHAT_REPORT_SPACE_URL, MODERATOR_PRINCIPALS},
+    events::push_notifications::dispatch_notif,
+    offchain_service::send_message_gchat,
     types::DelegatedIdentityWire,
-    utils::delegated_identity::get_user_info_from_delegated_identity_wire, AppError,
+    utils::delegated_identity::get_user_info_from_delegated_identity_wire,
+    AppError,
 };
 
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
@@ -113,14 +117,18 @@ pub async fn verify_moderator(
 pub fn moderation_router(state: Arc<AppState>) -> OpenApiRouter {
     use axum::middleware;
 
-    OpenApiRouter::new()
+    let moderator_routes = OpenApiRouter::new()
         .routes(routes!(get_pending_videos))
         .routes(routes!(approve_video))
         .routes(routes!(disapprove_video))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             verify_moderator,
-        ))
+        ));
+
+    OpenApiRouter::new()
+        .merge(moderator_routes)
+        .routes(routes!(send_ban_requests_to_gchat))
         .with_state(state)
 }
 
@@ -613,4 +621,132 @@ async fn send_approval_notification(state: &AppState, video_info: &VideoInfo, is
             user_principal
         );
     }
+}
+
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+pub struct BanRequestsBody {
+    pub video_ids: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, ToSchema, Debug)]
+pub struct BanRequestResult {
+    pub video_id: String,
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize, ToSchema, Debug)]
+pub struct BanRequestsResponse {
+    pub results: Vec<BanRequestResult>,
+}
+
+/// Send Google Chat cards with Ban button for a list of video_ids
+#[utoipa::path(
+    post,
+    path = "/send-ban-requests",
+    request_body = BanRequestsBody,
+    tag = "moderation",
+    responses(
+        (status = 200, description = "Results per video", body = BanRequestsResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+#[instrument(skip(state))]
+pub async fn send_ban_requests_to_gchat(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<BanRequestsBody>,
+) -> Result<impl IntoResponse, AppError> {
+    let token = headers
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .ok_or_else(|| AppError::from(anyhow::anyhow!("missing Authorization header")))?;
+
+    if token != state.user_migration_api_key {
+        return Err(AppError::from(anyhow::anyhow!("unauthorized")));
+    }
+
+    let mut results = Vec::with_capacity(body.video_ids.len());
+
+    for video_id in &body.video_ids {
+        let metadata = match state.kvrocks_client.get_video_metadata(video_id).await {
+            Ok(Some(m)) => m,
+            Ok(None) => {
+                results.push(BanRequestResult {
+                    video_id: video_id.clone(),
+                    success: false,
+                    message: "metadata not found in kvrocks".to_string(),
+                });
+                continue;
+            }
+            Err(e) => {
+                log::error!("kvrocks lookup failed for video {video_id}: {e}");
+                results.push(BanRequestResult {
+                    video_id: video_id.clone(),
+                    success: false,
+                    message: format!("kvrocks error: {e}"),
+                });
+                continue;
+            }
+        };
+
+        let card = json!({
+            "cardsV2": [{
+                "cardId": format!("corrupt-{}", video_id),
+                "card": {
+                    "sections": [{
+                        "header": "Corrupt Video — Ban Request",
+                        "widgets": [
+                            {
+                                "textParagraph": {
+                                    "text": format!(
+                                        "video_id: {}\npublisher_user_id: {}\npost_id: {}\nreason: corrupt video",
+                                        video_id, metadata.publisher_user_id, metadata.post_id
+                                    )
+                                }
+                            },
+                            {
+                                "buttonList": {
+                                    "buttons": [{
+                                        "text": "Ban Post",
+                                        "onClick": {
+                                            "action": {
+                                                "function": "goToView",
+                                                "parameters": [{
+                                                    "key": "viewType",
+                                                    "value": format!("{} {}", metadata.publisher_user_id, metadata.post_id)
+                                                }]
+                                            }
+                                        }
+                                    }]
+                                }
+                            }
+                        ]
+                    }]
+                }
+            }]
+        });
+
+        match send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, card).await {
+            Ok(_) => {
+                results.push(BanRequestResult {
+                    video_id: video_id.clone(),
+                    success: true,
+                    message: format!("GChat card sent for post {}", metadata.post_id),
+                });
+            }
+            Err(e) => {
+                log::error!("GChat send failed for video {video_id}: {e}");
+                results.push(BanRequestResult {
+                    video_id: video_id.clone(),
+                    success: false,
+                    message: format!("GChat error: {e}"),
+                });
+            }
+        }
+    }
+
+    Ok((StatusCode::OK, Json(BanRequestsResponse { results })))
 }

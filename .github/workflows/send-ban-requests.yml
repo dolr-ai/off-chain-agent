@@ -1,0 +1,57 @@
+name: Send Ban Requests to Google Chat
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_ids:
+        description: "Comma-separated list of video IDs to send ban requests for"
+        required: true
+        type: string
+      agent_url:
+        description: "Off-chain agent base URL (e.g. https://agent.yral.com)"
+        required: true
+        type: string
+
+jobs:
+  send-ban-requests:
+    name: Send Ban Requests
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: off-chain-agent-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/off-chain-agent/YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY value | YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY ;
+
+      - name: Build JSON payload
+        id: payload
+        run: |
+          VIDEO_IDS_JSON=$(echo "${{ inputs.video_ids }}" | tr ',' '\n' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | jq -R . | jq -sc .)
+          echo "json={\"video_ids\":$VIDEO_IDS_JSON}" >> $GITHUB_OUTPUT
+
+      - name: Send ban requests
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "${{ inputs.agent_url }}/api/v1/moderation/send-ban-requests" \
+            -H "Authorization: Bearer ${{ env.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '${{ steps.payload.outputs.json }}')
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Request failed with status $HTTP_CODE"
+            exit 1
+          fi
