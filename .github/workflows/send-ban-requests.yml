@@ -7,10 +7,6 @@ on:
         description: "Comma-separated list of video IDs to send ban requests for"
         required: true
         type: string
-      agent_url:
-        description: "Off-chain agent base URL (e.g. https://agent.yral.com)"
-        required: true
-        type: string
 
 jobs:
   send-ban-requests:
@@ -40,7 +36,7 @@ jobs:
       - name: Send ban requests
         run: |
           RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST "${{ inputs.agent_url }}/api/v1/moderation/send-ban-requests" \
+            -X POST "https://offchain.yral.com/api/v1/moderation/send-ban-requests" \
             -H "Authorization: Bearer ${{ env.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d '${{ steps.payload.outputs.json }}')
