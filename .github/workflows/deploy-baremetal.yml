@@ -238,6 +238,7 @@ jobs:
             secret/data/off-chain-agent/SENTRY_CLIENT_SECRET_2 value | SENTRY_CLIENT_SECRET_2 ;
             secret/data/off-chain-agent/GCHAT_SENTRY_WEBHOOK_URL value | GCHAT_SENTRY_WEBHOOK_URL ;
             secret/data/off-chain-agent/GOOGLE_CHAT_REPORT_SPACE_URL value | GOOGLE_CHAT_REPORT_SPACE_URL ;
+            secret/data/off-chain-agent/RECSYS_INTERNAL_CALL_SECRET_KEY value | RECSYS_INTERNAL_CALL_SECRET_KEY ;
             secret/data/off-chain-agent/KVROCKS_PASSWORD value | KVROCKS_PASSWORD ;
             secret/data/off-chain-agent/KVROCKS_HOSTS value | KVROCKS_HOSTS ;
             secret/data/off-chain-agent/KVROCKS_CA_CERT value | KVROCKS_CA_CERT ;
@@ -315,6 +316,7 @@ jobs:
           SENTRY_CLIENT_SECRET_2: ${{ env.SENTRY_CLIENT_SECRET_2 }}
           GCHAT_SENTRY_WEBHOOK_URL: ${{ env.GCHAT_SENTRY_WEBHOOK_URL }}
           GOOGLE_CHAT_REPORT_SPACE_URL: ${{ env.GOOGLE_CHAT_REPORT_SPACE_URL }}
+          RECSYS_INTERNAL_CALL_SECRET_KEY: ${{ secrets.RECSYS_INTERNAL_CALL_SECRET_KEY }}
           KVROCKS_PASSWORD: ${{ env.KVROCKS_PASSWORD }}
           KVROCKS_HOSTS: ${{ env.KVROCKS_HOSTS }}
           KVROCKS_CA_CERT: ${{ env.KVROCKS_CA_CERT }}
@@ -396,6 +398,7 @@ jobs:
             ANALYTICS_SERVER_TOKEN='${ANALYTICS_SERVER_TOKEN}' \
             MILVUS_URL='${MILVUS_URL}' \
             REPLICATE_WEBHOOK_SIGNING_SECRET='${REPLICATE_WEBHOOK_SIGNING_SECRET}' \
+            RECSYS_INTERNAL_CALL_SECRET_KEY='${RECSYS_INTERNAL_CALL_SECRET_KEY}' \
             KVROCKS_PASSWORD='${KVROCKS_PASSWORD}' \
             KVROCKS_HOSTS='${KVROCKS_HOSTS}' \
             KVROCKS_CA_CERT='${KVROCKS_CA_CERT}' \
