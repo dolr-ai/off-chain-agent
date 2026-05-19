@@ -345,10 +345,10 @@ impl ViewTracker {
             video_id
         );
 
-        // Example HTTP POST request to recsys endpoint
         let req_client = self.recsys_client.client.clone();
         let video_id = video_id.to_string();
         let path = self.recsys_client.url.path().to_string();
+        let secret = std::env::var("RECSYS_INTERNAL_CALL_SECRET_KEY").unwrap_or_default();
 
         tokio::spawn(async move {
             let payload = serde_json::json!([{
@@ -357,47 +357,41 @@ impl ViewTracker {
             }]);
 
             let payload_str = payload.to_string();
+            let timestamp = chrono::Utc::now().timestamp().to_string();
 
-            let secret = std::env::var("RECSYS_INTERNAL_CALL_SECRET_KEY");
-            if let Ok(secret) = secret {
-                let timestamp = chrono::Utc::now().timestamp().to_string();
+            let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+                .expect("HMAC can take key of any size");
+            mac.update(timestamp.as_bytes());
+            mac.update(b"\n");
+            mac.update(b"POST");
+            mac.update(b"\n");
+            mac.update(path.as_bytes());
+            mac.update(b"\n");
+            mac.update(payload_str.as_bytes());
+            let signature = hex::encode(mac.finalize().into_bytes());
 
-                let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-                    .expect("HMAC can take key of any size");
-                mac.update(timestamp.as_bytes());
-                mac.update(b"\n");
-                mac.update(b"POST");
-                mac.update(b"\n");
-                mac.update(path.as_bytes());
-                mac.update(b"\n");
-                mac.update(payload_str.as_bytes());
-                let signature = hex::encode(mac.finalize().into_bytes());
-
-                match req_client
-                    .post(RECSYS_ENDPOINT)
-                    .header("x-internal-timestamp", timestamp)
-                    .header("x-internal-signature", signature)
-                    .header("Content-Type", "application/json")
-                    .body(payload_str)
-                    .send()
-                    .await
-                {
-                    Ok(response) => {
-                        if response.status().is_success() {
-                            log::info!("Successfully sent view count to recsys-system");
-                        } else {
-                            log::error!(
-                                "Failed to send view count to recsys-system: HTTP {}",
-                                response.status()
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("Error sending view count to recsys-system: {}", e);
+            match req_client
+                .post(RECSYS_ENDPOINT)
+                .header("x-internal-timestamp", timestamp)
+                .header("x-internal-signature", signature)
+                .header("Content-Type", "application/json")
+                .body(payload_str)
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        log::info!("Successfully sent view count to recsys-system");
+                    } else {
+                        log::error!(
+                            "Failed to send view count to recsys-system: HTTP {}",
+                            response.status()
+                        );
                     }
                 }
-            } else {
-                log::error!("RECSYS_INTERNAL_CALL_SECRET_KEY not set, request will not be signed");
+                Err(e) => {
+                    log::error!("Error sending view count to recsys-system: {}", e);
+                }
             }
         });
     }
