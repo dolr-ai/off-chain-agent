@@ -1,9 +1,6 @@
 name: Send Ban Requests to Google Chat
 
 on:
-  push:
-    branches:
-      - feat/send-ban-requests-gchat
   workflow_dispatch:
     inputs:
       video_ids:
@@ -33,12 +30,7 @@ jobs:
       - name: Build JSON payload
         id: payload
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            IDS="${{ inputs.video_ids }}"
-          else
-            IDS="7ba82669a8eb489b87d800b02b55fe5e"
-          fi
-          VIDEO_IDS_JSON=$(echo "$IDS" | tr ',' '\n' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | jq -R . | jq -sc .)
+          VIDEO_IDS_JSON=$(echo "${{ inputs.video_ids }}" | tr ',' '\n' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | jq -R . | jq -sc .)
           echo "json={\"video_ids\":$VIDEO_IDS_JSON}" >> $GITHUB_OUTPUT
 
       - name: Send ban requests
