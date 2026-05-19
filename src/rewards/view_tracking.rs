@@ -353,7 +353,7 @@ impl ViewTracker {
         tokio::spawn(async move {
             let payload = serde_json::json!([{
                 "video_id": video_id,
-                "total_view_count": total_view_count,
+                "total_count_all": total_view_count,
             }]);
 
             let payload_str = payload.to_string();
