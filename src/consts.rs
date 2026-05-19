@@ -51,7 +51,7 @@ pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:4
 pub const ANALYTICS_SERVER_URL: &str = "https://analytics.yral.com";
 
 pub static STORJ_INTERFACE_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://pr-11-yral-video-upload-service.preview.yral.com").unwrap());
+    Lazy::new(|| Url::parse("https://storage-interface.prakash.yral.com").unwrap());
 
 pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
     Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").expect("STORJ_INTERFACE_TOKEN to be set"));
