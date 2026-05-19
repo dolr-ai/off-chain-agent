@@ -163,6 +163,10 @@ impl RewardEngine {
                     .track_view(video_id, &event.user_id, false)
                     .await?;
             }
+            // send total view count to recsys-system from here for non-logged-in users.
+            let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
+            self.view_tracker
+                .send_view_count_to_recsys(video_id, total_view_count);
             return Ok(());
         }
 
@@ -178,6 +182,10 @@ impl RewardEngine {
                     .track_view(video_id, &event.user_id, false)
                     .await?;
             }
+            // send total view count to recsys-system from here for unregistered users.
+            let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
+            self.view_tracker
+                .send_view_count_to_recsys(video_id, total_view_count);
             return Ok(());
         }
 
@@ -193,6 +201,10 @@ impl RewardEngine {
                     .track_view(video_id, &event.user_id, false)
                     .await?;
             }
+            // send total view count to recsys-system from here for videos with unregistered publishers.
+            let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
+            self.view_tracker
+                .send_view_count_to_recsys(video_id, total_view_count);
             return Ok(());
         }
 
@@ -214,6 +226,10 @@ impl RewardEngine {
             .view_tracker
             .track_view(video_id, &event.user_id, true)
             .await?;
+
+        let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
+        self.view_tracker
+            .send_view_count_to_recsys(video_id, total_view_count);
 
         if let Some(count) = view_count {
             log::info!(
