@@ -403,6 +403,7 @@ impl ViewTracker {
     }
 }
 
+#[derive(Clone)]
 pub struct RecsysClient {
     client: Client,
     url: Url,
