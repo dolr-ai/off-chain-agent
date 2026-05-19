@@ -410,7 +410,6 @@ pub struct RecsysClient {
 }
 
 impl RecsysClient {
-
     pub fn new() -> Self {
         let client = Client::new();
         let url = Url::parse(RECSYS_ENDPOINT).expect("Invalid recsys endpoint URL");
@@ -418,8 +417,7 @@ impl RecsysClient {
         let secret = std::env::var("RECSYS_INTERNAL_CALL_SECRET_KEY").unwrap_or_default();
         if secret.is_empty() {
             log::error!("RECSYS_INTERNAL_CALL_SECRET_KEY is not set");
-        }
-        else {
+        } else {
             log::info!("RECSYS_INTERNAL_CALL_SECRET_KEY is set");
         }
         Self { client, url }
