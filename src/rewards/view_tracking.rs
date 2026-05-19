@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use candid::Principal;
 use hmac::{Hmac, Mac};
 use redis::AsyncCommands;
-use reqwest::Client;
+use reqwest::{Client, Url};
 use sha1::{Digest, Sha1};
 use sha2::Sha256;
 use std::sync::Arc;
@@ -62,12 +62,12 @@ fn calculate_script_sha(script: &str) -> String {
 pub struct ViewTracker {
     redis_store_pool: Arc<DragonflyPool>,
     script_sha: Option<String>,
-    recsys_client: Client,
+    recsys_client: RecsysClient,
 }
 
 impl ViewTracker {
     pub fn new(redis_store_pool: Arc<DragonflyPool>) -> Self {
-        let recsys_client = Client::new();
+        let recsys_client = RecsysClient::new();
         Self {
             redis_store_pool,
             script_sha: None,
@@ -346,8 +346,9 @@ impl ViewTracker {
         );
 
         // Example HTTP POST request to recsys endpoint
-        let client = self.recsys_client.clone();
+        let req_client = self.recsys_client.client.clone();
         let video_id = video_id.to_string();
+        let path = self.recsys_client.url.path();
 
         tokio::spawn(async move {
             let payload = serde_json::json!([{
@@ -356,44 +357,71 @@ impl ViewTracker {
             }]);
 
             let payload_str = payload.to_string();
-            let secret = std::env::var("RECSYS_INTERNAL_CALL_SECRET_KEY").unwrap_or_default();
-            let timestamp = chrono::Utc::now().timestamp().to_string();
 
-            let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-                .expect("HMAC can take key of any size");
-            mac.update(timestamp.as_bytes());
-            mac.update(b"\n");
-            mac.update(b"POST");
-            mac.update(b"\n");
-            mac.update(RECSYS_ENDPOINT.as_bytes());
-            mac.update(b"\n");
-            mac.update(payload_str.as_bytes());
-            let signature = hex::encode(mac.finalize().into_bytes());
+            let secret = std::env::var("RECSYS_INTERNAL_CALL_SECRET_KEY");
+            if let Ok(secret) = secret {
+                let timestamp = chrono::Utc::now().timestamp().to_string();
 
-            match client
-                .post(RECSYS_ENDPOINT)
-                .header("x-internal-timestamp", timestamp)
-                .header("x-internal-signature", signature)
-                .header("Content-Type", "application/json")
-                .body(payload_str)
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    if response.status().is_success() {
-                        log::info!("Successfully sent view count to recsys-system");
-                    } else {
-                        log::error!(
-                            "Failed to send view count to recsys-system: HTTP {}",
-                            response.status()
-                        );
+                let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+                    .expect("HMAC can take key of any size");
+                mac.update(timestamp.as_bytes());
+                mac.update(b"\n");
+                mac.update(b"POST");
+                mac.update(b"\n");
+                mac.update(path.as_bytes());
+                mac.update(b"\n");
+                mac.update(payload_str.as_bytes());
+                let signature = hex::encode(mac.finalize().into_bytes());
+
+                match req_client
+                    .post(RECSYS_ENDPOINT)
+                    .header("x-internal-timestamp", timestamp)
+                    .header("x-internal-signature", signature)
+                    .header("Content-Type", "application/json")
+                    .body(payload_str)
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            log::info!("Successfully sent view count to recsys-system");
+                        } else {
+                            log::error!(
+                                "Failed to send view count to recsys-system: HTTP {}",
+                                response.status()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Error sending view count to recsys-system: {}", e);
                     }
                 }
-                Err(e) => {
-                    log::error!("Error sending view count to recsys-system: {}", e);
-                }
+            } else {
+                log::error!("RECSYS_INTERNAL_CALL_SECRET_KEY not set, request will not be signed");
             }
         });
+    }
+}
+
+pub struct RecsysClient {
+    client: Client,
+    url: Url,
+}
+
+impl RecsysClient {
+
+    pub fn new() -> Self {
+        let client = Client::new();
+        let url = Url::parse(RECSYS_ENDPOINT).expect("Invalid recsys endpoint URL");
+
+        let secret = std::env::var("RECSYS_INTERNAL_CALL_SECRET_KEY").unwrap_or_default();
+        if secret.is_empty() {
+            log::error!("RECSYS_INTERNAL_CALL_SECRET_KEY is not set");
+        }
+        else {
+            log::info!("RECSYS_INTERNAL_CALL_SECRET_KEY is set");
+        }
+        Self { client, url }
     }
 }
 
