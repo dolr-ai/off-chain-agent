@@ -51,7 +51,7 @@ pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:4
 pub const ANALYTICS_SERVER_URL: &str = "https://analytics.yral.com";
 
 pub static STORJ_INTERFACE_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://storj-interface.yral.com/").unwrap());
+    Lazy::new(|| Url::parse("https://storage-interface.prakash.yral.com").unwrap());
 
 pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
     Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").expect("STORJ_INTERFACE_TOKEN to be set"));
@@ -65,7 +65,7 @@ pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
 
 // Storj Public Bucket URLs
 pub const STORJ_SFW_BUCKET_URL: &str =
-    "https://link.storjshare.io/raw/jxdwdcqbubqksqgz4i7wxsg6o7cq/yral-videos";
+    "https://link.storjshare.io/raw/jxepcyfzxbj5mk4d676jhsfjpg5a/yral-sfw";
 pub const STORJ_NSFW_BUCKET_URL: &str =
     "https://link.storjshare.io/raw/jxflpcetc5iwtfu6y6co2iugaewa/yral-nsfw-videos";
 

@@ -267,7 +267,7 @@ async fn move2_nsfw_buckets_if_required(
         client
             .post(
                 crate::consts::STORJ_INTERFACE_URL
-                    .join("/move2nsfw")
+                    .join("/move-to-nsfw")
                     .expect("url to be valid"),
             )
             .json(&move_args)
