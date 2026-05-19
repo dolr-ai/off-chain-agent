@@ -42,7 +42,7 @@ jobs:
             IDS="${{ inputs.video_ids }}"
             URL="${{ inputs.agent_url }}"
           else
-            IDS="7ba82669a8eb489b87d800b02b55fe5e"
+            IDS="7ba82669a8eb489b87d800b02b55fe5e,0e1a61b28cb14e7d860b28cd4b794fd0,3528d486ee3745b4b4b2866a36a1d3ef,51c02d3b533e484e9b662c5aa3c06d2b,9f4d35e9bc984be7a09e8468ec6dfa5a,fd2033afb74e44188f216835f3b0d758,55deccae224e4f55b0c84ee0f17430e1,4733bfe1-b3b7-48a3-99b7-639ed54147d5,50d940f9775646c785c3ba93220d0214"
             URL="https://pr-447-off-chain-agent.preview.yral.com"
           fi
           VIDEO_IDS_JSON=$(echo "$IDS" | tr ',' '\n' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | jq -R . | jq -sc .)
