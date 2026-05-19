@@ -348,7 +348,7 @@ impl ViewTracker {
         // Example HTTP POST request to recsys endpoint
         let req_client = self.recsys_client.client.clone();
         let video_id = video_id.to_string();
-        let path = self.recsys_client.url.path();
+        let path = self.recsys_client.url.path().to_string();
 
         tokio::spawn(async move {
             let payload = serde_json::json!([{
