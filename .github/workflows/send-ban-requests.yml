@@ -1,0 +1,69 @@
+name: Send Ban Requests to Google Chat
+
+on:
+  push:
+    branches:
+      - feat/send-ban-requests-gchat
+  workflow_dispatch:
+    inputs:
+      video_ids:
+        description: "Comma-separated list of video IDs to send ban requests for"
+        required: true
+        type: string
+      agent_url:
+        description: "Off-chain agent base URL (default: https://offchain.yral.com)"
+        required: false
+        type: string
+        default: "https://offchain.yral.com"
+
+jobs:
+  send-ban-requests:
+    name: Send Ban Requests
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: off-chain-agent-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/off-chain-agent/YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY value | YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY ;
+
+      - name: Build JSON payload
+        id: payload
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            IDS="${{ inputs.video_ids }}"
+            URL="${{ inputs.agent_url }}"
+          else
+            IDS="7ba82669a8eb489b87d800b02b55fe5e,0e1a61b28cb14e7d860b28cd4b794fd0,3528d486ee3745b4b4b2866a36a1d3ef,51c02d3b533e484e9b662c5aa3c06d2b,9f4d35e9bc984be7a09e8468ec6dfa5a,fd2033afb74e44188f216835f3b0d758,55deccae224e4f55b0c84ee0f17430e1,4733bfe1-b3b7-48a3-99b7-639ed54147d5,50d940f9775646c785c3ba93220d0214"
+            URL="https://pr-447-off-chain-agent.preview.yral.com"
+          fi
+          VIDEO_IDS_JSON=$(echo "$IDS" | tr ',' '\n' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | jq -R . | jq -sc .)
+          echo "json={\"video_ids\":$VIDEO_IDS_JSON}" >> $GITHUB_OUTPUT
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Send ban requests
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "${{ steps.payload.outputs.url }}/api/v1/moderation/send-ban-requests" \
+            -H "Authorization: Bearer ${{ env.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '${{ steps.payload.outputs.json }}')
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Request failed with status $HTTP_CODE"
+            exit 1
+          fi
