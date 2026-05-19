@@ -1,6 +1,9 @@
 name: Send Ban Requests to Google Chat
 
 on:
+  push:
+    branches:
+      - feat/send-ban-requests-gchat
   workflow_dispatch:
     inputs:
       video_ids:
@@ -35,13 +38,21 @@ jobs:
       - name: Build JSON payload
         id: payload
         run: |
-          VIDEO_IDS_JSON=$(echo "${{ inputs.video_ids }}" | tr ',' '\n' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | jq -R . | jq -sc .)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            IDS="${{ inputs.video_ids }}"
+            URL="${{ inputs.agent_url }}"
+          else
+            IDS="7ba82669a8eb489b87d800b02b55fe5e"
+            URL="https://pr-447-off-chain-agent.preview.yral.com"
+          fi
+          VIDEO_IDS_JSON=$(echo "$IDS" | tr ',' '\n' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | jq -R . | jq -sc .)
           echo "json={\"video_ids\":$VIDEO_IDS_JSON}" >> $GITHUB_OUTPUT
+          echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Send ban requests
         run: |
           RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST "${{ inputs.agent_url }}/api/v1/moderation/send-ban-requests" \
+            -X POST "${{ steps.payload.outputs.url }}/api/v1/moderation/send-ban-requests" \
             -H "Authorization: Bearer ${{ env.YRAL_OFF_CHAIN_USER_MIGRATION_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d '${{ steps.payload.outputs.json }}')
