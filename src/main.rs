@@ -8,7 +8,6 @@ use axum::routing::post;
 use axum::{routing::get, Router};
 use canister::canister_health_handler;
 use config::AppConfig;
-use events::event::storj::enqueue_storj_backfill_item;
 use http::header::CONTENT_TYPE;
 use offchain_service::report_approved_handler;
 use qstash::qstash_router;
@@ -141,10 +140,6 @@ async fn main_impl() -> Result<()> {
         .route("/canister-health", get(canister_health_handler))
         .route("/report-approved", post(report_approved_handler))
         .route("/webhooks/sentry", post(sentry_webhook_handler))
-        .route(
-            "/enqueue_storj_backfill_item",
-            post(enqueue_storj_backfill_item),
-        )
         .nest("/qstash", qstash_routes)
         .nest("/replicate", replicate_webhook_routes)
         .nest("/comfyui", comfyui_webhook_routes)

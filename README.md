@@ -45,7 +45,7 @@ flowchart TD
 flowchart TD
     OffChainAgent[OffChain Agent]
     Frontend[Frontend SSR]
-    CFStream[Cloudflare<br> Stream]
+    StorageService[Storage Interface<br>Storj/Hetzner]
     GCSVideos[GCS Videos bucket]
     GCSFrames[GCS Frames bucket]
     NSFWServer[NSFW Server]
@@ -53,7 +53,7 @@ flowchart TD
     BQNSFW[BQ NSFW table]
     Upstash[Upstash]
 
-    Frontend --[1]--> CFStream
+    Frontend --[1]--> StorageService
     Frontend --[2.1]--> OffChainAgent
     OffChainAgent --[2.x.1]--> Upstash
     Upstash --[2.x.2]--> OffChainAgent

@@ -6398,7 +6398,6 @@ dependencies = [
  "serde_with 3.14.1",
  "sha1",
  "sha2 0.10.9",
- "storj-interface",
  "stringreader",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -8878,22 +8877,6 @@ dependencies = [
  "cfg-if",
  "futures-core",
  "pin-project-lite",
-]
-
-[[package]]
-name = "storj-interface"
-version = "0.1.0"
-source = "git+https://github.com/dolr-ai/storj-interface?rev=b824766e5a528deafa56fbb01ecb9f7e09a79e50#b824766e5a528deafa56fbb01ecb9f7e09a79e50"
-dependencies = [
- "anyhow",
- "axum 0.8.4",
- "futures-util",
- "once_cell",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
 ]
 
 [[package]]

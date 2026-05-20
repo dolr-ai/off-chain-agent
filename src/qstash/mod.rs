@@ -29,7 +29,7 @@ use crate::{
         },
     },
     events::{
-        event::{storj::storj_ingest, upload_video_gcs},
+        event::upload_video_gcs,
         nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
     },
     posts::report_post::qstash_report_post,
@@ -144,7 +144,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
         .route("/enqueue_video_nsfw_detection_v2", post(nsfw_job_v2))
-        .route("/storj_ingest", post(storj_ingest))
         .route("/report_post", post(qstash_report_post))
         .route(
             "/start_backup_canisters_job_v2",

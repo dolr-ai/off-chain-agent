@@ -32,9 +32,6 @@ pub static GOOGLE_CHAT_REPORT_SPACE_URL: Lazy<String> = Lazy::new(|| {
 });
 
 #[allow(dead_code)]
-pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
-
-#[allow(dead_code)]
 pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
 pub static OFF_CHAIN_AGENT_URL: Lazy<Url> = Lazy::new(|| {
@@ -76,16 +73,6 @@ pub fn get_storj_video_url(publisher_user_id: &str, video_id: &str, is_nsfw: boo
         STORJ_SFW_BUCKET_URL
     };
     format!("{}/{}/{}.mp4", bucket_url, publisher_user_id, video_id)
-}
-
-// Cloudflare Stream URL
-pub const CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN: &str = "customer-2p3jflss4r4hmpnz";
-
-pub fn get_cloudflare_stream_url(video_id: &str) -> String {
-    format!(
-        "https://{}.cloudflarestream.com/{}/watch",
-        CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN, video_id
-    )
 }
 
 // Rate Limiting Constants

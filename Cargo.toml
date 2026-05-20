@@ -69,7 +69,6 @@ aead = "0.5.2"
 image = "0.25"
 rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
-storj-interface = { git = "https://github.com/dolr-ai/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
 # yral-metrics = { path = "../yral-common/metrics" }
 yral-metadata-types = { git = "https://github.com/dolr-ai/yral-metadata", branch = "master", version = "0.1.0" }
 sentry = { version = "0.37.0", default-features = false, features = [

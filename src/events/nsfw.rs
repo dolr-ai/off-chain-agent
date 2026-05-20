@@ -204,6 +204,12 @@ struct VideoNSFWData {
     nsfw_ec: String,
     nsfw_gore: String,
 }
+
+#[derive(Serialize)]
+struct MoveToNsfwArgs {
+    publisher_user_id: String,
+    video_id: String,
+}
 #[cfg(feature = "local-bin")]
 pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
@@ -258,7 +264,7 @@ async fn move2_nsfw_buckets_if_required(
     );
 
     if is_nsfw {
-        let move_args = storj_interface::move2nsfw::Args {
+        let move_args = MoveToNsfwArgs {
             publisher_user_id: video_info.publisher_user_id,
             video_id: video_info.video_id,
         };

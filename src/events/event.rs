@@ -20,8 +20,6 @@ use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
 
-pub mod storj;
-
 /// Flat event for Mixpanel - event name + all params at same level
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]

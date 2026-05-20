@@ -6,7 +6,6 @@ pub enum Step {
     GcsUpload,
     NsfwDetection,
     NsfwDetectionV2,
-    StorjIngest,
 }
 
 impl std::fmt::Display for Step {
@@ -17,7 +16,6 @@ impl std::fmt::Display for Step {
             Step::GcsUpload => "gcs_upload",
             Step::NsfwDetection => "nsfw_detection",
             Step::NsfwDetectionV2 => "nsfw_detection_v2",
-            Step::StorjIngest => "storj_ingest",
         };
 
         f.write_str(text)

@@ -59,27 +59,6 @@ impl QStashClient {
     }
 
     #[instrument(skip(self))]
-    pub async fn duplicate_to_storj(
-        &self,
-        data: storj_interface::duplicate::Args,
-    ) -> anyhow::Result<()> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/storj_ingest").unwrap();
-        let url = self.base_url.join(&format!("publish/{off_chain_ep}"))?;
-
-        self.client
-            .post(url)
-            .json(&data)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .header("Upstash-Flow-Control-Key", "STORJ_INGESTION")
-            .header("Upstash-Flow-Control-Value", "Rate=20,Parallelism=10")
-            .send()
-            .await?;
-
-        Ok(())
-    }
-
-    #[instrument(skip(self))]
     pub async fn publish_video(
         &self,
         video_id: &str,

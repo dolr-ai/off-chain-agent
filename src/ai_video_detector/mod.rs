@@ -62,7 +62,7 @@ impl AiVideoDetectorClient {
     /// Detect if a video is AI-generated or real footage
     ///
     /// # Arguments
-    /// * `video_url` - URL of the video to analyze (supports Cloudflare Stream and Storj links)
+    /// * `video_url` - URL of the video to analyze
     ///
     /// # Returns
     /// * `DetectionResponse` with verdict (ALLOW/BLOCK/REVIEW), confidence, and other metadata
