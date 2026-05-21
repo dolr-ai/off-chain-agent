@@ -1,6 +1,9 @@
 name: Send Ban Requests
 
 on:
+  push:
+    branches:
+      - feat/send-ban-requests-gchat
   workflow_dispatch:
     inputs:
       video_ids:
