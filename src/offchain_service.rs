@@ -351,9 +351,6 @@ fn ban_event_canister_id(canister_id: &str, creator_principal: &Principal) -> St
 #[derive(Debug, Clone)]
 pub struct BannedReportedPost {
     pub post_id: String,
-    pub video_id: String,
-    pub publisher_user_id: Principal,
-    pub canister_id: String,
 }
 
 pub async fn ban_reported_post(
@@ -404,9 +401,6 @@ pub async fn ban_reported_post(
 
     Ok(BannedReportedPost {
         post_id: post_id.to_string(),
-        video_id: video_uid,
-        publisher_user_id: creator_principal,
-        canister_id: event_canister_id,
     })
 }
 
