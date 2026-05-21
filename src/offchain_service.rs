@@ -339,6 +339,77 @@ async fn verify_google_chat_bearer_token(auth_token: &str) -> Result<()> {
     ))
 }
 
+fn ban_event_canister_id(canister_id: &str, creator_principal: &Principal) -> String {
+    let canister_id = canister_id.trim();
+    if canister_id.is_empty() {
+        creator_principal.to_text()
+    } else {
+        canister_id.to_string()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BannedReportedPost {
+    pub post_id: String,
+    pub video_id: String,
+    pub publisher_user_id: Principal,
+    pub canister_id: String,
+}
+
+pub async fn ban_reported_post(
+    state: &AppState,
+    canister_id: &str,
+    post_id: &str,
+) -> Result<BannedReportedPost> {
+    let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &state.agent);
+
+    let post_details = user_post_service
+        .get_individual_post_details_by_id(post_id.to_string())
+        .await
+        .with_context(|| format!("Failed to fetch post details for {canister_id}/{post_id}"))?;
+
+    let Result2::Ok(Post {
+        video_uid,
+        creator_principal,
+        ..
+    }) = post_details
+    else {
+        return Err(anyhow::anyhow!(
+            "Failed to fetch post details for {}/{}",
+            canister_id,
+            post_id
+        ));
+    };
+
+    user_post_service
+        .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
+        .await
+        .with_context(|| format!("Failed to ban post {canister_id}/{post_id}"))?;
+    log::info!("Post status updated to banned");
+
+    let event_canister_id = ban_event_canister_id(canister_id, &creator_principal);
+    let params = json!({
+        "video_id": video_uid.clone(),
+        "publisher_user_id": creator_principal.to_text(),
+        "canister_id": event_canister_id.clone(),
+        "post_id": post_id
+    });
+
+    let event = Event::new(WarehouseEvent {
+        event: "video_report_banned".to_string(),
+        params: params.to_string(),
+    });
+    event.stream_to_bigquery(state);
+    log::info!("Ban event sent to BigQuery");
+
+    Ok(BannedReportedPost {
+        post_id: post_id.to_string(),
+        video_id: video_uid,
+        publisher_user_id: creator_principal,
+        canister_id: event_canister_id,
+    })
+}
+
 pub async fn report_approved_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -415,32 +486,7 @@ pub async fn report_approved_handler(
         post_id
     );
 
-    let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &state.agent);
-
-    let post_details = user_post_service
-        .get_individual_post_details_by_id(post_id.to_string())
-        .await
-        .with_context(|| format!("Failed to fetch post details for {canister_id}/{post_id}"))?;
-
-    let Result2::Ok(Post {
-        video_uid,
-        creator_principal,
-        ..
-    }) = post_details
-    else {
-        return Err(anyhow::anyhow!(
-            "Failed to fetch post details for {}/{}",
-            canister_id,
-            post_id
-        )
-        .into());
-    };
-
-    user_post_service
-        .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
-        .await
-        .with_context(|| format!("Failed to ban post {canister_id}/{post_id}"))?;
-    log::info!("Post status updated to banned");
+    ban_reported_post(&state, canister_id, post_id).await?;
 
     // send confirmation to Google Chat
     let confirmation_msg = json!({
@@ -454,24 +500,23 @@ pub async fn report_approved_handler(
         log::info!("Sent confirmation message to Google Chat");
     }
 
-    let params = json!({
-        "video_id": video_uid,
-        "publisher_user_id": creator_principal,
-        "canister_id": canister_id,
-        "post_id": post_id
-    });
-
-    let event = Event::new(WarehouseEvent {
-        event: "video_report_banned".to_string(),
-        params: params.to_string(),
-    });
-    event.stream_to_bigquery(&state);
-    log::info!("Ban event sent to BigQuery");
-
     log::info!("report_approved_handler completed successfully");
 
     // Return a simple message response
     Ok(axum::Json(json!({
         "text": format!("✅ Post {}/{} has been banned successfully", canister_id, post_id)
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ban_event_canister_id;
+    use candid::Principal;
+
+    #[test]
+    fn ban_event_canister_id_uses_creator_when_missing() {
+        let creator_principal = Principal::from_text("2vxsx-fae").unwrap();
+
+        assert_eq!(ban_event_canister_id("", &creator_principal), "2vxsx-fae");
+    }
 }

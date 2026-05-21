@@ -1,13 +1,10 @@
-name: Send Ban Requests to Google Chat
+name: Send Ban Requests
 
 on:
-  push:
-    branches:
-      - feat/send-ban-requests-gchat
   workflow_dispatch:
     inputs:
       video_ids:
-        description: "Comma-separated list of video IDs to send ban requests for"
+        description: "Comma-separated list of video/post IDs to ban"
         required: true
         type: string
       agent_url:
@@ -18,7 +15,7 @@ on:
 
 jobs:
   send-ban-requests:
-    name: Send Ban Requests
+    name: Ban Posts
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -49,7 +46,7 @@ jobs:
           echo "json={\"video_ids\":$VIDEO_IDS_JSON}" >> $GITHUB_OUTPUT
           echo "url=$URL" >> $GITHUB_OUTPUT
 
-      - name: Send ban requests
+      - name: Ban posts
         run: |
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X POST "${{ steps.payload.outputs.url }}/api/v1/moderation/send-ban-requests" \
@@ -65,5 +62,17 @@ jobs:
 
           if [ "$HTTP_CODE" != "200" ]; then
             echo "Request failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          if ! echo "$BODY" | jq -e '.results | type == "array"' >/dev/null; then
+            echo "Response did not contain a results array"
+            exit 1
+          fi
+
+          FAILED_RESULTS=$(echo "$BODY" | jq -r '.results[] | select(.success != true) | "- " + (.video_id // "<unknown>") + ": " + (.message // "unknown error")')
+          if [ -n "$FAILED_RESULTS" ]; then
+            echo "One or more bans failed:"
+            echo "$FAILED_RESULTS"
             exit 1
           fi

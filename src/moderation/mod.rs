@@ -17,13 +17,9 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::kvrocks::KvrocksClient;
 use crate::{
-    app_state::AppState,
-    consts::{GOOGLE_CHAT_REPORT_SPACE_URL, MODERATOR_PRINCIPALS},
-    events::push_notifications::dispatch_notif,
-    offchain_service::send_message_gchat,
-    types::DelegatedIdentityWire,
-    utils::delegated_identity::get_user_info_from_delegated_identity_wire,
-    AppError,
+    app_state::AppState, consts::MODERATOR_PRINCIPALS, events::push_notifications::dispatch_notif,
+    offchain_service::ban_reported_post, types::DelegatedIdentityWire,
+    utils::delegated_identity::get_user_info_from_delegated_identity_wire, AppError,
 };
 
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
@@ -128,7 +124,7 @@ pub fn moderation_router(state: Arc<AppState>) -> OpenApiRouter {
 
     OpenApiRouter::new()
         .merge(moderator_routes)
-        .routes(routes!(send_ban_requests_to_gchat))
+        .routes(routes!(send_ban_requests))
         .with_state(state)
 }
 
@@ -640,7 +636,11 @@ pub struct BanRequestsResponse {
     pub results: Vec<BanRequestResult>,
 }
 
-/// Send Google Chat cards with Ban button for a list of video_ids
+fn direct_ban_post_id_from_video_id(video_id: &str) -> &str {
+    video_id
+}
+
+/// Ban posts directly for a list of video_ids. For this workflow, video_id is the post_id.
 #[utoipa::path(
     post,
     path = "/send-ban-requests",
@@ -653,7 +653,7 @@ pub struct BanRequestsResponse {
     )
 )]
 #[instrument(skip(state))]
-pub async fn send_ban_requests_to_gchat(
+pub async fn send_ban_requests(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<BanRequestsBody>,
@@ -671,82 +671,46 @@ pub async fn send_ban_requests_to_gchat(
     let mut results = Vec::with_capacity(body.video_ids.len());
 
     for video_id in &body.video_ids {
-        let metadata = match state.kvrocks_client.get_video_metadata(video_id).await {
-            Ok(Some(m)) => m,
-            Ok(None) => {
-                results.push(BanRequestResult {
-                    video_id: video_id.clone(),
-                    success: false,
-                    message: "metadata not found in kvrocks".to_string(),
-                });
-                continue;
-            }
-            Err(e) => {
-                log::error!("kvrocks lookup failed for video {video_id}: {e}");
-                results.push(BanRequestResult {
-                    video_id: video_id.clone(),
-                    success: false,
-                    message: format!("kvrocks error: {e}"),
-                });
-                continue;
-            }
-        };
+        let post_id = direct_ban_post_id_from_video_id(video_id).trim();
+        if post_id.is_empty() {
+            results.push(BanRequestResult {
+                video_id: video_id.clone(),
+                success: false,
+                message: "empty video_id/post_id".to_string(),
+            });
+            continue;
+        }
 
-        let card = json!({
-            "cardsV2": [{
-                "cardId": format!("corrupt-{}", video_id),
-                "card": {
-                    "sections": [{
-                        "header": "Corrupt Video — Ban Request",
-                        "widgets": [
-                            {
-                                "textParagraph": {
-                                    "text": format!(
-                                        "video_id: {}\npublisher_user_id: {}\npost_id: {}\nreason: corrupt video",
-                                        video_id, metadata.publisher_user_id, metadata.post_id
-                                    )
-                                }
-                            },
-                            {
-                                "buttonList": {
-                                    "buttons": [{
-                                        "text": "Ban Post",
-                                        "onClick": {
-                                            "action": {
-                                                "function": "goToView",
-                                                "parameters": [{
-                                                    "key": "viewType",
-                                                    "value": format!("{} {}", metadata.publisher_user_id, metadata.post_id)
-                                                }]
-                                            }
-                                        }
-                                    }]
-                                }
-                            }
-                        ]
-                    }]
-                }
-            }]
-        });
-
-        match send_message_gchat(&state, &GOOGLE_CHAT_REPORT_SPACE_URL, card).await {
-            Ok(_) => {
+        match ban_reported_post(&state, "", post_id).await {
+            Ok(banned_post) => {
                 results.push(BanRequestResult {
                     video_id: video_id.clone(),
                     success: true,
-                    message: format!("GChat card sent for post {}", metadata.post_id),
+                    message: format!("Banned post {}", banned_post.post_id),
                 });
             }
             Err(e) => {
-                log::error!("GChat send failed for video {video_id}: {e}");
+                log::error!("Failed to ban post {post_id} for video {video_id}: {e}");
                 results.push(BanRequestResult {
                     video_id: video_id.clone(),
                     success: false,
-                    message: format!("GChat error: {e}"),
+                    message: format!("ban error: {e}"),
                 });
             }
         }
     }
 
     Ok((StatusCode::OK, Json(BanRequestsResponse { results })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::direct_ban_post_id_from_video_id;
+
+    #[test]
+    fn direct_ban_uses_video_id_as_post_id() {
+        let video_id = "4733bfe1-b3b7-48a3-99b7-639ed54147d5";
+
+        assert_eq!(direct_ban_post_id_from_video_id(video_id), video_id);
+    }
 }
