@@ -80,6 +80,28 @@ async fn main_impl() -> Result<()> {
         .layer(NewSentryLayer::new_from_top())
         .layer(SentryHttpLayer::with_transaction());
 
+    // apply_defaults fills in the transport (DefaultTransportFactory); without it
+    // Client::from skips transport setup and the hub silently drops all events.
+    let videogen_sentry_hub = Arc::new(sentry::Hub::new(
+        Some(Arc::new(sentry::Client::from(sentry::apply_defaults(
+            sentry::ClientOptions {
+                dsn: "https://ac236e89dcd339a65e822de34b81653a@sentry.prakash.yral.com/8"
+                    .parse()
+                    .ok(),
+                release: sentry::release_name!(),
+                traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1.0),
+                send_default_pii: true,
+                attach_stacktrace: true,
+                before_send: Some(crate::middleware::sentry_scrub::create_before_send()),
+                ..Default::default()
+            },
+        )))),
+        Arc::new(sentry::Scope::default()),
+    ));
+
     let router = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/api/v1/posts", posts::posts_router(shared_state.clone()))
         .nest(
@@ -89,7 +111,12 @@ async fn main_impl() -> Result<()> {
         .nest("/api/v1/user", user::user_router(shared_state.clone()))
         .nest(
             "/api/v1/videogen",
-            videogen::videogen_router(shared_state.clone()),
+            videogen::videogen_router(shared_state.clone()).layer(
+                axum::middleware::from_fn_with_state(
+                    videogen_sentry_hub.clone(),
+                    videogen_sentry_capture,
+                ),
+            ),
         )
         .nest(
             "/api/v1/leaderboard",
@@ -101,7 +128,12 @@ async fn main_impl() -> Result<()> {
         )
         .nest(
             "/api/v2/videogen",
-            videogen::videogen_router_v2(shared_state.clone()),
+            videogen::videogen_router_v2(shared_state.clone()).layer(
+                axum::middleware::from_fn_with_state(
+                    videogen_sentry_hub.clone(),
+                    videogen_sentry_capture,
+                ),
+            ),
         )
         .nest(
             "/api/v2/events",
@@ -133,8 +165,14 @@ async fn main_impl() -> Result<()> {
 
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
-    let replicate_webhook_routes = videogen::router::replicate_webhook_router(shared_state.clone());
-    let comfyui_webhook_routes = videogen::router::comfyui_webhook_router(shared_state.clone());
+    let vg_middleware = axum::middleware::from_fn_with_state(
+        videogen_sentry_hub.clone(),
+        videogen_sentry_capture,
+    );
+    let replicate_webhook_routes = videogen::router::replicate_webhook_router(shared_state.clone())
+        .layer(vg_middleware.clone());
+    let comfyui_webhook_routes = videogen::router::comfyui_webhook_router(shared_state.clone())
+        .layer(vg_middleware);
 
     let http = Router::new()
         .route("/healthz", get(health_handler))
@@ -257,6 +295,50 @@ fn main() {
         .block_on(async {
             main_impl().await.unwrap();
         });
+}
+
+async fn videogen_sentry_capture(
+    axum::extract::State(hub): axum::extract::State<Arc<sentry::Hub>>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::extract::MatchedPath;
+    use http_body_util::BodyExt as _;
+
+    let method = request.method().to_string();
+    // Use matched route pattern (e.g. "/generate") for stable Sentry grouping.
+    // Falling back to the raw path only if the router hasn't matched yet.
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|p| p.as_str().to_owned())
+        .unwrap_or_else(|| request.uri().path().to_owned());
+
+    let response = next.run(request).await;
+    let status = response.status();
+
+    // Only capture true server failures (5xx) and 429 rate-limit for investigation.
+    // 400/401/402 are expected user errors and would flood grouping.
+    let should_capture = status.is_server_error() || status.as_u16() == 429;
+
+    if should_capture {
+        let (parts, body) = response.into_parts();
+        let bytes = body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
+        let raw = String::from_utf8_lossy(&bytes);
+        // Truncate to keep message compact; full body may contain tokens.
+        let truncated = if raw.len() > 400 {
+            format!("{}…", &raw[..400])
+        } else {
+            raw.into_owned()
+        };
+        hub.capture_message(
+            &format!("{method} {route} → {status}: {truncated}"),
+            sentry::Level::Error,
+        );
+        axum::response::Response::from_parts(parts, axum::body::Body::from(bytes))
+    } else {
+        response
+    }
 }
 
 #[instrument]
