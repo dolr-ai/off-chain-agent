@@ -25,17 +25,16 @@ impl ComfyUIConfig {
     }
 
     pub fn from_env() -> Option<Self> {
-        const COMFYUI_URL: &str = "https://each-provided-dropped-oriented.trycloudflare.com";
-
         let api_token = std::env::var("COMFYUI_API_TOKEN").ok()?;
 
         if api_token.is_empty() {
             return None;
         }
 
+        let url = crate::consts::COMFYUI_URL.as_str();
         Some(Self::new(
-            Url::parse(COMFYUI_URL).ok()?,
-            Url::parse(COMFYUI_URL).ok()?,
+            Url::parse(url).ok()?,
+            Url::parse(url).ok()?,
             api_token,
         ))
     }

@@ -125,6 +125,12 @@ pub const REPLICATE_WAN2_5_FAST_MODEL: &str = "wan-video/wan-2.5-t2v-fast";
 // Configured via environment variables:
 // - COMFYUI_API_URL: The base URL of the ComfyUI API (e.g., https://your-tunnel.trycloudflare.com/)
 // - COMFYUI_API_TOKEN: Bearer token for authentication
+pub static COMFYUI_URL: Lazy<String> = Lazy::new(|| {
+    // std::env::var("COMFYUI_API_URL")
+    //     .or_else(|_| std::env::var("COMFYUI_VIEW_URL"))
+    //     .unwrap_or_else(|_| "https://each-provided-dropped-oriented.trycloudflare.com".to_string())
+    "https://each-provided-dropped-oriented.trycloudflare.com".to_string()
+});
 
 pub static MODERATOR_PRINCIPALS: Lazy<Vec<Principal>> = Lazy::new(|| {
     vec![

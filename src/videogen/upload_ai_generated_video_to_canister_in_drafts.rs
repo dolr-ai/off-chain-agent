@@ -23,13 +23,10 @@ pub async fn upload_ai_generated_video_to_canister_impl(
 ) -> Result<(), Box<dyn Error>> {
     let mut request = reqwest::Client::new().get(ai_video_url);
 
-    // If fetching from our ComfyUI instance, we need to pass the API token for authentication
-    if let Ok(view_url) = std::env::var("COMFYUI_VIEW_URL") {
-        let view_url_base = view_url.trim_end_matches('/');
-        if ai_video_url.starts_with(view_url_base) {
-            if let Ok(token) = std::env::var("COMFYUI_API_TOKEN") {
-                request = request.bearer_auth(token);
-            }
+    // If fetching from our ComfyUI instance, add the API token for authentication
+    if ai_video_url.starts_with(crate::consts::COMFYUI_URL.trim_end_matches('/')) {
+        if let Ok(token) = std::env::var("COMFYUI_API_TOKEN") {
+            request = request.bearer_auth(token);
         }
     }
 
