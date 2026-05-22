@@ -165,14 +165,12 @@ async fn main_impl() -> Result<()> {
 
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
-    let vg_middleware = axum::middleware::from_fn_with_state(
-        videogen_sentry_hub.clone(),
-        videogen_sentry_capture,
-    );
+    let vg_middleware =
+        axum::middleware::from_fn_with_state(videogen_sentry_hub.clone(), videogen_sentry_capture);
     let replicate_webhook_routes = videogen::router::replicate_webhook_router(shared_state.clone())
         .layer(vg_middleware.clone());
-    let comfyui_webhook_routes = videogen::router::comfyui_webhook_router(shared_state.clone())
-        .layer(vg_middleware);
+    let comfyui_webhook_routes =
+        videogen::router::comfyui_webhook_router(shared_state.clone()).layer(vg_middleware);
 
     let http = Router::new()
         .route("/healthz", get(health_handler))
@@ -323,7 +321,11 @@ async fn videogen_sentry_capture(
 
     if should_capture {
         let (parts, body) = response.into_parts();
-        let bytes = body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
+        let bytes = body
+            .collect()
+            .await
+            .map(|c| c.to_bytes())
+            .unwrap_or_default();
         let raw = String::from_utf8_lossy(&bytes);
         // Truncate to keep message compact; full body may contain tokens.
         let truncated = if raw.len() > 400 {
