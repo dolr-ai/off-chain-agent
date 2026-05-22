@@ -169,8 +169,11 @@ pub async fn handle_delete_post_v2(
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Route based on canister
-    if publisher_canister_id == *USER_INFO_SERVICE_CANISTER_ID {
+    // Route based on canister or post_id format: UUID post_ids always belong to UserPostService,
+    // even if the user's metadata still points to a legacy individual canister.
+    let is_uuid_post_id = post_id.parse::<u64>().is_err();
+
+    if publisher_canister_id == *USER_INFO_SERVICE_CANISTER_ID || is_uuid_post_id {
         // Use UserPostService
         let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &user_ic_agent);
 
