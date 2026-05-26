@@ -13,7 +13,6 @@ concurrency:
 env:
   DOCKER_REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  PROXY_IMAGE_NAME: ${{ github.repository_owner }}/fly-redis-proxy-offchain
 
 jobs:
   build_check:
@@ -64,15 +63,6 @@ jobs:
             type=sha,format=long,prefix=
             type=raw,value=latest
 
-      - name: Extract metadata for fly-redis-proxy
-        id: meta-proxy
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.PROXY_IMAGE_NAME }}
-          tags: |
-            type=sha,format=long,prefix=
-            type=raw,value=latest
-
       - name: Build and push offchain-agent image
         uses: docker/build-push-action@v5
         with:
@@ -83,64 +73,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Build and push fly-redis-proxy image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./deploy-baremetal/fly-redis-proxy
-          file: ./deploy-baremetal/fly-redis-proxy/Dockerfile
-          push: true
-          tags: ${{ steps.meta-proxy.outputs.tags }}
-          labels: ${{ steps.meta-proxy.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  fetch-redis-passwords:
-    name: Fetch Fly Redis Passwords
-    needs: build_check
-    runs-on: ubuntu-latest
-
-    outputs:
-      ml_feed_password: ${{ steps.redis.outputs.ml_feed_password }}
-
-    steps:
-      - name: Install Fly CLI
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Fetch Redis passwords from Fly
-        id: redis
-        env:
-          FLY_API_TOKEN: ${{ secrets.OFFCHAIN_FLY_API_TOKEN }}
-        run: |
-          # Function to fetch and extract password
-          fetch_redis_password() {
-            local db_name=$1
-            local output_name=$2
-
-            OUTPUT=$(flyctl redis status "$db_name" 2>&1)
-            REDIS_URL=$(echo "$OUTPUT" | grep "Private URL" | awk '{print $NF}')
-            REDIS_PASSWORD=$(echo "$REDIS_URL" | sed -n 's|redis://default:\([^@]*\)@.*|\1|p')
-
-            if [ -n "$REDIS_PASSWORD" ]; then
-              echo "::add-mask::$REDIS_PASSWORD"
-              echo "::add-mask::$REDIS_URL"
-            fi
-
-            if [ -z "$REDIS_URL" ]; then
-              echo "Error: Could not fetch Redis URL for $db_name"
-              exit 1
-            fi
-            if [ -z "$REDIS_PASSWORD" ]; then
-              echo "Error: Could not extract Redis password for $db_name"
-              exit 1
-            fi
-
-            echo "${output_name}=$REDIS_PASSWORD" >> $GITHUB_OUTPUT
-            echo "Password for $db_name fetched successfully"
-          }
-
-          # Fetch password
-          fetch_redis_password "yral-ml-feed-cache" "ml_feed_password"
 
   prepare-servers:
     name: Prepare Server List
@@ -158,7 +90,7 @@ jobs:
 
   deploy:
     name: Deploy to Server
-    needs: [build-and-push, fetch-redis-passwords, prepare-servers]
+    needs: [build-and-push, prepare-servers]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -220,6 +152,7 @@ jobs:
             secret/data/off-chain-agent/YRAL_METADATA_NOTIFICATION_API_KEY value | YRAL_METADATA_NOTIFICATION_API_KEY ;
             secret/data/off-chain-agent/ML_FEED_CACHE_MEMORYSTORE_URL value | ML_FEED_CACHE_MEMORYSTORE_URL ;
             secret/data/off-chain-agent/YRAL_HON_WORKER_JWT value | YRAL_HON_WORKER_JWT ;
+            secret/data/off-chain-agent/ML_FEED_CACHE_REDIS_URL value | ML_FEED_CACHE_REDIS_URL ;
             secret/data/off-chain-agent/LEADERBOARD_REDIS_URL value | LEADERBOARD_REDIS_URL ;
             secret/data/off-chain-agent/SERVICE_CANISTER_MIGRATION_REDIS_URL value | SERVICE_CANISTER_MIGRATION_REDIS_URL ;
             secret/data/off-chain-agent/HETZNER_S3_ACCESS_KEY value | HETZNER_S3_ACCESS_KEY ;
@@ -298,6 +231,7 @@ jobs:
           YRAL_METADATA_NOTIFICATION_API_KEY: ${{ env.YRAL_METADATA_NOTIFICATION_API_KEY }}
           ML_FEED_CACHE_MEMORYSTORE_URL: ${{ env.ML_FEED_CACHE_MEMORYSTORE_URL }}
           YRAL_HON_WORKER_JWT: ${{ env.YRAL_HON_WORKER_JWT }}
+          ML_FEED_CACHE_REDIS_URL: ${{ env.ML_FEED_CACHE_REDIS_URL }}
           LEADERBOARD_REDIS_URL: ${{ env.LEADERBOARD_REDIS_URL }}
           SERVICE_CANISTER_MIGRATION_REDIS_URL: ${{ env.SERVICE_CANISTER_MIGRATION_REDIS_URL }}
           HETZNER_S3_ACCESS_KEY: ${{ env.HETZNER_S3_ACCESS_KEY }}
@@ -343,7 +277,6 @@ jobs:
 
             echo 'Pulling latest images...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
-            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-offchain \
             IMAGE_TAG=${{ github.sha }} \
             docker compose pull
 
@@ -352,10 +285,8 @@ jobs:
 
             echo 'Starting services...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
-            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-offchain \
             IMAGE_TAG=${{ github.sha }} \
-            FLY_API_TOKEN='${{ secrets.OFFCHAIN_FLY_API_TOKEN }}' \
-            FLY_REDIS_ML_FEED_PASSWORD='${{ needs.fetch-redis-passwords.outputs.ml_feed_password }}' \
+            ML_FEED_CACHE_REDIS_URL='${ML_FEED_CACHE_REDIS_URL}' \
             CF_R2_ACCESS_KEY_TEMP='${CF_R2_ACCESS_KEY_TEMP}' \
             CF_R2_SECRET_ACCESS_KEY_TEMP='${CF_R2_SECRET_ACCESS_KEY_TEMP}' \
             CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY='${CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY}' \
@@ -454,9 +385,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Images" >> $GITHUB_STEP_SUMMARY
           echo "- ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-offchain:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Services" >> $GITHUB_STEP_SUMMARY
-          echo "- fly-redis-proxy-ml-feed (Fly Redis tunnel for yral-ml-feed-cache)" >> $GITHUB_STEP_SUMMARY
           echo "- offchain-agent (gRPC service on port 50051)" >> $GITHUB_STEP_SUMMARY
           echo "- caddy (TLS termination + HTTP/2 reverse proxy)" >> $GITHUB_STEP_SUMMARY

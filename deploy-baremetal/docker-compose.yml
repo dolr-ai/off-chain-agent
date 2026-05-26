@@ -1,20 +1,5 @@
 services:
 
-  fly-redis-proxy-ml-feed:
-    image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy-offchain}:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    environment:
-      - FLY_API_TOKEN=${FLY_API_TOKEN}
-      - FLY_REDIS_DB_NAME=yral-ml-feed-cache
-    networks:
-      - offchain-net
-    healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "16379"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-
   offchain-agent:
     image: ${APP_IMAGE:-ghcr.io/dolr-ai/icp-off-chain-agent}:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -31,9 +16,7 @@ services:
       ALLOYDB_DB_PASSWORD: ${ALLOYDB_DB_PASSWORD}
 
       # === Redis Configuration ===
-      # ML Feed Cache Redis - uses Fly Redis proxy
-      ML_FEED_CACHE_REDIS_URL: redis://default:${FLY_REDIS_ML_FEED_PASSWORD}@fly-redis-proxy-ml-feed:16379
-      # Other Redis instances (direct connection)
+      ML_FEED_CACHE_REDIS_URL: ${ML_FEED_CACHE_REDIS_URL}
       CANISTER_BACKUP_CACHE_REDIS_URL: ${CANISTER_BACKUP_CACHE_REDIS_URL}
       LEADERBOARD_REDIS_URL: ${LEADERBOARD_REDIS_URL}
       SERVICE_CANISTER_MIGRATION_REDIS_URL: ${SERVICE_CANISTER_MIGRATION_REDIS_URL}
@@ -130,9 +113,6 @@ services:
       SCRATCHPAD_DRAGONFLY_PASSWORD: ${SCRATCHPAD_DRAGONFLY_PASSWORD}
     networks:
       - offchain-net
-    depends_on:
-      fly-redis-proxy-ml-feed:
-        condition: service_healthy
 
   caddy:
     image: caddy:2-alpine
