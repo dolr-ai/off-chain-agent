@@ -76,31 +76,6 @@ pub fn extract_request_metadata(request: &VideoGenRequest) -> RequestMetadata {
     }
 }
 
-/// Creates a user agent for DOLR operations if needed
-pub fn create_user_agent_if_dolr(
-    identity: DelegatedIdentity,
-    token_type: &TokenType,
-) -> Result<Option<Agent>, (StatusCode, Json<VideoGenError>)> {
-    if matches!(token_type, TokenType::Dolr) {
-        let agent = Agent::builder()
-            .with_identity(identity)
-            .with_url("https://ic0.app")
-            .build()
-            .map_err(|e| {
-                log::error!("Failed to build agent: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(VideoGenError::NetworkError(
-                        "Failed to create agent".to_string(),
-                    )),
-                )
-            })?;
-        Ok(Some(agent))
-    } else {
-        Ok(None)
-    }
-}
-
 /// Retrieves the JWT token from environment variables
 pub fn get_hon_worker_jwt_token() -> Result<String, (StatusCode, Json<VideoGenError>)> {
     std::env::var("YRAL_HON_WORKER_JWT").map_err(|_| {
@@ -148,67 +123,6 @@ pub async fn rollback_balance_on_failure(
     Ok(())
 }
 
-/// Queues video generation to Qstash with automatic rollback on failure
-pub async fn queue_to_qstash_with_rollback(
-    app_state: &Arc<AppState>,
-    qstash_request: QstashVideoGenRequest,
-    jwt_token: String,
-    user_principal: Principal,
-) -> Result<(), (StatusCode, Json<VideoGenError>)> {
-    let uses_webhook = qstash_request.input.supports_webhook_callbacks();
-
-    // Build callback URL
-    let callback_url = OFF_CHAIN_AGENT_URL
-        .join("qstash/video_gen_callback")
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(VideoGenError::NetworkError(format!(
-                    "Failed to construct callback URL: {e}"
-                ))),
-            )
-        })?
-        .to_string();
-
-    // Attempt to queue
-    if let Err(e) = app_state
-        .qstash_client
-        .queue_video_generation(
-            &qstash_request,
-            if uses_webhook {
-                None
-            } else {
-                Some(&callback_url)
-            },
-        )
-        .await
-    {
-        log::error!("Failed to queue video generation: {e}. Rolling back balance.");
-
-        // Rollback balance on failure
-        if let Err(rollback_err) = rollback_balance_on_failure(
-            user_principal,
-            qstash_request.deducted_amount,
-            &qstash_request.token_type,
-            jwt_token,
-            &app_state.agent,
-        )
-        .await
-        {
-            log::error!("Rollback failed: {rollback_err}");
-        }
-
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(VideoGenError::NetworkError(format!(
-                "Failed to queue video generation: {e}"
-            ))),
-        ));
-    }
-
-    Ok(())
-}
-
 /// Builds the final queued response
 pub fn build_queued_response(
     request_key: crate::videogen::VideoGenRequestKey,
@@ -225,111 +139,77 @@ pub fn build_queued_response(
 }
 
 /// Common video generation processing logic used by both v1 and v2 APIs
-/// This function handles everything after input validation and preparation
 pub async fn process_video_generation(
     app_state: &Arc<AppState>,
     user_principal: Principal,
     video_gen_input: videogen_common::VideoGenInput,
     token_type: TokenType,
-    delegated_identity_wire: yral_types::delegated_identity::DelegatedIdentityWire,
     handle_video_upload: Option<VideoUploadHandling>,
 ) -> Result<crate::videogen::VideoGenRequestKey, (StatusCode, Json<VideoGenError>)> {
-    // Extract metadata from the input
     let model_id = video_gen_input.model_id();
     let prompt = video_gen_input.get_prompt();
-    let image = video_gen_input.get_image();
 
-    // Check prompt and image for NSFW content before any rate limiting or balance deduction
-    super::prompt_moderation::check_prompt_nsfw(prompt, image).await?;
-
-    // Determine property for rate limiting
     let property = if model_id == "inttest" {
         "VIDEOGEN_INTTEST"
     } else {
         "VIDEOGEN"
     };
 
-    //TODO: check model cost for speech to video model
-    // Get cost for the model
-    let cost = super::token_operations::get_model_cost(model_id, &token_type);
-
-    // Determine payment amount for rate limit
-    let payment_amount = if matches!(token_type, TokenType::Free) {
-        None
-    } else {
-        Some(cost)
-    };
-
-    // Verify rate limit
     let request_key = super::rate_limit::verify_rate_limit_and_create_request_v1(
         user_principal,
         model_id,
         prompt,
         property,
         &token_type,
-        payment_amount,
+        None,
         app_state,
     )
     .await
     .map_err(|(status, error)| (status, Json(error)))?;
 
-    // Create delegated identity for agent creation
-    let identity: DelegatedIdentity =
-        delegated_identity_wire
-            .clone()
-            .try_into()
-            .map_err(|e: k256::elliptic_curve::Error| {
-                log::error!("Failed to create delegated identity: {e}");
-                (StatusCode::UNAUTHORIZED, Json(VideoGenError::AuthError))
-            })?;
+    let uses_webhook = video_gen_input.supports_webhook_callbacks();
+    let callback_url = if !uses_webhook {
+        Some(
+            OFF_CHAIN_AGENT_URL
+                .join("qstash/video_gen_callback")
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(VideoGenError::NetworkError(format!(
+                            "Failed to construct callback URL: {e}"
+                        ))),
+                    )
+                })?
+                .to_string(),
+        )
+    } else {
+        None
+    };
 
-    // Create user agent if needed for DOLR operations
-    let user_agent = create_user_agent_if_dolr(identity, &token_type)?;
-
-    // Get JWT token
-    let jwt_token = get_hon_worker_jwt_token()?;
-
-    // Deduct balance with automatic cleanup on failure
-    let deducted_amount = super::token_operations::deduct_balance_with_cleanup(
-        user_principal,
-        cost,
-        &token_type,
-        jwt_token.clone(),
-        &app_state.agent,
-        &request_key,
-        property,
-        user_agent.as_ref(),
-    )
-    .await?;
-
-    // Encrypt identity for stateless preservation across asynchronous flows
-    let encrypted_identity = app_state
-        .crypto
-        .encrypt_identity(&delegated_identity_wire)
-        .map_err(|e| {
-            log::error!("Failed to encrypt identity: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(VideoGenError::ProviderError(
-                    "Failed to secure identity".to_string(),
-                )),
-            )
-        })?;
-
-    // Prepare Qstash request
     let qstash_request = super::qstash_types::QstashVideoGenRequest {
         user_principal,
         input: video_gen_input,
         request_key: request_key.clone(),
         property: property.to_string(),
-        deducted_amount,
+        deducted_amount: None,
         token_type,
         handle_video_upload,
-        encrypted_identity: Some(encrypted_identity),
+        encrypted_identity: None,
     };
 
-    // Queue to Qstash with automatic rollback on failure
-    queue_to_qstash_with_rollback(app_state, qstash_request, jwt_token, user_principal).await?;
+    app_state
+        .qstash_client
+        .queue_video_generation(&qstash_request, callback_url.as_deref())
+        .await
+        .map_err(|e| {
+            log::error!("Failed to queue video generation: {e}");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(VideoGenError::NetworkError(format!(
+                    "Failed to queue video generation: {e}"
+                ))),
+            )
+        })?;
 
     Ok(request_key)
 }
