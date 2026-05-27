@@ -129,7 +129,7 @@ pub static COMFYUI_URL: Lazy<String> = Lazy::new(|| {
     // std::env::var("COMFYUI_API_URL")
     //     .or_else(|_| std::env::var("COMFYUI_VIEW_URL"))
     //     .unwrap_or_else(|_| "https://each-provided-dropped-oriented.trycloudflare.com".to_string())
-    "https://camping-liabilities-weights-supreme.trycloudflare.com".to_string()
+    "https://videogen.prakash.yral.com".to_string()
 });
 
 pub static MODERATOR_PRINCIPALS: Lazy<Vec<Principal>> = Lazy::new(|| {

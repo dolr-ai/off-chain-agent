@@ -5,6 +5,8 @@ use std::time::Duration;
 use tracing::info;
 use videogen_common::VideoGenError;
 
+const VIDEO_SECONDS: u32 = 5;
+
 /// Configuration for a ComfyUI instance
 #[derive(Clone)]
 pub struct ComfyUIConfig {
@@ -230,7 +232,7 @@ impl ComfyUIClient {
             // === Video parameters ===
             "267:201": { "inputs": { "value": is_t2v }, "class_type": "PrimitiveBoolean" },
             "267:260": { "inputs": { "value": 25 }, "class_type": "PrimitiveInt" },
-            "267:225": { "inputs": { "value": 5 }, "class_type": "PrimitiveInt" },
+            "267:225": { "inputs": { "value": VIDEO_SECONDS }, "class_type": "PrimitiveInt" },
             "267:257": { "inputs": { "value": 720 }, "class_type": "PrimitiveInt" },
             "267:258": { "inputs": { "value": 1280 }, "class_type": "PrimitiveInt" },
             "267:261": { "inputs": { "expression": "a", "values.a": ["267:260", 0] }, "class_type": "ComfyMathExpression" },
