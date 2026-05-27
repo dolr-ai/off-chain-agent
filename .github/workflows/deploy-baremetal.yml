@@ -273,12 +273,6 @@ jobs:
           YRAL_MOBILE_SA_KEY_ESCAPED=$(printf '%q' "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY")
 
           ssh offchain@${{ matrix.server }} "
-            # Gracefully stop the old project if the directory still exists
-            if [ -d '/home/offchain-agent' ]; then
-              echo 'Stopping containers from old directory...'
-              cd /home/offchain-agent && docker compose down --remove-orphans || true
-            fi
-
             cd /home/offchain/off-chain-agent
 
             echo 'Pulling latest images...'
