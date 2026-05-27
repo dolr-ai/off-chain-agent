@@ -5,7 +5,7 @@ use std::time::Duration;
 use tracing::info;
 use videogen_common::VideoGenError;
 
-const VIDEO_SECONDS: u32 = 5;
+const VIDEO_SECONDS: u32 = 15;
 
 /// Configuration for a ComfyUI instance
 #[derive(Clone)]
