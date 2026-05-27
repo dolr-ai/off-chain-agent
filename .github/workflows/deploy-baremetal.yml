@@ -101,22 +101,6 @@ jobs:
         server: ${{ fromJson(needs.prepare-servers.outputs.servers) }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
-
-      - name: Add server to known hosts
-        run: |
-          ssh-keyscan -H ${{ matrix.server }} >> ~/.ssh/known_hosts
-
-      - name: Check server connectivity
-        run: |
-          ssh -o ConnectTimeout=10 root@${{ matrix.server }} "echo 'Server ${{ matrix.server }} connection successful'"
-
       - name: Import Secrets from Vault
         uses: hashicorp/vault-action@v3
         with:
@@ -185,17 +169,35 @@ jobs:
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_HOSTS value | DRAGONFLY_REDIS_STORE_HOSTS ;
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_CLIENT_CERT value | DRAGONFLY_REDIS_STORE_CLIENT_CERT ;
-            secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;      
+            secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
+            secret/data/off-chain-agent/OFFCHAIN_MACHINES_SSH_ACCESS_KEY value | OFFCHAIN_MACHINES_SSH_ACCESS_KEY ;
 
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ env.OFFCHAIN_MACHINES_SSH_ACCESS_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ matrix.server }} >> ~/.ssh/known_hosts
+
+      - name: Check server connectivity
+        run: |
+          ssh -o ConnectTimeout=10 offchain@${{ matrix.server }} "echo 'Server ${{ matrix.server }} connection successful'"
+
+      
       - name: Sync deployment files to server
         run: |
           rsync -avz --delete \
             ./deploy-baremetal/ \
-            root@${{ matrix.server }}:/home/offchain-agent/
+            offchain@${{ matrix.server }}:/home/offchain/off-chain-agent/
 
       - name: Log in to GHCR on server
         run: |
-          ssh root@${{ matrix.server }} "
+          ssh offchain@${{ matrix.server }} "
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           "
 
@@ -270,8 +272,14 @@ jobs:
           ALLOYDB_SA_JSON_ESCAPED=$(printf '%q' "$ALLOYDB_SERVICE_ACCOUNT_JSON")
           YRAL_MOBILE_SA_KEY_ESCAPED=$(printf '%q' "$YRAL_MOBILE_SERVICE_ACCOUNT_KEY")
 
-          ssh root@${{ matrix.server }} "
-            cd /home/offchain-agent
+          ssh offchain@${{ matrix.server }} "
+            # Gracefully stop the old project if the directory still exists
+            if [ -d '/home/offchain-agent' ]; then
+              echo 'Stopping containers from old directory...'
+              cd /home/offchain-agent && docker compose down --remove-orphans || true
+            fi
+
+            cd /home/offchain/off-chain-agent
 
             echo 'Pulling latest images...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
@@ -358,8 +366,8 @@ jobs:
 
       - name: Verify deployment
         run: |
-          ssh root@${{ matrix.server }} "
-            cd /home/offchain-agent
+          ssh offchain@${{ matrix.server }} "
+            cd /home/offchain/off-chain-agent
             echo '=== Container Status ==='
             docker compose ps
             echo ''
