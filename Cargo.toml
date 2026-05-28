@@ -123,7 +123,7 @@ yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", br
 yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", branch = "master", package = "alloydb-client"}
 yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master" }
 yral-metrics = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
-videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master", features = ["server"] }
+videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "prakash/foreward-duration-seconds", features = ["server"] }
 yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
 yral-types = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
 yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
@@ -137,7 +137,6 @@ yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "
 # yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
 # yral-qstash-types = { path = "../yral-common/qstash-types" }
 # videogen-common = { path = "../yral-common/videogen-common", features = [
-#     "ic",
 #     "server",
 # ] }
 # yral-identity = { path = "../yral-common/identity" }

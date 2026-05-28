@@ -1,3 +1,4 @@
+use aead::rand_core::le;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -180,7 +181,7 @@ impl ComfyUIClient {
     /// Build LTX-2 distilled workflow with 1080p upscale based on the generation mode
     ///
     /// Pipeline: generate at half res (540x960) → upscale 2x in latent space → refine → tiled VAE decode
-    pub fn build_ltx2_workflow(&self, mode: &VideoGenMode) -> Value {
+    pub fn build_ltx2_workflow(&self, mode: &VideoGenMode, duration_seconds: Option<u32>) -> Value {
         let (prompt_text, image_url) = match mode {
             VideoGenMode::TextToVideo { prompt } => (prompt.as_str(), None),
             VideoGenMode::ImageToVideo { image_url, prompt } => {
@@ -193,6 +194,9 @@ impl ComfyUIClient {
 
         let is_t2v = image_url.is_none();
         let image_input = image_url.unwrap_or("example.png");
+        let duration_seconds = duration_seconds
+            .filter(|&d| d <= VIDEO_SECONDS)
+            .unwrap_or(VIDEO_SECONDS);
 
         // LTX-2.3 two-pass workflow (verified working, exported from ComfyUI).
         // Pass 1: half-res (640x360) with euler_ancestral_cfg_pp.
@@ -232,7 +236,7 @@ impl ComfyUIClient {
             // === Video parameters ===
             "267:201": { "inputs": { "value": is_t2v }, "class_type": "PrimitiveBoolean" },
             "267:260": { "inputs": { "value": 25 }, "class_type": "PrimitiveInt" },
-            "267:225": { "inputs": { "value": VIDEO_SECONDS }, "class_type": "PrimitiveInt" },
+            "267:225": { "inputs": { "value": duration_seconds }, "class_type": "PrimitiveInt" },
             "267:257": { "inputs": { "value": 720 }, "class_type": "PrimitiveInt" },
             "267:258": { "inputs": { "value": 1280 }, "class_type": "PrimitiveInt" },
             "267:261": { "inputs": { "expression": "a", "values.a": ["267:260", 0] }, "class_type": "ComfyMathExpression" },
@@ -382,8 +386,9 @@ impl ComfyUIClient {
         mode: VideoGenMode,
         webhook_url: &str,
         extra_params: Value,
+        duration_seconds: Option<u32>,
     ) -> Result<GenerateResponse, VideoGenError> {
-        let workflow = self.build_ltx2_workflow(&mode);
+        let workflow = self.build_ltx2_workflow(&mode, duration_seconds);
         self.submit_workflow_with_webhook(workflow, webhook_url, extra_params)
             .await
     }

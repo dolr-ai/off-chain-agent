@@ -3319,6 +3319,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "global-constants"
+version = "0.1.0"
+source = "git+https://github.com/dolr-ai/yral-common?branch=prakash%2Fforeward-duration-seconds#1738436c46039c6489c386fcc94ed8c3815aa224"
+dependencies = [
+ "candid",
+ "num-bigint 0.4.6",
+ "serde",
+ "serde_with 3.14.1",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "google-cloud-alloydb-v1"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3787,7 +3799,7 @@ version = "0.1.0"
 source = "git+https://github.com/dolr-ai/yral-common?branch=master#aa5abf3e5bd07a150978823a72bb6bf5589de69d"
 dependencies = [
  "candid",
- "global-constants",
+ "global-constants 0.1.0 (git+https://github.com/dolr-ai/yral-common?branch=master)",
  "ic-agent",
  "num-bigint 0.4.6",
  "serde",
@@ -6426,7 +6438,7 @@ dependencies = [
  "yral-metadata-types 0.1.0 (git+https://github.com/dolr-ai/yral-metadata.git?branch=master)",
  "yral-metrics",
  "yral-qstash-types",
- "yral-types",
+ "yral-types 0.1.0 (git+https://github.com/dolr-ai/yral-common?branch=master)",
  "yral-username-gen",
  "yup-oauth2",
 ]
@@ -9991,11 +10003,11 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "videogen-common"
 version = "0.1.0"
-source = "git+https://github.com/dolr-ai/yral-common?branch=master#aa5abf3e5bd07a150978823a72bb6bf5589de69d"
+source = "git+https://github.com/dolr-ai/yral-common?branch=prakash%2Fforeward-duration-seconds#1738436c46039c6489c386fcc94ed8c3815aa224"
 dependencies = [
  "candid",
  "enum_dispatch",
- "global-constants",
+ "global-constants 0.1.0 (git+https://github.com/dolr-ai/yral-common?branch=prakash%2Fforeward-duration-seconds)",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -10004,7 +10016,7 @@ dependencies = [
  "thiserror 1.0.69",
  "utoipa",
  "web-sys",
- "yral-types",
+ "yral-types 0.1.0 (git+https://github.com/dolr-ai/yral-common?branch=prakash%2Fforeward-duration-seconds)",
 ]
 
 [[package]]
@@ -10663,7 +10675,7 @@ dependencies = [
  "enum_dispatch",
  "futures-util",
  "getrandom 0.2.17",
- "global-constants",
+ "global-constants 0.1.0 (git+https://github.com/dolr-ai/yral-common?branch=master)",
  "hon-worker-common",
  "ic-agent",
  "k256",
@@ -10684,7 +10696,7 @@ dependencies = [
  "yral-metadata-client 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
  "yral-metadata-types 0.1.0 (git+https://github.com/yral-dapp/yral-metadata?branch=master)",
  "yral-pump-n-dump-common",
- "yral-types",
+ "yral-types 0.1.0 (git+https://github.com/dolr-ai/yral-common?branch=master)",
  "yral-username-gen",
 ]
 
@@ -10789,13 +10801,26 @@ source = "git+https://github.com/dolr-ai/yral-common?branch=master#aa5abf3e5bd07
 dependencies = [
  "candid",
  "serde",
- "yral-types",
+ "yral-types 0.1.0 (git+https://github.com/dolr-ai/yral-common?branch=master)",
 ]
 
 [[package]]
 name = "yral-types"
 version = "0.1.0"
 source = "git+https://github.com/dolr-ai/yral-common?branch=master#aa5abf3e5bd07a150978823a72bb6bf5589de69d"
+dependencies = [
+ "ic-agent",
+ "k256",
+ "serde",
+ "serde_json",
+ "utoipa",
+ "utoipa-swagger-ui",
+]
+
+[[package]]
+name = "yral-types"
+version = "0.1.0"
+source = "git+https://github.com/dolr-ai/yral-common?branch=prakash%2Fforeward-duration-seconds#1738436c46039c6489c386fcc94ed8c3815aa224"
 dependencies = [
  "ic-agent",
  "k256",

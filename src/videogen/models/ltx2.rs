@@ -92,7 +92,7 @@ pub async fn generate_with_context(
     });
 
     let response = comfyui_client
-        .submit_video_generation(mode, &webhook_url, extra_params)
+        .submit_video_generation(mode, &webhook_url, extra_params, model.duration_seconds)
         .await?;
 
     info!(
