@@ -119,14 +119,14 @@ milvus-sdk-rust = "0.1.0"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", branch = "prakash/foreward-duration-seconds", features = [ "full" ] }
-yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", branch = "prakash/foreward-duration-seconds", package = "alloydb-client"}
-yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", branch = "prakash/foreward-duration-seconds" }
-yral-metrics = { git = "https://github.com/dolr-ai/yral-common", branch = "prakash/foreward-duration-seconds" }
-videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "prakash/foreward-duration-seconds", features = ["server"] }
-yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", branch = "prakash/foreward-duration-seconds" }
-yral-types = { git = "https://github.com/dolr-ai/yral-common", branch = "prakash/foreward-duration-seconds" }
-yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "prakash/foreward-duration-seconds" }
+yral-canisters-client = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master", features = [ "full" ] }
+yral-alloydb-client = { git = "https://github.com/dolr-ai/yral-common", branch = "master", package = "alloydb-client"}
+yral-qstash-types = { git = "https://github.com/dolr-ai/yral-common.git", branch = "master" }
+yral-metrics = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+videogen-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master", features = ["server"] }
+yral-canisters-common = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-types = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
+yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "master" }
 
 
 # Local (Path) - uncomment to use local development versions
