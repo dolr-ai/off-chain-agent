@@ -137,7 +137,6 @@ yral-username-gen = { git = "https://github.com/dolr-ai/yral-common", branch = "
 # yral-alloydb-client = { path = "../yral-common/alloydb-client", package = "alloydb-client" }
 # yral-qstash-types = { path = "../yral-common/qstash-types" }
 # videogen-common = { path = "../yral-common/videogen-common", features = [
-#     "ic",
 #     "server",
 # ] }
 # yral-identity = { path = "../yral-common/identity" }
