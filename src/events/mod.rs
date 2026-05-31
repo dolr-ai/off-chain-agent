@@ -63,11 +63,12 @@ impl WarehouseEvents for WarehouseEventsService {
         request: tonic::Request<WarehouseEvent>,
     ) -> Result<tonic::Response<Empty>, tonic::Status> {
         let shared_state = self.shared_state.clone();
+        let mut video_view_counts: HashMap<String, u64> = HashMap::new();
 
         let request = request.into_inner();
         let event = event::Event::new(request);
 
-        process_event_impl(event, shared_state, None)
+        process_event_impl(event, shared_state, &mut video_view_counts)
             .await
             .map_err(|e| {
                 log::error!("Failed to process event grpc: {e}");
@@ -127,7 +128,7 @@ async fn post_event(
     let event = Event::new(warehouse_event);
 
     let mut video_view_counts: HashMap<String, u64> = HashMap::new(); // Cache for view counts to minimize send view count to recsys
-    process_event_impl(event, state.clone(), Some(&mut video_view_counts))
+    process_event_impl(event, state.clone(), &mut video_view_counts)
         .await
         .map_err(|e| {
             log::error!("Failed to process event rest: {e}");
@@ -149,7 +150,7 @@ async fn post_event(
 async fn process_event_impl(
     event: Event,
     shared_state: Arc<AppState>,
-    video_view_counts: Option<&mut HashMap<String, u64>>,
+    video_view_counts: &mut HashMap<String, u64>,
 ) -> Result<(), anyhow::Error> {
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery(&shared_state.clone());
@@ -195,7 +196,7 @@ async fn process_event_impl(
 async fn process_event_impl_v2(
     event: Event,
     shared_state: Arc<AppState>,
-    video_view_counts: Option<&mut HashMap<String, u64>>,
+    video_view_counts: &mut HashMap<String, u64>,
 ) -> Result<(), anyhow::Error> {
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery(&shared_state.clone());
@@ -272,7 +273,7 @@ async fn handle_bulk_events(
             params: req_event.params().to_string(),
         });
 
-        if let Err(e) = process_event_impl(event, state.clone(), Some(&mut video_view_counts)).await
+        if let Err(e) = process_event_impl(event, state.clone(), &mut video_view_counts).await
         {
             log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
@@ -350,7 +351,7 @@ async fn handle_bulk_events_v2(
         });
 
         if let Err(e) =
-            process_event_impl_v2(event, state.clone(), Some(&mut video_view_counts)).await
+            process_event_impl_v2(event, state.clone(), &mut video_view_counts).await
         {
             log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
@@ -391,7 +392,7 @@ async fn post_event_v2(
     let event = Event::new(warehouse_event);
     let mut video_view_counts = HashMap::new(); // Cache for view counts to minimize send view count to recsys
 
-    process_event_impl_v2(event, state.clone(), Some(&mut video_view_counts))
+    process_event_impl_v2(event, state.clone(), &mut video_view_counts)
         .await
         .map_err(|e| {
             log::error!("Failed to process event rest: {e}");

@@ -426,7 +426,7 @@ impl Event {
     pub async fn process_btc_rewards(
         &self,
         app_state: &AppState,
-        video_view_counts: Option<&mut HashMap<String, u64>>,
+        video_view_counts: &mut HashMap<String, u64>,
     ) {
         if self.event.event != "video_duration_watched" {
             return;
