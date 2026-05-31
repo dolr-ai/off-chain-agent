@@ -6,6 +6,7 @@ use redis::AsyncCommands;
 use reqwest::{Client, Url};
 use sha1::{Digest, Sha1};
 use sha2::Sha256;
+use std::collections::HashMap;
 use std::sync::Arc;
 type HmacSha256 = Hmac<Sha256>;
 
@@ -391,6 +392,73 @@ impl ViewTracker {
                 }
                 Err(e) => {
                     log::error!("Error sending view count to recsys-system: {}", e);
+                }
+            }
+        });
+    }
+
+    pub fn send_bulk_view_count_to_recsys(&self, video_view_counts: HashMap<String, u64>) {
+        // check if the map is empty, if yes then skip sending request to recsys-system
+        if video_view_counts.is_empty() {
+            log::info!("No view counts to send to recsys-system, skipping request");
+            return;
+        }
+
+        log::info!(
+            "Sending bulk view counts for {} videos to recsys-system",
+            video_view_counts.len()
+        );
+
+        let req_client = self.recsys_client.client.clone();
+        let path = self.recsys_client.url.path().to_string();
+        let secret = std::env::var("RECSYS_INTERNAL_CALL_SECRET_KEY").unwrap_or_default();
+
+        tokio::spawn(async move {
+            let payload = serde_json::json!(video_view_counts
+                .iter()
+                .map(|(video_id, count)| {
+                    serde_json::json!({
+                        "video_id": video_id,
+                        "total_count_all": count,
+                    })
+                })
+                .collect::<Vec<_>>());
+
+            let payload_str = payload.to_string();
+            let timestamp = chrono::Utc::now().timestamp().to_string();
+
+            let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+                .expect("HMAC can take key of any size");
+            mac.update(timestamp.as_bytes());
+            mac.update(b"\n");
+            mac.update(b"POST");
+            mac.update(b"\n");
+            mac.update(path.as_bytes());
+            mac.update(b"\n");
+            mac.update(payload_str.as_bytes());
+            let signature = hex::encode(mac.finalize().into_bytes());
+
+            match req_client
+                .post(RECSYS_ENDPOINT)
+                .header("x-internal-timestamp", timestamp)
+                .header("x-internal-signature", signature)
+                .header("Content-Type", "application/json")
+                .body(payload_str)
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        log::info!("Successfully sent bulk view counts to recsys-system");
+                    } else {
+                        log::error!(
+                            "Failed to send bulk view counts to recsys-system: HTTP {}",
+                            response.status()
+                        );
+                    }
+                }
+                Err(e) => {
+                    log::error!("Error sending bulk view counts to recsys-system: {}", e);
                 }
             }
         });
