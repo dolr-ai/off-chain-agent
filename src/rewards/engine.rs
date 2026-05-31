@@ -129,7 +129,7 @@ impl RewardEngine {
                     .await?;
 
                     let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-                    if let Some(view_counts_map) = video_view_counts {
+                    if let Some(ref mut view_counts_map) = video_view_counts {
                         view_counts_map.insert(video_id.to_string(), total_view_count);
                     }
             }
@@ -172,7 +172,7 @@ impl RewardEngine {
             }
             // send total view count to recsys-system from here for non-logged-in users.
             let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            if let Some(view_counts_map) = video_view_counts {
+            if let Some(ref mut view_counts_map) = video_view_counts {
                 view_counts_map.insert(video_id.to_string(), total_view_count);
             }
             return Ok(());
@@ -192,7 +192,7 @@ impl RewardEngine {
             }
             // send total view count to recsys-system from here for unregistered users.
             let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            if let Some(view_counts_map) = video_view_counts {
+            if let Some(ref mut view_counts_map) = video_view_counts {
                 view_counts_map.insert(video_id.to_string(), total_view_count);
             }
             return Ok(());
@@ -212,7 +212,7 @@ impl RewardEngine {
             }
             // send total view count to recsys-system from here for videos with unregistered publishers.
             let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            if let Some(view_counts_map) = video_view_counts {
+            if let Some(ref mut view_counts_map) = video_view_counts {
                 view_counts_map.insert(video_id.to_string(), total_view_count);
             }
             return Ok(());
@@ -238,7 +238,7 @@ impl RewardEngine {
             .await?;
 
         let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-        if let Some(view_counts_map) = video_view_counts {
+        if let Some(ref mut view_counts_map) = video_view_counts {
             view_counts_map.insert(video_id.to_string(), total_view_count);
         }
 
@@ -364,7 +364,7 @@ impl RewardEngine {
 
             // Duplicate views still increment `total_count_all`, so update Recsys
             let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            if let Some(view_counts_map) = video_view_counts {
+            if let Some(ref mut view_counts_map) = video_view_counts {
                 view_counts_map.insert(video_id.to_string(), total_view_count);
             }
         }
