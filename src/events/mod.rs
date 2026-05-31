@@ -273,8 +273,7 @@ async fn handle_bulk_events(
             params: req_event.params().to_string(),
         });
 
-        if let Err(e) = process_event_impl(event, state.clone(), &mut video_view_counts).await
-        {
+        if let Err(e) = process_event_impl(event, state.clone(), &mut video_view_counts).await {
             log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
     }
@@ -350,9 +349,7 @@ async fn handle_bulk_events_v2(
             params: payload.to_string(),
         });
 
-        if let Err(e) =
-            process_event_impl_v2(event, state.clone(), &mut video_view_counts).await
-        {
+        if let Err(e) = process_event_impl_v2(event, state.clone(), &mut video_view_counts).await {
             log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
     }
