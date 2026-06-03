@@ -2,12 +2,6 @@ use candid::Principal;
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
-pub static DEDUP_INDEX_CANISTER_ID: Lazy<Principal> = Lazy::new(|| {
-    "4drz6-pyaaa-aaaas-qbfoa-cai"
-        .parse()
-        .expect("canister id to be valid")
-});
-
 /// with nsfw detection v2, nsfw probablity greater or equal to this is considered nsfw
 pub const NSFW_THRESHOLD: f32 = 0.4;
 

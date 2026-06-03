@@ -266,10 +266,8 @@ pub async fn delete_canister_data(
         let bigquery_client = state.bigquery_client.clone();
         let kvrocks_client = state.kvrocks_client.clone();
         let video_ids: Vec<String> = posts.iter().map(|p| p.video_id.clone()).collect();
-        let agent = agent.clone();
         tokio::spawn(async move {
-            handle_duplicate_posts_cleanup(&agent, bigquery_client, kvrocks_client, video_ids)
-                .await;
+            handle_duplicate_posts_cleanup(bigquery_client, kvrocks_client, video_ids).await;
         });
     }
 
@@ -429,7 +427,6 @@ async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPostV2>) {
 }
 
 async fn handle_duplicate_posts_cleanup(
-    agent: &Agent,
     bigquery_client: google_cloud_bigquery::client::Client,
     kvrocks_client: crate::kvrocks::KvrocksClient,
     video_ids: Vec<String>,
@@ -441,7 +438,6 @@ async fn handle_duplicate_posts_cleanup(
             let kvrocks = kvrocks_client.clone();
             async move {
                 crate::posts::delete_post::handle_duplicate_post_on_delete(
-                    agent,
                     client,
                     &kvrocks,
                     video_id.clone(),

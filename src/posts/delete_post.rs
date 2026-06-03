@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::types::{UserPost, UserPostV2, VideoDeleteRow};
-use anyhow::Context;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use chrono::Utc;
 use google_cloud_bigquery::{
@@ -12,13 +11,11 @@ use google_cloud_bigquery::{
     },
     query::row::Row as QueryRow,
 };
-use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use types::PostRequest;
 use verify::VerifiedPostRequest;
 use yral_canisters_client::{
-    dedup_index::DedupIndex,
     individual_user_template::{IndividualUserTemplate, Result_},
     user_post_service::UserPostService,
 };
@@ -26,9 +23,7 @@ use yral_canisters_client::{
 use crate::kvrocks::{KvrocksClient, VideoDeleted};
 use crate::{
     app_state::AppState,
-    consts::{
-        DEDUP_INDEX_CANISTER_ID, USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID,
-    },
+    consts::{USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID},
     posts::queries::get_duplicate_children_query,
     user::utils::get_agent_from_delegated_identity_wire,
 };
@@ -105,16 +100,10 @@ pub async fn handle_delete_post(
     // spawn to not block the request since as far as user is concerned, the post is deleted
     let bigquery_client = state.bigquery_client.clone();
     let kvrocks_client = state.kvrocks_client.clone();
-    let agent = state.agent.clone();
     let video_id_clone = video_id.clone();
     tokio::spawn(async move {
-        if let Err(e) = handle_duplicate_post_on_delete(
-            &agent,
-            bigquery_client,
-            &kvrocks_client,
-            video_id_clone,
-        )
-        .await
+        if let Err(e) =
+            handle_duplicate_post_on_delete(bigquery_client, &kvrocks_client, video_id_clone).await
         {
             log::error!("Failed to handle duplicate post on delete: {e}");
         }
@@ -246,16 +235,10 @@ pub async fn handle_delete_post_v2(
     // spawn to not block the request since as far as user is concerned, the post is deleted
     let bigquery_client = state.bigquery_client.clone();
     let kvrocks_client = state.kvrocks_client.clone();
-    let agent = state.agent.clone();
     let video_id_clone = video_id.clone();
     tokio::spawn(async move {
-        if let Err(e) = handle_duplicate_post_on_delete(
-            &agent,
-            bigquery_client,
-            &kvrocks_client,
-            video_id_clone,
-        )
-        .await
+        if let Err(e) =
+            handle_duplicate_post_on_delete(bigquery_client, &kvrocks_client, video_id_clone).await
         {
             log::error!("Failed to handle duplicate post on delete: {e}");
         }
@@ -282,7 +265,6 @@ async fn get_hash_from_videohash_original(
 
 #[instrument(skip(bq_client, kvrocks_client))]
 pub async fn handle_duplicate_post_on_delete(
-    agent: &Agent,
     bq_client: Client,
     kvrocks_client: &KvrocksClient,
     video_id: String,
@@ -297,14 +279,6 @@ pub async fn handle_duplicate_post_on_delete(
         Some(h) => h,
         None => return Ok(()),
     };
-
-    DedupIndex(*DEDUP_INDEX_CANISTER_ID, agent)
-        .remove_video_id(yral_canisters_client::dedup_index::RemoveVideoIdArgs {
-            video_hash: videohash.clone(),
-            video_id: video_id.clone(),
-        })
-        .await
-        .context("Couldn't delete video from dedup index")?;
 
     // if its not unique, return
     if !is_unique {

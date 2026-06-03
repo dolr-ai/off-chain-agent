@@ -37,7 +37,6 @@ use crate::{
 };
 
 pub mod client;
-pub mod dedup_index_backfill;
 pub mod duplicate;
 #[cfg(not(feature = "local-bin"))]
 pub mod milvus_ingest;
@@ -91,7 +90,6 @@ async fn video_deduplication_handler(
 
     if let Err(e) = duplicate::VideoHashDuplication
         .process_video_deduplication_v2(
-            &state.agent,
             &state.bigquery_client,
             &state.milvus_client,
             &state.rewards_module.dragonfly_pool,
@@ -204,10 +202,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/bulk_compute_phash",
             post(phash_bulk::bulk_compute_phash_handler),
-        )
-        .route(
-            "/backfill_dedup_index",
-            post(dedup_index_backfill::backfill_dedup_index_handler),
         );
 
     #[cfg(not(feature = "local-bin"))]
