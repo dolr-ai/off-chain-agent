@@ -6,6 +6,8 @@ pub enum Step {
     GcsUpload,
     NsfwDetection,
     NsfwDetectionV2,
+    NsfwApiHandoff,
+    NsfwApiStatusPoll,
     StorjIngest,
 }
 
@@ -17,6 +19,8 @@ impl std::fmt::Display for Step {
             Step::GcsUpload => "gcs_upload",
             Step::NsfwDetection => "nsfw_detection",
             Step::NsfwDetectionV2 => "nsfw_detection_v2",
+            Step::NsfwApiHandoff => "nsfw_api_handoff",
+            Step::NsfwApiStatusPoll => "nsfw_api_status_poll",
             Step::StorjIngest => "storj_ingest",
         };
 

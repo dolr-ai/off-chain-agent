@@ -59,6 +59,8 @@ pub mod scratchpad;
 mod types;
 pub mod user;
 pub mod utils;
+#[cfg(not(feature = "local-bin"))]
+mod video_processing;
 pub mod videogen;
 mod webhooks;
 pub mod yral_auth;
@@ -77,6 +79,8 @@ async fn main_impl() -> Result<()> {
     let conf = AppConfig::load()?;
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
+    #[cfg(not(feature = "local-bin"))]
+    video_processing::worker::spawn_worker(shared_state.clone())?;
 
     let sentry_tower_layer = ServiceBuilder::new()
         .layer(NewSentryLayer::new_from_top())

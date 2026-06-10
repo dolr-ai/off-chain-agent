@@ -28,10 +28,7 @@ use crate::{
             snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
         },
     },
-    events::{
-        event::{storj::storj_ingest, upload_video_gcs},
-        nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
-    },
+    events::event::storj::storj_ingest,
     posts::report_post::qstash_report_post,
     rewards::api::update_reward_config,
 };
@@ -86,7 +83,7 @@ async fn video_deduplication_handler(
 
     let publisher_data = req.publisher_data.clone();
 
-    let qstash_client = state.qstash_client.clone();
+    let video_processing_pool = state.yral_redis_store_dragonfly.clone();
 
     if let Err(e) = duplicate::VideoHashDuplication
         .process_video_deduplication_v2(
@@ -102,14 +99,21 @@ async fn video_deduplication_handler(
                 // Clone the values to ensure they have 'static lifetime
                 let vid_id = vid_id.to_string();
                 let publisher_user_id = publisher_user_id.to_string();
-
-                // Use the cloned qstash_client instead of accessing through state
-                let qstash_client = qstash_client.clone();
+                let video_processing_pool = video_processing_pool.clone();
 
                 Box::pin(async move {
-                    qstash_client
-                        .publish_video(&vid_id, post_id, timestamp, &publisher_user_id)
-                        .await
+                    let mut job = crate::video_processing::worker::new_upload_job(
+                        vid_id,
+                        publisher_user_id,
+                        post_id,
+                        None,
+                    );
+                    job.upload_created_at = Some(timestamp);
+                    crate::video_processing::queue::schedule_nsfw_handoff_job(
+                        &video_processing_pool,
+                        job,
+                    )
+                    .await
                 })
             },
         )
@@ -128,7 +132,6 @@ async fn video_deduplication_handler(
 }
 
 #[instrument(skip(app_state))]
-// QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     let mut router = Router::new();
 
@@ -138,10 +141,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     }
 
     let router = router
-        .route("/upload_video_gcs", post(upload_video_gcs))
-        .route("/enqueue_video_frames", post(extract_frames_and_upload))
-        .route("/enqueue_video_nsfw_detection", post(nsfw_job))
-        .route("/enqueue_video_nsfw_detection_v2", post(nsfw_job_v2))
         .route("/storj_ingest", post(storj_ingest))
         .route("/report_post", post(qstash_report_post))
         .route(
