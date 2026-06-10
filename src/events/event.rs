@@ -197,6 +197,7 @@ impl Event {
                     canister_id,
                 );
 
+                // Await the durable write so upload processing fails visibly instead of dropping NSFW handoff state.
                 crate::video_processing::queue::enqueue_video_processing_job(
                     &video_processing_pool,
                     job,

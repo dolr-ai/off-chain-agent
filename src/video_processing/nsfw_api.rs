@@ -88,6 +88,7 @@ impl NsfwApiClient {
         request: &VideoDetectRequest,
     ) -> std::result::Result<VideoDetectResponse, NsfwApiError> {
         let path = "/v1/videos/detect";
+        // The HMAC covers the exact request bytes, so serialize once and send the same bytes we sign.
         let body = serde_json::to_vec(request)
             .map_err(|e| NsfwApiError::Terminal(format!("failed to serialize request: {e}")))?;
         let url = self
@@ -165,6 +166,7 @@ async fn parse_response<T: for<'de> Deserialize<'de>>(
 
     if status.is_success() {
         return serde_json::from_str(&body).map_err(|e| {
+            // The enqueue probably reached the server; retry polling/enqueue rather than marking the video terminal.
             NsfwApiError::Retryable(format!(
                 "{action} response could not be decoded as JSON: {e}; body={body}"
             ))

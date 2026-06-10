@@ -60,6 +60,7 @@ pub fn spawn_worker(state: Arc<AppState>) -> Result<()> {
     }
 
     let config = WorkerConfig::from_env();
+    // Build the client before spawning so missing signing config fails startup, not the first background tick.
     let nsfw_client = NsfwApiClient::from_env()?;
 
     tokio::spawn(async move {
@@ -201,6 +202,7 @@ async fn process_dedup_pending(
         "job": &job,
     });
 
+    // Dedup may return Ok without calling the continuation when AI approval blocks the video.
     let callback_called = Arc::new(AtomicBool::new(false));
     let callback_called_for_dedup = callback_called.clone();
     let callback_pool = state.yral_redis_store_dragonfly.clone();
@@ -226,6 +228,7 @@ async fn process_dedup_pending(
                 let callback_called_for_dedup = callback_called_for_dedup.clone();
 
                 Box::pin(async move {
+                    // Replace the old upload_video_gcs callback with a durable phase transition.
                     callback_called_for_dedup.store(true, Ordering::SeqCst);
                     queue::mark_nsfw_enqueue_pending(&callback_pool, &video_id).await
                 })
@@ -357,6 +360,7 @@ async fn process_nsfw_poll_pending(
                 response.final_result.is_some()
             );
 
+            // Status lookup is by video_id, so after a retry it can briefly return the previous NSFW job.
             if response.job_id != job.nsfw_job_id {
                 let expected_job_id = job.nsfw_job_id.clone();
                 retry_or_terminal(
@@ -501,6 +505,7 @@ async fn reenqueue_failed_retryable(
     }
 
     job.phase = VideoProcessingPhase::NsfwEnqueuePending;
+    // NSFW queue idempotency includes source_object_version; bump it to request a bounded retry job.
     job.source_object_version = format!("retry-{}", job.nsfw_job_retry_attempts);
     job.nsfw_job_id = queue::nsfw_job_id(
         &job.video_id,

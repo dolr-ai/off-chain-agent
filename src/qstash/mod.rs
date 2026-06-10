@@ -81,6 +81,7 @@ async fn video_deduplication_handler(
         req.video_id
     );
 
+    // Old delayed QStash dedup messages can still arrive; their continuation must use the new NSFW API flow.
     let publisher_data = req.publisher_data.clone();
 
     let video_processing_pool = state.yral_redis_store_dragonfly.clone();
@@ -140,6 +141,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         router = router.route("/video_deduplication", post(video_deduplication_handler));
     }
 
+    // Retired video GCS/frame/NSFW QStash routes stay unmounted; the handlers remain in the repo only for cleanup/rollback context.
     let router = router
         .route("/storj_ingest", post(storj_ingest))
         .route("/report_post", post(qstash_report_post))

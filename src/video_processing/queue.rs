@@ -184,6 +184,7 @@ pub async fn mark_nsfw_enqueue_pending(pool: &Arc<DragonflyPool>, video_id: &str
     let mut job = load_job(pool, video_id)
         .await?
         .with_context(|| format!("video processing job not found for {video_id}"))?;
+    // Dedup callback only advances the state machine; NSFW service owns download/classification/storage.
     job.phase = VideoProcessingPhase::NsfwEnqueuePending;
     job.next_run_at = chrono::Utc::now().timestamp();
     job.last_error = None;
@@ -194,6 +195,7 @@ pub async fn schedule_nsfw_handoff_job(
     pool: &Arc<DragonflyPool>,
     mut job: VideoProcessingJob,
 ) -> Result<()> {
+    // Legacy QStash dedup and the new worker can converge on the same video; preserve active job state.
     if let Some(mut existing_job) = load_job(pool, &job.video_id).await? {
         if existing_job.is_terminal() {
             log::info!(
