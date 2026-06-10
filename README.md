@@ -7,6 +7,10 @@ Off-chain agent is a service that runs on Fly.io and is responsible for orchestr
 - Daily backups for disaster recovery
 - Monitoring
 
+## Operations
+
+- Self-hosted Airflow migration and operating notes: [docs/self-hosted-airflow.md](docs/self-hosted-airflow.md)
+
 ## Architecture
 
 ### Periodic Backups
