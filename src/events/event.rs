@@ -495,6 +495,7 @@ pub struct UploadVideoInfoV2 {
 }
 
 #[instrument(skip(state))]
+#[allow(dead_code)]
 pub async fn upload_video_gcs(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UploadVideoInfoV2>,
@@ -522,6 +523,7 @@ pub async fn upload_video_gcs(
 }
 
 #[instrument(skip(uid))]
+#[allow(dead_code)]
 pub async fn upload_gcs_impl(
     uid: &str,
     publisher_user_id: &str,

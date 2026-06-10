@@ -29,6 +29,8 @@ pub mod warehouse_events {
 }
 
 pub mod event;
+// Retired QStash NSFW handlers are kept for rollback/cleanup context, but are not mounted.
+#[allow(dead_code)]
 pub mod nsfw;
 pub mod push_notifications;
 pub mod queries;

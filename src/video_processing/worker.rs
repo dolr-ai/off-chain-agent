@@ -349,8 +349,9 @@ async fn process_nsfw_poll_pending(
     match nsfw_client.video_status(&job.video_id).await {
         Ok(response) => {
             log::info!(
-                "NSFW status for {}: job_id={}, status={}, attempts={}, trace_id={:?}, last_error_code={:?}, last_error_message={:?}, final_result_present={}",
+                "NSFW status for {}: response_video_id={}, job_id={}, status={}, attempts={}, trace_id={:?}, last_error_code={:?}, last_error_message={:?}, final_result_present={}",
                 job.video_id,
+                response.video_id,
                 response.job_id,
                 response.status,
                 response.attempts,
@@ -359,6 +360,23 @@ async fn process_nsfw_poll_pending(
                 response.last_error_message,
                 response.final_result.is_some()
             );
+
+            if response.video_id != job.video_id {
+                let expected_video_id = job.video_id.clone();
+                retry_or_terminal(
+                    &state,
+                    &mut job,
+                    config.max_nsfw_poll_attempts,
+                    RetryCounter::NsfwPoll,
+                    "NSFW status returned mismatched video_id",
+                    format!(
+                        "expected={expected_video_id}; got={}; job_id={}; status={}",
+                        response.video_id, response.job_id, response.status
+                    ),
+                )
+                .await?;
+                return Ok(());
+            }
 
             // Status lookup is by video_id, so after a retry it can briefly return the previous NSFW job.
             if response.job_id != job.nsfw_job_id {
