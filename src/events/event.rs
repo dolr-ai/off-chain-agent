@@ -1,6 +1,4 @@
-use crate::consts::{
-    OFF_CHAIN_AGENT_URL, USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID,
-};
+use crate::consts::{USER_INFO_SERVICE_CANISTER_ID, USER_POST_SERVICE_CANISTER_ID};
 use crate::events::types::{
     string_or_number, VideoDurationWatchedPayload, VideoDurationWatchedPayloadV2,
     VideoStartedPayload, VideoUploadSuccessfulPayload,
@@ -12,7 +10,6 @@ use crate::{
     AppError,
 };
 use axum::{extract::State, Json};
-use http::header::CONTENT_TYPE;
 use log::{debug, error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -159,7 +156,10 @@ impl Event {
         });
     }
 
-    pub fn check_video_deduplication(&self, app_state: &AppState) {
+    pub async fn check_video_deduplication(
+        &self,
+        app_state: &AppState,
+    ) -> Result<(), anyhow::Error> {
         if self.event.event == "video_upload_successful" {
             let params: Result<VideoUploadSuccessfulPayload, _> =
                 serde_json::from_str(&self.event.params);
@@ -167,68 +167,47 @@ impl Event {
             let params = match params {
                 Ok(params) => params,
                 Err(e) => {
-                    error!("Failed to parse video_duration_watched params: {e:?}");
-                    return;
+                    error!("Failed to parse video_upload_successful params: {e:?}");
+                    return Err(anyhow::anyhow!(
+                        "failed to parse video_upload_successful params: {e:?}"
+                    ));
                 }
             };
 
-            let qstash_client = app_state.qstash_client.clone();
+            #[cfg(feature = "local-bin")]
+            {
+                log::info!(
+                    "Skipping durable video processing enqueue in local-bin for {}",
+                    params.video_id
+                );
+            }
 
-            tokio::spawn(async move {
-                // Extract required fields with error handling
+            #[cfg(not(feature = "local-bin"))]
+            {
+                let video_processing_pool = app_state.yral_redis_store_dragonfly.clone();
                 let video_id = params.video_id;
-
                 let post_id = params.post_id.clone();
-
                 let publisher_user_id = params.publisher_user_id.to_text();
+                let canister_id = Some(params.canister_id.to_text());
 
-                let video_url =
-                    crate::consts::get_storj_video_url(&publisher_user_id, &video_id, false);
+                let job = crate::video_processing::worker::new_upload_job(
+                    video_id.clone(),
+                    publisher_user_id,
+                    post_id,
+                    canister_id,
+                );
 
-                log::info!("Sending video for deduplication check: {video_id}");
-
-                // Create request for video_deduplication endpoint
-                let off_chain_ep = OFF_CHAIN_AGENT_URL
-                    .join("qstash/video_deduplication")
-                    .unwrap();
-                let url = qstash_client
-                    .base_url
-                    .join(&format!("publish/{off_chain_ep}"))
-                    .unwrap();
-
-                // TODO: change to struct
-                let request_data = serde_json::json!({
-                    "video_id": video_id,
-                    "video_url": video_url,
-                    "publisher_data": {
-                        "publisher_principal": publisher_user_id,
-                        "post_id": post_id
-                    }
-                });
-
-                // Send to the "/video_deduplication" endpoint via QStash
-                let result = qstash_client
-                    .client
-                    .post(url)
-                    .json(&request_data)
-                    .header(CONTENT_TYPE, "application/json")
-                    .header("upstash-method", "POST")
-                    .header("upstash-delay", "600s")
-                    .header("Upstash-Flow-Control-Key", "VIDEO_DEDUPLICATION")
-                    .header("Upstash-Flow-Control-Value", "Rate=30,Parallelism=15")
-                    .send()
-                    .await;
-
-                match result {
-                    Ok(_) => log::info!(
-                        "Video deduplication check successfully queued for video_id: {video_id}"
-                    ),
-                    Err(e) => error!(
-                        "Failed to queue video deduplication check for video_id {video_id}: {e:?}"
-                    ),
-                }
-            });
+                // Await the durable write so upload processing fails visibly instead of dropping NSFW handoff state.
+                crate::video_processing::queue::enqueue_video_processing_job(
+                    &video_processing_pool,
+                    job,
+                )
+                .await?;
+                log::info!("Durable video processing job queued for video_id: {video_id}");
+            }
         }
+
+        Ok(())
     }
 
     // TODO: canister_id being used
@@ -516,6 +495,7 @@ pub struct UploadVideoInfoV2 {
 }
 
 #[instrument(skip(state))]
+#[allow(dead_code)]
 pub async fn upload_video_gcs(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UploadVideoInfoV2>,
@@ -543,6 +523,7 @@ pub async fn upload_video_gcs(
 }
 
 #[instrument(skip(uid))]
+#[allow(dead_code)]
 pub async fn upload_gcs_impl(
     uid: &str,
     publisher_user_id: &str,

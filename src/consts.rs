@@ -3,6 +3,7 @@ use once_cell::sync::Lazy;
 use reqwest::Url;
 
 /// with nsfw detection v2, nsfw probablity greater or equal to this is considered nsfw
+#[allow(dead_code)]
 pub const NSFW_THRESHOLD: f32 = 0.4;
 
 pub static BIGQUERY_INGESTION_URL: Lazy<Url> = Lazy::new(|| {
