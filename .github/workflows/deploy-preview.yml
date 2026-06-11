@@ -224,6 +224,8 @@ jobs:
           QSTASH_CURRENT_SIGNING_KEY: ${{ env.QSTASH_CURRENT_SIGNING_KEY }}
           CF_IMAGES_API_TOKEN: ${{ env.CF_IMAGES_API_TOKEN }}
           NSFW_GRPC_TOKEN: ${{ env.NSFW_GRPC_TOKEN }}
+          NSFW_API_BASE_URL: https://nsfw.ansuman.yral.com
+          NSFW_INTERNAL_REQUEST_HMAC_SECRET: ${{ secrets.PROD_INTERNAL_REQUEST_HMAC_SECRET }}
           QSTASH_AUTH_TOKEN: ${{ env.QSTASH_AUTH_TOKEN }}
           INTERNAL_ENCRYPTION_SECRET: ${{ env.INTERNAL_ENCRYPTION_SECRET }}
           STORJ_INTERFACE_TOKEN: ${{ env.STORJ_INTERFACE_TOKEN }}
@@ -296,6 +298,8 @@ jobs:
             --arg qstash_current_signing_key "$QSTASH_CURRENT_SIGNING_KEY" \
             --arg cf_images_api_token "$CF_IMAGES_API_TOKEN" \
             --arg nsfw_grpc_token "$NSFW_GRPC_TOKEN" \
+            --arg nsfw_api_base_url "$NSFW_API_BASE_URL" \
+            --arg nsfw_internal_request_hmac_secret "$NSFW_INTERNAL_REQUEST_HMAC_SECRET" \
             --arg qstash_auth_token "$QSTASH_AUTH_TOKEN" \
             --arg internal_encryption_secret "$INTERNAL_ENCRYPTION_SECRET" \
             --arg storj_interface_token "$STORJ_INTERFACE_TOKEN" \
@@ -364,6 +368,8 @@ jobs:
               { "key": "QSTASH_CURRENT_SIGNING_KEY", "value": $qstash_current_signing_key, "is_multiline": true},
               { "key": "CF_IMAGES_API_TOKEN", "value": $cf_images_api_token, "is_literal": true},
               { "key": "NSFW_GRPC_TOKEN", "value": $nsfw_grpc_token, "is_literal": true},
+              { "key": "NSFW_API_BASE_URL", "value": $nsfw_api_base_url, "is_literal": true},
+              { "key": "NSFW_INTERNAL_REQUEST_HMAC_SECRET", "value": $nsfw_internal_request_hmac_secret, "is_literal": true},
               { "key": "QSTASH_AUTH_TOKEN", "value": $qstash_auth_token, "is_literal": true},
               { "key": "INTERNAL_ENCRYPTION_SECRET", "value": $internal_encryption_secret, "is_literal": true},
               { "key": "STORJ_INTERFACE_TOKEN", 	"value": $storj_interface_token, 	"is_literal": true},
