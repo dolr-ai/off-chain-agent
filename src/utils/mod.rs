@@ -4,3 +4,4 @@ pub mod gcs;
 pub mod grpc_clients;
 pub mod s3;
 pub mod time;
+pub mod naitik_multi_service_client;

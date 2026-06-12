@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::consts::{ANALYTICS_SERVER_URL, NSFW_SERVER_URL, YRAL_METADATA_URL};
+use crate::consts::{ANALYTICS_SERVER_URL, NAITIK_YRAL_MULTI_SERVICES, NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
@@ -108,6 +108,8 @@ pub struct AppState {
     pub comfyui_client: Option<ComfyUIClient>,
 
     pub crypto: Crypto,
+
+    pub naitik_multi_service_client: NaitikMultiServiceClient,
 }
 
 impl AppState {
@@ -190,6 +192,7 @@ impl AppState {
             mixpanel_client: MixpanelClient::new(),
             comfyui_client,
             crypto: Crypto::default(),
+            naitik_multi_service_client: NaitikMultiServiceClient::new(),
         }
     }
 
@@ -254,6 +257,7 @@ impl AppState {
     pub fn individual_user(&self, user_canister: Principal) -> IndividualUserTemplate<'_> {
         IndividualUserTemplate(user_canister, &self.agent)
     }
+
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
@@ -534,4 +538,25 @@ async fn init_scratchpad_client() -> ScratchpadClient {
     crate::scratchpad::init_scratchpad_client()
         .await
         .expect("Failed to connect to scratchpad Dragonfly - this is required for the application to function")
+}
+
+#[derive(Clone)]
+pub struct NaitikMultiServiceClient {
+    client: reqwest::Client,
+    base_url: reqwest::Url,
+}
+
+impl NaitikMultiServiceClient {
+    pub fn new() -> Self {
+        let client = reqwest::Client::new();
+        let base_url = reqwest::Url::parse(&NAITIK_YRAL_MULTI_SERVICES.to_string()).expect("Invalid recsys endpoint URL");
+
+        let secret = std::env::var("NAITIK_MULTI_SERVICE_API_JWT_TOKEN").unwrap_or_default();
+        if secret.is_empty() {
+            log::error!("NAITIK_MULTI_SERVICE_API_JWT_TOKEN is not set");
+        } else {
+            log::info!("NAITIK_MULTI_SERVICE_API_JWT_TOKEN is set");
+        }
+        Self { client, base_url }
+    }
 }
