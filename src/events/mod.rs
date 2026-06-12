@@ -65,7 +65,6 @@ impl WarehouseEvents for WarehouseEventsService {
         request: tonic::Request<WarehouseEvent>,
     ) -> Result<tonic::Response<Empty>, tonic::Status> {
         let shared_state = self.shared_state.clone();
-        let mut video_view_counts: HashMap<String, u64> = HashMap::new();
 
         let request = request.into_inner();
         let event = event::Event::new(request);
@@ -121,8 +120,8 @@ async fn post_event(
     check_auth_events(auth_token).map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
 
     let warehouse_event = WarehouseEvent {
-        event: payload.event,
-        params: payload.params,
+        event: payload.event.clone(),
+        params: payload.params.clone(),
     };
 
     let event = Event::new(warehouse_event);
@@ -262,7 +261,7 @@ async fn handle_bulk_events(
     State(state): State<Arc<AppState>>,
     Json(request): Json<VerifiedEventBulkRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    for req_event in request.events {
+    for req_event in &request.events {
         let event = Event::new(WarehouseEvent {
             event: req_event.tag(),
             params: req_event.params().to_string(),
@@ -313,7 +312,7 @@ async fn handle_bulk_events_v2(
     State(state): State<Arc<AppState>>,
     Json(request): Json<VerifiedEventBulkRequestV2>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    for mut payload in request.events {
+    for mut payload in &request.events {
         // Extract event name and convert PascalCase to snake_case for backwards compat
         let event_name = payload
             .get("event")

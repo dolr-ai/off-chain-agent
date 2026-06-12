@@ -6,12 +6,8 @@ use redis::AsyncCommands;
 use reqwest::{Client, Url};
 use sha1::{Digest, Sha1};
 use sha2::Sha256;
-use std::collections::HashMap;
 use std::sync::Arc;
 type HmacSha256 = Hmac<Sha256>;
-
-pub const RECSYS_ENDPOINT: &str =
-    "https://recsys-influencer-feed.ansuman.yral.com/api/v1/internal/feed-recsys/view-counts";
 
 const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     --!df flags=allow-undeclared-keys

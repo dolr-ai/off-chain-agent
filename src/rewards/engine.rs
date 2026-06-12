@@ -335,10 +335,6 @@ impl RewardEngine {
                 )
                 .await;
             }
-
-            // Duplicate views still increment `total_count_all`, so update Recsys
-            let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            video_view_counts.insert(video_id.to_string(), total_view_count);
         }
 
         Ok(())
