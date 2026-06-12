@@ -334,7 +334,7 @@ jobs:
             --arg gchat_sentry_webhook_url "$GCHAT_SENTRY_WEBHOOK_URL" \
             --arg google_chat_report_space_url "$GOOGLE_CHAT_REPORT_SPACE_URL" \
             --arg recsys_internal_call_secret_key "$RECSYS_INTERNAL_CALL_SECRET_KEY" \
-            --arg naitik_multi_service_api_jwt_token "$NAITIK_MULTI_SERVICE_API_JWT_TOKEN"
+            --arg naitik_multi_service_api_jwt_token "$NAITIK_MULTI_SERVICE_API_JWT_TOKEN" \
             --arg kvrocks_password "$KVROCKS_PASSWORD" \
             --arg kvrocks_hosts "$KVROCKS_HOSTS" \
             --arg kvrocks_ca_cert "$KVROCKS_CA_CERT" \
