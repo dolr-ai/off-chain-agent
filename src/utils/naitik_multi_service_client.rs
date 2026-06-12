@@ -10,6 +10,12 @@ pub struct NaitikMultiServiceClient {
     jwt_token: String,
 }
 
+impl Default for NaitikMultiServiceClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NaitikMultiServiceClient {
     pub fn new() -> Self {
         let client = reqwest::Client::new();

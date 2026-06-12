@@ -1,7 +1,5 @@
 use crate::config::AppConfig;
-use crate::consts::{
-    ANALYTICS_SERVER_URL, NAITIK_YRAL_MULTI_SERVICES, NSFW_SERVER_URL, YRAL_METADATA_URL,
-};
+use crate::consts::{ANALYTICS_SERVER_URL, NSFW_SERVER_URL, YRAL_METADATA_URL};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
