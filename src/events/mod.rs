@@ -5,7 +5,6 @@ use event::Event;
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 use std::sync::Arc;
 use types::AnalyticsEvent;
 use utoipa::ToSchema;
@@ -312,7 +311,8 @@ async fn handle_bulk_events_v2(
     State(state): State<Arc<AppState>>,
     Json(request): Json<VerifiedEventBulkRequestV2>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    for mut payload in &request.events {
+    let events_payload = request.clone();
+    for mut payload in request.events {
         // Extract event name and convert PascalCase to snake_case for backwards compat
         let event_name = payload
             .get("event")
@@ -349,7 +349,7 @@ async fn handle_bulk_events_v2(
     // After processing all events, we can send events to naitik multi services in bulk
     state
         .naitik_multi_service_client
-        .send_bulk_events_v2_to_naitik_multi_services(request);
+        .send_bulk_events_v2_to_naitik_multi_services(events_payload);
 
     Ok((StatusCode::OK, "Events processed".to_string()))
 }

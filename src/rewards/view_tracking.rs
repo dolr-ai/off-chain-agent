@@ -1,13 +1,11 @@
 use crate::yral_auth::dragonfly::DragonflyPool;
 use anyhow::{Context, Result};
 use candid::Principal;
-use hmac::{Hmac, Mac};
 use redis::AsyncCommands;
 use reqwest::{Client, Url};
 use sha1::{Digest, Sha1};
 use sha2::Sha256;
 use std::sync::Arc;
-type HmacSha256 = Hmac<Sha256>;
 
 const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"
     --!df flags=allow-undeclared-keys
@@ -63,7 +61,6 @@ pub struct ViewTracker {
 
 impl ViewTracker {
     pub fn new(redis_store_pool: Arc<DragonflyPool>) -> Self {
-        let recsys_client = RecsysClient::new();
         Self {
             redis_store_pool,
             script_sha: None,
@@ -331,21 +328,6 @@ impl ViewTracker {
         }
 
         Ok(response)
-    }
-}
-
-#[derive(Clone)]
-pub struct RecsysClient {
-    client: Client,
-    url: Url,
-}
-
-impl RecsysClient {
-    pub fn new() -> Self {
-        let client = Client::new();
-        let url = Url::parse(RECSYS_ENDPOINT).expect("Invalid recsys endpoint URL");
-
-        Self { client, url }
     }
 }
 
