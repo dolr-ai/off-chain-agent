@@ -1,14 +1,16 @@
 use crate::config::AppConfig;
-use crate::consts::{ANALYTICS_SERVER_URL, NAITIK_YRAL_MULTI_SERVICES, NSFW_SERVER_URL, YRAL_METADATA_URL};
+use crate::consts::{
+    ANALYTICS_SERVER_URL, NAITIK_YRAL_MULTI_SERVICES, NSFW_SERVER_URL, YRAL_METADATA_URL,
+};
 #[cfg(not(feature = "local-bin"))]
 use crate::events::push_notifications::NotificationClient;
 use crate::kvrocks::KvrocksClient;
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
-use crate::utils::naitik_multi_service_client::NaitikMultiServiceClient;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
+use crate::utils::naitik_multi_service_client::NaitikMultiServiceClient;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
@@ -258,7 +260,6 @@ impl AppState {
     pub fn individual_user(&self, user_canister: Principal) -> IndividualUserTemplate<'_> {
         IndividualUserTemplate(user_canister, &self.agent)
     }
-
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
