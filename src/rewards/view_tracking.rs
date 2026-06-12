@@ -2,9 +2,7 @@ use crate::yral_auth::dragonfly::DragonflyPool;
 use anyhow::{Context, Result};
 use candid::Principal;
 use redis::AsyncCommands;
-use reqwest::{Client, Url};
 use sha1::{Digest, Sha1};
-use sha2::Sha256;
 use std::sync::Arc;
 
 const LUA_ATOMIC_VIEW_SCRIPT: &str = r#"

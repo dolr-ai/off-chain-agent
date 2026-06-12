@@ -18,7 +18,6 @@ use crate::{
 use anyhow::{Context, Result};
 use candid::Principal;
 use chrono::Utc;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone)]

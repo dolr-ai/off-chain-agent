@@ -374,7 +374,7 @@ async fn post_event_v2(
 
     let warehouse_event = WarehouseEvent {
         event: event_name,
-        params: payload.params,
+        params: payload.params.clone(),
     };
 
     let event = Event::new(warehouse_event);
