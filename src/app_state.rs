@@ -6,6 +6,7 @@ use crate::kvrocks::KvrocksClient;
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
+use crate::utils::naitik_multi_service_client::NaitikMultiServiceClient;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
@@ -538,25 +539,4 @@ async fn init_scratchpad_client() -> ScratchpadClient {
     crate::scratchpad::init_scratchpad_client()
         .await
         .expect("Failed to connect to scratchpad Dragonfly - this is required for the application to function")
-}
-
-#[derive(Clone)]
-pub struct NaitikMultiServiceClient {
-    client: reqwest::Client,
-    base_url: reqwest::Url,
-}
-
-impl NaitikMultiServiceClient {
-    pub fn new() -> Self {
-        let client = reqwest::Client::new();
-        let base_url = reqwest::Url::parse(&NAITIK_YRAL_MULTI_SERVICES.to_string()).expect("Invalid recsys endpoint URL");
-
-        let secret = std::env::var("NAITIK_MULTI_SERVICE_API_JWT_TOKEN").unwrap_or_default();
-        if secret.is_empty() {
-            log::error!("NAITIK_MULTI_SERVICE_API_JWT_TOKEN is not set");
-        } else {
-            log::info!("NAITIK_MULTI_SERVICE_API_JWT_TOKEN is set");
-        }
-        Self { client, base_url }
-    }
 }
