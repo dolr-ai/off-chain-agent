@@ -1,9 +1,10 @@
 use std::{collections::HashMap, env, sync::Arc};
 
+#[cfg(not(feature = "local-bin"))]
+use crate::video_processing::nsfw_api::{NsfwApiClient, VideoBanRequest};
 use crate::{
     app_state::AppState,
     consts::{GOOGLE_CHAT_REPORT_SPACE_URL, OFF_CHAIN_AGENT_URL, USER_POST_SERVICE_CANISTER_ID},
-    events::{event::Event, warehouse_events::WarehouseEvent},
     posts::report_post::repost_post_common_impl,
     AppError,
 };
@@ -140,6 +141,93 @@ pub async fn send_message_gchat_webhook(request_url: &str, data: Value) -> Resul
     }
 
     log::debug!("Google Chat response: {}", body);
+    Ok(())
+}
+
+async fn send_report_approved_failure_message(
+    app_state: &AppState,
+    canister_id: &str,
+    post_id: &str,
+    failure: &str,
+) {
+    let failure_msg = json!({
+        "text": format!("Failed to ban post {}/{}: {}", canister_id, post_id, failure)
+    });
+    if let Err(e) = send_message_gchat(app_state, &GOOGLE_CHAT_REPORT_SPACE_URL, failure_msg).await
+    {
+        log::error!("Failed to send ban failure message to Google Chat: {e:?}");
+    }
+}
+
+fn report_approved_nsfw_ban_enabled() -> bool {
+    for key in [
+        "REPORT_APPROVED_NSFW_BAN_ENABLED",
+        "REPORT_APPROVED_NSFw_BAN_ENABLED",
+    ] {
+        if let Ok(value) = env::var(key) {
+            return !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "no" | "off"
+            );
+        }
+    }
+    true
+}
+
+#[cfg(not(feature = "local-bin"))]
+async fn ban_video_in_nsfw_service(
+    video_id: &str,
+    publisher_user_id: String,
+    canister_id: &str,
+    post_id: &str,
+) -> Result<()> {
+    if !report_approved_nsfw_ban_enabled() {
+        log::warn!(
+            "Skipping manual NSFW ban API call because REPORT_APPROVED_NSFW_BAN_ENABLED=false"
+        );
+        return Ok(());
+    }
+
+    let client = NsfwApiClient::from_env().context("Failed to initialize NSFW API client")?;
+    let response = client
+        .ban_video(
+            video_id,
+            &VideoBanRequest {
+                publisher_user_id,
+                post_id: post_id.to_string(),
+                canister_id: canister_id.to_string(),
+                reason: "user_report_approved".to_string(),
+                source: "google_chat".to_string(),
+                moderator_id: None,
+                trace_id: Some(format!("report-approved:{canister_id}:{post_id}")),
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("NSFW manual ban API failed: {e}"))?;
+
+    if response.status != "banned"
+        || !response.excluded_videos_written
+        || !response.legacy_nsfw_agg_written
+    {
+        return Err(anyhow::anyhow!(
+            "NSFW manual ban API returned incomplete write status for video {}: status={}, excluded_videos_written={}, legacy_nsfw_agg_written={}",
+            response.video_id,
+            response.status,
+            response.excluded_videos_written,
+            response.legacy_nsfw_agg_written
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "local-bin")]
+async fn ban_video_in_nsfw_service(
+    _video_id: &str,
+    _publisher_user_id: String,
+    _canister_id: &str,
+    _post_id: &str,
+) -> Result<()> {
     Ok(())
 }
 
@@ -417,10 +505,28 @@ pub async fn report_approved_handler(
 
     let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &state.agent);
 
-    let post_details = user_post_service
+    let post_details = match user_post_service
         .get_individual_post_details_by_id(post_id.to_string())
         .await
-        .with_context(|| format!("Failed to fetch post details for {canister_id}/{post_id}"))?;
+        .with_context(|| format!("Failed to fetch post details for {canister_id}/{post_id}"))
+    {
+        Ok(post_details) => post_details,
+        Err(e) => {
+            log::error!(
+                "Failed to fetch post details for {}/{}: {e:?}",
+                canister_id,
+                post_id
+            );
+            send_report_approved_failure_message(
+                &state,
+                canister_id,
+                post_id,
+                "failed to fetch post details",
+            )
+            .await;
+            return Err(e.into());
+        }
+    };
 
     let Result2::Ok(Post {
         video_uid,
@@ -428,6 +534,13 @@ pub async fn report_approved_handler(
         ..
     }) = post_details
     else {
+        send_report_approved_failure_message(
+            &state,
+            canister_id,
+            post_id,
+            "post details were not found",
+        )
+        .await;
         return Err(anyhow::anyhow!(
             "Failed to fetch post details for {}/{}",
             canister_id,
@@ -436,10 +549,51 @@ pub async fn report_approved_handler(
         .into());
     };
 
-    user_post_service
+    if let Err(e) = ban_video_in_nsfw_service(
+        &video_uid,
+        creator_principal.to_text(),
+        canister_id,
+        post_id,
+    )
+    .await
+    {
+        log::error!(
+            "Failed to record manual NSFW ban for {}/{} video_id={}: {e:?}",
+            canister_id,
+            post_id,
+            video_uid
+        );
+        send_report_approved_failure_message(
+            &state,
+            canister_id,
+            post_id,
+            "failed to record manual NSFW ban",
+        )
+        .await;
+        return Err(e.into());
+    }
+    log::info!("Manual NSFW ban recorded for video_id={}", video_uid);
+
+    if let Err(e) = user_post_service
         .update_post_status(post_id.to_string(), PostStatus::BannedDueToUserReporting)
         .await
-        .with_context(|| format!("Failed to ban post {canister_id}/{post_id}"))?;
+        .with_context(|| format!("Failed to ban post {canister_id}/{post_id}"))
+    {
+        log::error!(
+            "Failed to update post status after manual NSFW ban for {}/{} video_id={}: {e:?}",
+            canister_id,
+            post_id,
+            video_uid
+        );
+        send_report_approved_failure_message(
+            &state,
+            canister_id,
+            post_id,
+            "manual NSFW ban was recorded, but canister status update failed",
+        )
+        .await;
+        return Err(e.into());
+    }
     log::info!("Post status updated to banned");
 
     // send confirmation to Google Chat
@@ -453,20 +607,6 @@ pub async fn report_approved_handler(
     } else {
         log::info!("Sent confirmation message to Google Chat");
     }
-
-    let params = json!({
-        "video_id": video_uid,
-        "publisher_user_id": creator_principal,
-        "canister_id": canister_id,
-        "post_id": post_id
-    });
-
-    let event = Event::new(WarehouseEvent {
-        event: "video_report_banned".to_string(),
-        params: params.to_string(),
-    });
-    event.stream_to_bigquery(&state);
-    log::info!("Ban event sent to BigQuery");
 
     log::info!("report_approved_handler completed successfully");
 
