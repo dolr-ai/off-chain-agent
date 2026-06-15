@@ -210,13 +210,21 @@ async fn ban_video_in_nsfw_service(
         || !response.legacy_nsfw_agg_written
     {
         return Err(anyhow::anyhow!(
-            "NSFW manual ban API returned incomplete write status for video {}: status={}, excluded_videos_written={}, legacy_nsfw_agg_written={}",
+            "NSFW manual ban API returned incomplete write status for video {}: status={}, excluded_videos_written={}, legacy_nsfw_agg_written={}, trace_id={:?}",
             response.video_id,
             response.status,
             response.excluded_videos_written,
-            response.legacy_nsfw_agg_written
+            response.legacy_nsfw_agg_written,
+            response.trace_id.as_deref()
         ));
     }
+
+    log::info!(
+        "NSFW manual ban completed for video {}: status={}, trace_id={:?}",
+        response.video_id,
+        response.status,
+        response.trace_id.as_deref()
+    );
 
     Ok(())
 }
