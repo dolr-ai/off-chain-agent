@@ -5,7 +5,6 @@ use event::Event;
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 use std::sync::Arc;
 use types::AnalyticsEvent;
 use utoipa::ToSchema;
@@ -65,17 +64,14 @@ impl WarehouseEvents for WarehouseEventsService {
         request: tonic::Request<WarehouseEvent>,
     ) -> Result<tonic::Response<Empty>, tonic::Status> {
         let shared_state = self.shared_state.clone();
-        let mut video_view_counts: HashMap<String, u64> = HashMap::new();
 
         let request = request.into_inner();
         let event = event::Event::new(request);
 
-        process_event_impl(event, shared_state, &mut video_view_counts)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to process event grpc: {e}");
-                tonic::Status::internal("Failed to process event")
-            })?;
+        process_event_impl(event, shared_state).await.map_err(|e| {
+            log::error!("Failed to process event grpc: {e}");
+            tonic::Status::internal("Failed to process event")
+        })?;
 
         Ok(tonic::Response::new(Empty {}))
     }
@@ -123,14 +119,13 @@ async fn post_event(
     check_auth_events(auth_token).map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
 
     let warehouse_event = WarehouseEvent {
-        event: payload.event,
-        params: payload.params,
+        event: payload.event.clone(),
+        params: payload.params.clone(),
     };
 
     let event = Event::new(warehouse_event);
 
-    let mut video_view_counts: HashMap<String, u64> = HashMap::new(); // Cache for view counts to minimize send view count to recsys
-    process_event_impl(event, state.clone(), &mut video_view_counts)
+    process_event_impl(event, state.clone())
         .await
         .map_err(|e| {
             log::error!("Failed to process event rest: {e}");
@@ -140,11 +135,10 @@ async fn post_event(
             )
         })?;
 
-    // After processing the event, send any updated view counts to recsys-system in bulk
+    // After processing the event, send event to naitik multi services
     state
-        .rewards_module
-        .view_tracker
-        .send_bulk_view_count_to_recsys(video_view_counts);
+        .naitik_multi_service_client
+        .send_event_v1_to_naitik_multi_services(payload);
 
     Ok((StatusCode::OK, "Event processed".to_string()))
 }
@@ -152,7 +146,6 @@ async fn post_event(
 async fn process_event_impl(
     event: Event,
     shared_state: Arc<AppState>,
-    video_view_counts: &mut HashMap<String, u64>,
 ) -> Result<(), anyhow::Error> {
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery(&shared_state.clone());
@@ -182,9 +175,7 @@ async fn process_event_impl(
 
     // Process BTC rewards for video views
     if event.event.event == "video_duration_watched" {
-        event
-            .process_btc_rewards(&shared_state.clone(), video_view_counts)
-            .await;
+        event.process_btc_rewards(&shared_state.clone()).await;
     }
 
     // Process video started events for profile normal views
@@ -200,7 +191,6 @@ async fn process_event_impl(
 async fn process_event_impl_v2(
     event: Event,
     shared_state: Arc<AppState>,
-    video_view_counts: &mut HashMap<String, u64>,
 ) -> Result<(), anyhow::Error> {
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery(&shared_state.clone());
@@ -230,9 +220,7 @@ async fn process_event_impl_v2(
 
     // Process BTC rewards for video views
     if event.event.event == "video_duration_watched" {
-        event
-            .process_btc_rewards(&shared_state.clone(), video_view_counts)
-            .await;
+        event.process_btc_rewards(&shared_state.clone()).await;
     }
 
     // Process video started events for profile normal views
@@ -272,23 +260,21 @@ async fn handle_bulk_events(
     State(state): State<Arc<AppState>>,
     Json(request): Json<VerifiedEventBulkRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let mut video_view_counts: HashMap<String, u64> = HashMap::new(); // Cache for view counts to minimize send view count to recsys
-    for req_event in request.events {
+    for req_event in &request.events {
         let event = Event::new(WarehouseEvent {
             event: req_event.tag(),
             params: req_event.params().to_string(),
         });
 
-        if let Err(e) = process_event_impl(event, state.clone(), &mut video_view_counts).await {
+        if let Err(e) = process_event_impl(event, state.clone()).await {
             log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
     }
 
-    // After processing all events, we can send updated view counts to recsys-system in bulk
+    // After processing all events, we send events to naitik multi services in bulk
     state
-        .rewards_module
-        .view_tracker
-        .send_bulk_view_count_to_recsys(video_view_counts);
+        .naitik_multi_service_client
+        .send_bulk_events_v1_to_naitik_multi_services(request);
 
     Ok((StatusCode::OK, "Events processed".to_string()))
 }
@@ -325,7 +311,7 @@ async fn handle_bulk_events_v2(
     State(state): State<Arc<AppState>>,
     Json(request): Json<VerifiedEventBulkRequestV2>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let mut video_view_counts: HashMap<String, u64> = HashMap::new(); // Cache for view counts to minimize send view count to recsys
+    let events_payload = request.clone();
     for mut payload in request.events {
         // Extract event name and convert PascalCase to snake_case for backwards compat
         let event_name = payload
@@ -355,16 +341,15 @@ async fn handle_bulk_events_v2(
             params: payload.to_string(),
         });
 
-        if let Err(e) = process_event_impl_v2(event, state.clone(), &mut video_view_counts).await {
+        if let Err(e) = process_event_impl_v2(event, state.clone()).await {
             log::error!("Failed to process event rest: {e}"); // not sending any error to the client as it is a bulk request
         }
     }
 
-    // After processing all events, we can send updated view counts to recsys-system in bulk
+    // After processing all events, we can send events to naitik multi services in bulk
     state
-        .rewards_module
-        .view_tracker
-        .send_bulk_view_count_to_recsys(video_view_counts);
+        .naitik_multi_service_client
+        .send_bulk_events_v2_to_naitik_multi_services(events_payload);
 
     Ok((StatusCode::OK, "Events processed".to_string()))
 }
@@ -389,13 +374,12 @@ async fn post_event_v2(
 
     let warehouse_event = WarehouseEvent {
         event: event_name,
-        params: payload.params,
+        params: payload.params.clone(),
     };
 
     let event = Event::new(warehouse_event);
-    let mut video_view_counts = HashMap::new(); // Cache for view counts to minimize send view count to recsys
 
-    process_event_impl_v2(event, state.clone(), &mut video_view_counts)
+    process_event_impl_v2(event, state.clone())
         .await
         .map_err(|e| {
             log::error!("Failed to process event rest: {e}");
@@ -405,11 +389,10 @@ async fn post_event_v2(
             )
         })?;
 
-    // After processing the event, send any updated view counts to recsys-system in bulk
+    // After processing the event, we can send event to naitik multi services
     state
-        .rewards_module
-        .view_tracker
-        .send_bulk_view_count_to_recsys(video_view_counts);
+        .naitik_multi_service_client
+        .send_event_v2_to_naitik_multi_services(payload);
 
     Ok((StatusCode::OK, "Event processed".to_string()))
 }

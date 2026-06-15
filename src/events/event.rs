@@ -14,7 +14,6 @@ use log::{debug, error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
 
@@ -402,11 +401,7 @@ impl Event {
         }
     }
 
-    pub async fn process_btc_rewards(
-        &self,
-        app_state: &AppState,
-        video_view_counts: &mut HashMap<String, u64>,
-    ) {
+    pub async fn process_btc_rewards(&self, app_state: &AppState) {
         if self.event.event != "video_duration_watched" {
             return;
         }
@@ -429,7 +424,7 @@ impl Event {
         // Process the view for rewards
         let app_state_arc = std::sync::Arc::new(app_state.clone());
         if let Err(e) = reward_engine
-            .process_video_view(params, &app_state_arc, video_view_counts)
+            .process_video_view(params, &app_state_arc)
             .await
         {
             log::error!("Failed to process BTC rewards: {e:?}");

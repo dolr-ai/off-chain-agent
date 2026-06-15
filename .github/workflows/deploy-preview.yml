@@ -134,7 +134,6 @@ jobs:
             secret/data/off-chain-agent/SENTRY_CLIENT_SECRET_2 value | SENTRY_CLIENT_SECRET_2 ;
             secret/data/off-chain-agent/GCHAT_SENTRY_WEBHOOK_URL value | GCHAT_SENTRY_WEBHOOK_URL ;
             secret/data/off-chain-agent/GOOGLE_CHAT_REPORT_SPACE_URL value | GOOGLE_CHAT_REPORT_SPACE_URL ;
-            secret/data/off-chain-agent/RECSYS_INTERNAL_CALL_SECRET_KEY value | RECSYS_INTERNAL_CALL_SECRET_KEY ;
             secret/data/off-chain-agent/KVROCKS_PASSWORD value | KVROCKS_PASSWORD ;
             secret/data/off-chain-agent/KVROCKS_HOSTS value | KVROCKS_HOSTS ;
             secret/data/off-chain-agent/KVROCKS_CA_CERT value | KVROCKS_CA_CERT ;
@@ -145,6 +144,7 @@ jobs:
             secret/data/off-chain-agent/SCRATCHPAD_DRAGONFLY_PASSWORD value | SCRATCHPAD_DRAGONFLY_PASSWORD ;
             secret/data/off-chain-agent/YRAL_MOBILE_SERVICE_ACCOUNT_KEY value | YRAL_MOBILE_SERVICE_ACCOUNT_KEY ;
             secret/data/off-chain-agent/PROMPT_MODERATION_GEMINI_API_KEY value | PROMPT_MODERATION_GEMINI_API_KEY ;
+            secret/data/off-chain-agent/NAITIK_MULTI_SERVICE_API_JWT_TOKEN value | NAITIK_MULTI_SERVICE_API_JWT_TOKEN ;
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_PASSWORD value | DRAGONFLY_REDIS_STORE_PASSWORD ;
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_HOSTS value | DRAGONFLY_REDIS_STORE_HOSTS ;
             secret/data/off-chain-agent/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
@@ -257,7 +257,7 @@ jobs:
           SENTRY_CLIENT_SECRET_2: ${{ env.SENTRY_CLIENT_SECRET_2 }}
           GCHAT_SENTRY_WEBHOOK_URL: ${{ env.GCHAT_SENTRY_WEBHOOK_URL }}
           GOOGLE_CHAT_REPORT_SPACE_URL: ${{ env.GOOGLE_CHAT_REPORT_SPACE_URL }}
-          RECSYS_INTERNAL_CALL_SECRET_KEY: ${{ env.RECSYS_INTERNAL_CALL_SECRET_KEY }}
+          NAITIK_MULTI_SERVICE_API_JWT_TOKEN: ${{ env.NAITIK_MULTI_SERVICE_API_JWT_TOKEN }}
           KVROCKS_PASSWORD: ${{ env.KVROCKS_PASSWORD }}
           KVROCKS_HOSTS: ${{ env.KVROCKS_HOSTS }}
           KVROCKS_CA_CERT: ${{ env.KVROCKS_CA_CERT }}
@@ -331,7 +331,7 @@ jobs:
             --arg sentry_client_secret_2 "$SENTRY_CLIENT_SECRET_2" \
             --arg gchat_sentry_webhook_url "$GCHAT_SENTRY_WEBHOOK_URL" \
             --arg google_chat_report_space_url "$GOOGLE_CHAT_REPORT_SPACE_URL" \
-            --arg recsys_internal_call_secret_key "$RECSYS_INTERNAL_CALL_SECRET_KEY" \
+            --arg naitik_multi_service_api_jwt_token "$NAITIK_MULTI_SERVICE_API_JWT_TOKEN" \
             --arg kvrocks_password "$KVROCKS_PASSWORD" \
             --arg kvrocks_hosts "$KVROCKS_HOSTS" \
             --arg kvrocks_ca_cert "$KVROCKS_CA_CERT" \
@@ -401,7 +401,7 @@ jobs:
               { "key": "SENTRY_CLIENT_SECRET_2", "value": $sentry_client_secret_2, "is_literal": true},
               { "key": "GCHAT_SENTRY_WEBHOOK_URL", "value": $gchat_sentry_webhook_url, "is_literal": true},
               { "key": "GOOGLE_CHAT_REPORT_SPACE_URL", "value": $google_chat_report_space_url, "is_literal": true},
-              { "key": "RECSYS_INTERNAL_CALL_SECRET_KEY", "value": $recsys_internal_call_secret_key, "is_literal": true},
+              { "key": "NAITIK_MULTI_SERVICE_API_JWT_TOKEN", "value": $naitik_multi_service_api_jwt_token, "is_literal": true},
               { "key": "KVROCKS_PASSWORD", "value": $kvrocks_password, "is_literal": true},
               { "key": "KVROCKS_HOSTS", "value": $kvrocks_hosts, "is_literal": true},
               { "key": "KVROCKS_CA_CERT", "value": $kvrocks_ca_cert, "is_multiline": true},

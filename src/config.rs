@@ -18,6 +18,7 @@ pub struct AppConfig {
     pub google_sa_key: String,
     #[cfg(not(feature = "local-bin"))]
     pub milvus_url: Option<String>,
+    pub naitik_multi_service_api_jwt_token: String,
 }
 
 impl AppConfig {

@@ -18,7 +18,6 @@ use crate::{
 use anyhow::{Context, Result};
 use candid::Principal;
 use chrono::Utc;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -99,7 +98,6 @@ impl RewardEngine {
         &self,
         event: VideoDurationWatchedPayloadV2,
         app_state: &Arc<AppState>,
-        video_view_counts: &mut HashMap<String, u64>,
     ) -> Result<()> {
         // if event.source.is_some() {
         log::info!(
@@ -127,9 +125,6 @@ impl RewardEngine {
                     .view_tracker
                     .track_view(video_id, &event.user_id, false)
                     .await?;
-
-                let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-                video_view_counts.insert(video_id.to_string(), total_view_count);
             }
 
             return Ok(());
@@ -168,9 +163,6 @@ impl RewardEngine {
                     .track_view(video_id, &event.user_id, false)
                     .await?;
             }
-            // send total view count to recsys-system from here for non-logged-in users.
-            let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            video_view_counts.insert(video_id.to_string(), total_view_count);
             return Ok(());
         }
 
@@ -186,9 +178,6 @@ impl RewardEngine {
                     .track_view(video_id, &event.user_id, false)
                     .await?;
             }
-            // send total view count to recsys-system from here for unregistered users.
-            let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            video_view_counts.insert(video_id.to_string(), total_view_count);
             return Ok(());
         }
 
@@ -204,9 +193,6 @@ impl RewardEngine {
                     .track_view(video_id, &event.user_id, false)
                     .await?;
             }
-            // send total view count to recsys-system from here for videos with unregistered publishers.
-            let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            video_view_counts.insert(video_id.to_string(), total_view_count);
             return Ok(());
         }
 
@@ -228,9 +214,6 @@ impl RewardEngine {
             .view_tracker
             .track_view(video_id, &event.user_id, true)
             .await?;
-
-        let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-        video_view_counts.insert(video_id.to_string(), total_view_count);
 
         if let Some(count) = view_count {
             log::info!(
@@ -351,10 +334,6 @@ impl RewardEngine {
                 )
                 .await;
             }
-
-            // Duplicate views still increment `total_count_all`, so update Recsys
-            let total_view_count = self.view_tracker.get_total_count_all(video_id).await?;
-            video_view_counts.insert(video_id.to_string(), total_view_count);
         }
 
         Ok(())

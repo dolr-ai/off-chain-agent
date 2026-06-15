@@ -13,6 +13,9 @@ pub static BIGQUERY_INGESTION_URL: Lazy<Url> = Lazy::new(|| {
 pub static YRAL_UPLOAD_SERVICE: Lazy<Url> =
     Lazy::new(|| Url::parse("https://upload.yral.com").unwrap());
 
+pub static NAITIK_YRAL_MULTI_SERVICES: Lazy<Url> =
+    Lazy::new(|| Url::parse("https://multi-service.naitik.yral.com").unwrap());
+
 #[allow(dead_code)]
 pub const PLATFORM_ORCHESTRATOR_ID: &str = "74zq4-iqaaa-aaaam-ab53a-cai";
 

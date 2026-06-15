@@ -8,6 +8,7 @@ use crate::qstash::QStashState;
 use crate::rewards::RewardsModule;
 use crate::scratchpad::ScratchpadClient;
 use crate::types::RedisPool;
+use crate::utils::naitik_multi_service_client::NaitikMultiServiceClient;
 use crate::videogen::comfyui_client::{ComfyUIClient, ComfyUIConfig};
 use crate::videogen::crypto::Crypto;
 use crate::yral_auth::dragonfly::{
@@ -108,6 +109,8 @@ pub struct AppState {
     pub comfyui_client: Option<ComfyUIClient>,
 
     pub crypto: Crypto,
+
+    pub naitik_multi_service_client: NaitikMultiServiceClient,
 }
 
 impl AppState {
@@ -190,6 +193,7 @@ impl AppState {
             mixpanel_client: MixpanelClient::new(),
             comfyui_client,
             crypto: Crypto::default(),
+            naitik_multi_service_client: NaitikMultiServiceClient::new(),
         }
     }
 
