@@ -7,6 +7,10 @@ PORT = '8080'
 SENTRY_ENVIRONMENT = "staging"
 ALLOYDB_DB_NAME = "postgres"
 ALLOYDB_DB_USER = "postgres"
+REPORT_APPROVED_NSFW_BAN_ENABLED = "true"
+
+[deploy]
+strategy = "rolling"
 
 [[services]]
 internal_port = 50051

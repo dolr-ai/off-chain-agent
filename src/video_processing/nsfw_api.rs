@@ -63,6 +63,26 @@ pub struct VideoStatusResponse {
     pub final_result: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct VideoBanRequest {
+    pub publisher_user_id: String,
+    pub post_id: String,
+    pub canister_id: String,
+    pub reason: String,
+    pub source: String,
+    pub moderator_id: Option<String>,
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct VideoBanResponse {
+    pub video_id: String,
+    pub status: String,
+    pub excluded_videos_written: bool,
+    pub legacy_nsfw_agg_written: bool,
+    pub trace_id: Option<String>,
+}
+
 impl NsfwApiClient {
     pub fn from_env() -> Result<Self> {
         let base_url = std::env::var("NSFW_API_BASE_URL")
@@ -129,6 +149,34 @@ impl NsfwApiClient {
             .map_err(|e| NsfwApiError::Retryable(format!("status request failed: {e}")))?;
 
         parse_response(response, "status").await
+    }
+
+    pub async fn ban_video(
+        &self,
+        video_id: &str,
+        request: &VideoBanRequest,
+    ) -> std::result::Result<VideoBanResponse, NsfwApiError> {
+        let encoded_video_id = urlencoding::encode(video_id);
+        let path = format!("/v1/videos/{encoded_video_id}/ban");
+        // The manual-ban endpoint uses the same exact-byte signing contract as detection.
+        let body = serde_json::to_vec(request)
+            .map_err(|e| NsfwApiError::Terminal(format!("failed to serialize ban request: {e}")))?;
+        let url = self
+            .base_url
+            .join(path.trim_start_matches('/'))
+            .map_err(|e| NsfwApiError::Terminal(format!("invalid ban URL: {e}")))?;
+
+        let response = self
+            .client
+            .post(url)
+            .header("content-type", "application/json")
+            .headers(self.signed_headers("POST", &path, &body)?)
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| NsfwApiError::Retryable(format!("ban request failed: {e}")))?;
+
+        parse_response(response, "ban").await
     }
 
     fn signed_headers(
@@ -222,6 +270,20 @@ mod tests {
         assert_eq!(
             signature,
             "3bc58c50db2f993a521f93c3e1ecd5aa8b95de594558de5265f10108c0407bc0"
+        );
+        assert_eq!(signature.len(), 64);
+        assert!(signature.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn signs_manual_ban_path_with_expected_shape() {
+        let body = br#"{"publisher_user_id":"user","post_id":"post","canister_id":"canister","reason":"user_report_approved","source":"google_chat","moderator_id":null,"trace_id":null}"#;
+        let signature = sign_request("secret", "123", "POST", "/v1/videos/video-1/ban", body)
+            .expect("signature");
+
+        assert_eq!(
+            signature,
+            "c68650ea212ce5ee1b502d7c3065179c8e28b0d1371b88cb631e581e51d46cd5"
         );
         assert_eq!(signature.len(), 64);
         assert!(signature.chars().all(|c| c.is_ascii_hexdigit()));
