@@ -937,6 +937,10 @@ impl EventPayload {
                         ..Default::default()
                     }),
                     apns: Some(ApnsConfig {
+                        headers: Some(json!({
+                            "apns-push-type": "alert",
+                            "apns-priority": "10",
+                        })),
                         fcm_options: Some(ApnsFcmOptions {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
@@ -1016,6 +1020,10 @@ impl EventPayload {
                         ..Default::default()
                     }),
                     apns: Some(ApnsConfig {
+                        headers: Some(json!({
+                            "apns-push-type": "alert",
+                            "apns-priority": "10",
+                        })),
                         fcm_options: Some(ApnsFcmOptions {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
@@ -1137,6 +1145,10 @@ impl EventPayload {
                         ..Default::default()
                     }),
                     apns: Some(ApnsConfig {
+                        headers: Some(json!({
+                            "apns-push-type": "alert",
+                            "apns-priority": "10",
+                        })),
                         fcm_options: Some(ApnsFcmOptions {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
@@ -1217,6 +1229,10 @@ impl EventPayload {
                         ..Default::default()
                     }),
                     apns: Some(ApnsConfig {
+                        headers: Some(json!({
+                            "apns-push-type": "alert",
+                            "apns-priority": "10",
+                        })),
                         fcm_options: Some(ApnsFcmOptions {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
@@ -1287,6 +1303,10 @@ impl EventPayload {
                         ..Default::default()
                     }),
                     apns: Some(ApnsConfig {
+                        headers: Some(json!({
+                            "apns-push-type": "alert",
+                            "apns-priority": "10",
+                        })),
                         fcm_options: Some(ApnsFcmOptions {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
@@ -1351,6 +1371,10 @@ impl EventPayload {
                         ..Default::default()
                     }),
                     apns: Some(ApnsConfig {
+                        headers: Some(json!({
+                            "apns-push-type": "alert",
+                            "apns-priority": "10",
+                        })),
                         fcm_options: Some(ApnsFcmOptions {
                             image: Some(
                                 "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
@@ -1504,6 +1528,10 @@ fn test_data_payload_serialization() {
             ..Default::default()
         }),
         apns: Some(ApnsConfig {
+            headers: Some(json!({
+                "apns-push-type": "alert",
+                "apns-priority": "10",
+            })),
             fcm_options: Some(ApnsFcmOptions {
                 image: Some("https://yral.com/img/yral/android-chrome-384x384.png".to_string()),
                 ..Default::default()
