@@ -158,20 +158,20 @@ async fn process_event_impl(
 
     event.update_view_count_canister(&shared_state.clone());
 
-    #[cfg(not(feature = "local-bin"))]
-    {
-        use crate::events::push_notifications::dispatch_notif;
+    // #[cfg(not(feature = "local-bin"))]
+    // {
+    //     use crate::events::push_notifications::dispatch_notif;
 
-        let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
-            log::error!("Failed to parse params: {e}");
-            anyhow::anyhow!("Failed to parse params: {}", e)
-        })?;
+    //     let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
+    //         log::error!("Failed to parse params: {e}");
+    //         anyhow::anyhow!("Failed to parse params: {}", e)
+    //     })?;
 
-        let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
-        if let Err(e) = res {
-            log::error!("Failed to dispatch notification: {e:?}");
-        }
-    }
+    //     let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
+    //     if let Err(e) = res {
+    //         log::error!("Failed to dispatch notification: {e:?}");
+    //     }
+    // }
 
     // Process BTC rewards for video views
     if event.event.event == "video_duration_watched" {
@@ -203,20 +203,20 @@ async fn process_event_impl_v2(
 
     event.update_view_count_canister(&shared_state.clone());
 
-    #[cfg(not(feature = "local-bin"))]
-    {
-        use crate::events::push_notifications::dispatch_notif;
+    // #[cfg(not(feature = "local-bin"))]
+    // {
+    //     use crate::events::push_notifications::dispatch_notif;
 
-        let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
-            log::error!("Failed to parse params: {e}");
-            anyhow::anyhow!("Failed to parse params: {}", e)
-        })?;
+    //     let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
+    //         log::error!("Failed to parse params: {e}");
+    //         anyhow::anyhow!("Failed to parse params: {}", e)
+    //     })?;
 
-        let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
-        if let Err(e) = res {
-            log::error!("Failed to dispatch notification: {e:?}");
-        }
-    }
+    //     let res = dispatch_notif(&event.event.event, params, &shared_state.clone()).await;
+    //     if let Err(e) = res {
+    //         log::error!("Failed to dispatch notification: {e:?}");
+    //     }
+    // }
 
     // Process BTC rewards for video views
     if event.event.event == "video_duration_watched" {
