@@ -1,7 +1,6 @@
 use std::env;
 use std::sync::Arc;
 
-use candid::Principal;
 use chrono::Timelike;
 use futures::StreamExt;
 use http::{
@@ -13,7 +12,6 @@ use serde_json::json;
 use tracing::instrument;
 
 use crate::{
-    canister::snapshot::snapshot_v2::BackupUserCanisterPayload,
     consts::OFF_CHAIN_AGENT_URL,
     events::event::UploadVideoInfoV2,
     posts::report_post::ReportPostRequestV3,
@@ -266,90 +264,6 @@ impl QStashClient {
             .header("upstash-method", "POST")
             .send()
             .await?;
-
-        Ok(())
-    }
-
-    #[instrument(skip(self, canister_ids))]
-    pub async fn backup_canister_batch(
-        &self,
-        canister_ids: Vec<Principal>,
-        rate_limit: u32,
-        parallelism: u32,
-        date_str: String,
-    ) -> anyhow::Result<()> {
-        let destination_url = OFF_CHAIN_AGENT_URL
-            .join("qstash/backup_user_canister")?
-            .to_string();
-        let qstash_batch_url = self.base_url.join("batch")?;
-
-        log::info!("Backup canister batch URL: {}", qstash_batch_url);
-
-        let requests: Vec<serde_json::Value> = canister_ids
-            .iter()
-            .map(|&canister_id| {
-                let payload = BackupUserCanisterPayload {
-                    canister_id,
-                    date_str: date_str.clone(),
-                };
-                let body_str = serde_json::to_string(&payload).unwrap_or_else(|e| {
-                    tracing::error!("Failed to serialize BackupUserCanisterPayload: {}", e);
-                    "{}".to_string() // Use an empty JSON object as fallback
-                });
-
-                json!({
-                    "destination": destination_url,
-                    "headers": {
-                        "Upstash-Forward-Content-Type": "application/json",
-                        "Upstash-Forward-Method": "POST",
-                        "Upstash-Flow-Control-Key": "BACKUP_CANISTER",
-                        "Upstash-Flow-Control-Value": format!("Rate={},Parallelism={}", rate_limit, parallelism),
-                        "Upstash-Content-Based-Deduplication": "true",
-                        "Upstash-Retries": "2",
-                    },
-                    "body": body_str,
-                })
-            })
-            .collect();
-
-        log::info!("Backup canister batch requests: {}", requests.len());
-
-        let chunk_size = 100;
-
-        let mut futures = Vec::new();
-        for request_chunk in requests.chunks(chunk_size) {
-            let client = self.client.clone();
-            let qstash_batch_url = qstash_batch_url.clone();
-            futures.push(async move {
-                client
-                    .post(qstash_batch_url.clone())
-                    .json(&request_chunk)
-                    .send()
-                    .await
-            });
-        }
-
-        log::info!("Backup canister batch futures: {}", futures.len());
-
-        let responses = futures::stream::iter(futures)
-            .buffer_unordered(80) // less than qstash limit per sec = 100
-            .collect::<Vec<_>>()
-            .await;
-
-        log::info!("Backup canister batch responses: {}", responses.len());
-
-        for response in responses {
-            match response {
-                Ok(response) => {
-                    if !response.status().is_success() {
-                        tracing::error!("QStash batch request failed: {}", response.status());
-                    }
-                }
-                Err(e) => tracing::error!("QStash batch request failed: {}", e),
-            }
-        }
-
-        log::info!("Backup canister batch completed");
 
         Ok(())
     }

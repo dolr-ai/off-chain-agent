@@ -25,7 +25,7 @@ use crate::{
         snapshot::{
             // alert::snapshot_alert_job,
             alert::snapshot_alert_job,
-            snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
+            snapshot_v2::backup_canisters_job_v2,
         },
     },
     events::event::storj::storj_ingest,
@@ -149,7 +149,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/start_backup_canisters_job_v2",
             post(backup_canisters_job_v2),
         )
-        .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
         .route(
             "/delete_and_reclaim_canisters",
