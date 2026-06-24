@@ -17,7 +17,7 @@ pub static NAITIK_YRAL_MULTI_SERVICES: Lazy<Url> =
     Lazy::new(|| Url::parse("https://multi-service.naitik.yral.com").unwrap());
 
 pub static YRAL_METADATA_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://metadata.yral.com/").unwrap());
+    Lazy::new(|| Url::parse("https://metadata.naitik.yral.com/").unwrap());
 
 #[allow(dead_code)]
 pub const RECYCLE_THRESHOLD_SECS: u64 = 15 * 24 * 60 * 60; // 15 days

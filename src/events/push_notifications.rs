@@ -4,7 +4,7 @@ use yral_metadata_types::SendNotificationReq;
 
 use crate::{app_state::AppState, events::types::deserialize_event_payload};
 
-const METADATA_SERVER_URL: &str = "https://metadata.yral.com";
+const METADATA_SERVER_URL: &str = "https://metadata.naitik.yral.com";
 
 #[derive(Clone)]
 pub struct NotificationClient {
