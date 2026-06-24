@@ -2,7 +2,6 @@ use ic_agent::{export::Principal, Agent};
 use tracing::instrument;
 use yral_canisters_client::{
     ic::PLATFORM_ORCHESTRATOR_ID, platform_orchestrator::PlatformOrchestrator,
-    user_index::UserIndex,
 };
 
 #[instrument(skip(agent))]
@@ -14,19 +13,14 @@ pub async fn get_subnet_orch_ids(agent: &Agent) -> Result<Vec<Principal>, anyhow
     Ok(subnet_orch_ids)
 }
 
-#[instrument(skip(agent))]
+/// Fetch the list of (user_principal, canister_id) pairs.
+///
+/// Subnet orchestrators (user_index canisters) have been decommissioned.
+/// This function now returns an empty list. Callers that need user canister
+/// mappings should use user_info_service instead.
+#[instrument(skip(_agent))]
 pub async fn get_user_principal_canister_list_v2(
-    agent: &Agent,
+    _agent: &Agent,
 ) -> Result<Vec<(Principal, Principal)>, anyhow::Error> {
-    let subnet_orch_ids = get_subnet_orch_ids(agent).await?;
-
-    let mut user_principal_canister_list = vec![];
-
-    for subnet_orch_id in subnet_orch_ids {
-        let subnet_orch = UserIndex(subnet_orch_id, agent);
-        let user_principal_canister_ids = subnet_orch.get_user_id_and_canister_list().await?;
-        user_principal_canister_list.extend(user_principal_canister_ids);
-    }
-
-    Ok(user_principal_canister_list)
+    Ok(vec![])
 }

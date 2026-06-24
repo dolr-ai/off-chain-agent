@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
 use yral_canisters_client::{
-    user_index::{Result3, UserIndex},
     user_info_service::UserInfoService,
     user_post_service::UserPostService,
 };
@@ -513,19 +512,12 @@ async fn process_single_canister_deletion(
         });
     }
 
-    // Step 3: Delete posts from subnet
-    let subnet = UserIndex(subnet_id, agent);
-    match subnet.uninstall_individual_user_canister(canister_id).await {
-        Ok(Result3::Ok) => Ok(canister_id.to_string()),
-        Ok(Result3::Err(e)) => Err(CanisterDeletionError {
-            user_principal: Some(user_principal),
-            error: anyhow::anyhow!("Failed to uninstall canister: {}", e),
-        }),
-        Err(e) => Err(CanisterDeletionError {
-            user_principal: Some(user_principal),
-            error: anyhow::anyhow!("Agent error: {}", e),
-        }),
-    }
+    // Subnet orchestrators (user_index canisters) have been decommissioned.
+    // The canister uninstall step that previously called
+    // UserIndex::uninstall_individual_user_canister is no longer applicable.
+    // Canister data deletion above is the remaining cleanup step.
+    let _ = subnet_id; // suppress unused variable warning
+    Ok(canister_id.to_string())
 }
 
 #[cfg(not(feature = "local-bin"))]
