@@ -16,9 +16,6 @@ pub static YRAL_UPLOAD_SERVICE: Lazy<Url> =
 pub static NAITIK_YRAL_MULTI_SERVICES: Lazy<Url> =
     Lazy::new(|| Url::parse("https://multi-service.naitik.yral.com").unwrap());
 
-#[allow(dead_code)]
-pub const PLATFORM_ORCHESTRATOR_ID: &str = "74zq4-iqaaa-aaaam-ab53a-cai";
-
 pub static YRAL_METADATA_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://metadata.yral.com/").unwrap());
 

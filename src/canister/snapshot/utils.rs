@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use candid::Principal;
 use ic_agent::Agent;
 use redis::AsyncCommands;
-use yral_canisters_client::ic::PLATFORM_ORCHESTRATOR_ID;
 
 use crate::{
     canister::{
@@ -93,25 +92,4 @@ pub async fn get_subnet_orch_ids_list_for_backup(
     );
 
     Ok(subnet_orch_ids_list)
-}
-
-pub async fn get_platform_orch_ids_list_for_backup(
-    _agent: &Agent,
-    canister_backup_redis_pool: &RedisPool,
-    date_str: String,
-) -> Result<Vec<Principal>, anyhow::Error> {
-    let platform_orch_id = PLATFORM_ORCHESTRATOR_ID;
-
-    let canister_backup_date_list = get_canister_backup_date_list(
-        canister_backup_redis_pool,
-        CanisterType::PlatformOrch,
-        date_str,
-    )
-    .await?;
-
-    if canister_backup_date_list.contains(&platform_orch_id.to_string()) {
-        return Ok(vec![]);
-    }
-
-    Ok(vec![platform_orch_id])
 }

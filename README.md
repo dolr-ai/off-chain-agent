@@ -20,13 +20,11 @@ flowchart TD
     IndividualCansiter1[(Individual User <br>Canister 1)]
     IndividualCansiter2[(Individual User <br>Canister 2)]
     UserIndex[(User Index)]
-    PlatformOrchestrator[Platform <br>Orchestrator]
     OffChainAgent[OffChain Agent]
     CFWorker[Cloudflare Worker]
     R2[(R2 store)]
 
-    OffChainAgent --[1.1]--> PlatformOrchestrator
-    OffChainAgent --[1.2]--> UserIndex
+    OffChainAgent --[1.1]--> UserIndex
     OffChainAgent --[2(get snapshot)]--> IndividualCansiter1
     OffChainAgent --[2.1(store snapshot)]--> R2
     OffChainAgent --[3]--> IndividualCansiter2
@@ -36,7 +34,6 @@ flowchart TD
 
 
     subgraph OnChain
-        PlatformOrchestrator
         UserIndex
         IndividualCansiter1
         IndividualCansiter2

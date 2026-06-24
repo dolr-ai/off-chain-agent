@@ -10,9 +10,7 @@ use tracing::instrument;
 
 use crate::{
     app_state::AppState,
-    canister::snapshot::utils::{
-        get_platform_orch_ids_list_for_backup, get_subnet_orch_ids_list_for_backup,
-    },
+    canister::snapshot::utils::get_subnet_orch_ids_list_for_backup,
     types::RedisPool,
 };
 
@@ -63,16 +61,6 @@ pub async fn snapshot_alert_job_impl(
         let canister_data = CanisterData {
             canister_id,
             canister_type: CanisterType::SubnetOrch,
-        };
-        canisters_backups.push((canister_data, date_str.clone()));
-    }
-
-    let platform_orch_ids =
-        get_platform_orch_ids_list_for_backup(agent, redis_pool, date_str.clone()).await?;
-    for canister_id in platform_orch_ids {
-        let canister_data = CanisterData {
-            canister_id,
-            canister_type: CanisterType::PlatformOrch,
         };
         canisters_backups.push((canister_data, date_str.clone()));
     }

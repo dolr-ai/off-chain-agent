@@ -7,8 +7,6 @@ use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use yral_canisters_client::ic::PLATFORM_ORCHESTRATOR_ID;
-
 use crate::{
     app_state::AppState,
     canister::snapshot::{
@@ -46,17 +44,17 @@ pub async fn backup_canisters_job_v2(
 
     // TODO: migrate to user_post_service/user_info_service
     // Individual user canister backups are no longer needed — user canisters have been
-    // decommissioned. Only platform/subnet orchestrator backups remain.
+    // decommissioned. Only subnet orchestrator backups remain.
     let _ = payload; // payload kept for API compatibility
 
     tokio::spawn(async move {
         if let Err(e) =
-            backup_pf_and_subnet_orchs(&agent, &canister_backup_redis_pool, date_str.clone()).await
+            backup_subnet_orchs(&agent, &canister_backup_redis_pool, date_str.clone()).await
         {
-            log::error!("Failed to backup PF and subnet orchs: {e}");
+            log::error!("Failed to backup subnet orchs: {e}");
         }
 
-        log::info!("Successfully backed up PF and subnet orchs. Starting snapshot alert job");
+        log::info!("Successfully backed up subnet orchs. Starting snapshot alert job");
 
         if let Err(e) =
             snapshot_alert_job_impl(&agent, &canister_backup_redis_pool, date_str.clone()).await
@@ -69,27 +67,11 @@ pub async fn backup_canisters_job_v2(
 }
 
 #[instrument(skip(agent))]
-pub async fn backup_pf_and_subnet_orchs(
+pub async fn backup_subnet_orchs(
     agent: &Agent,
     canister_backup_redis_pool: &RedisPool,
     date_str: String,
 ) -> Result<(), anyhow::Error> {
-    let pf_orch_canister_data = CanisterData {
-        canister_id: PLATFORM_ORCHESTRATOR_ID,
-        canister_type: CanisterType::PlatformOrch,
-    };
-
-    if let Err(e) = backup_canister_impl(
-        agent,
-        canister_backup_redis_pool,
-        pf_orch_canister_data,
-        date_str.clone(),
-    )
-    .await
-    {
-        log::error!("Failed to backup platform orchestrator: {e}");
-    }
-
     let subnet_orch_ids =
         get_subnet_orch_ids_list_for_backup(agent, canister_backup_redis_pool, date_str.clone())
             .await?;
