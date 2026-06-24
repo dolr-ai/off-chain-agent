@@ -3,16 +3,10 @@ use std::{error::Error, sync::Arc};
 
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
-use futures::future::join_all;
 use http::{header::AUTHORIZATION, StatusCode};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use yral_canisters_client::{
-    ic::USER_INFO_SERVICE_ID,
-    individual_user_template::{GetPostsOfUserProfileError, IndividualUserTemplate, Result6},
-    individual_user_template::{Result7, SessionType},
-    user_info_service::{Result_, UserInfoService},
-};
+use yral_canisters_client::ic::USER_INFO_SERVICE_ID;
 use yral_metadata_types::SetUserMetadataReqMetadata;
 
 use crate::{app_state::AppState, types::RedisPool};
@@ -119,127 +113,29 @@ pub async fn update_the_metadata_mapping(
 }
 
 pub async fn migrate_individual_user_to_service_canister(
-    State(state): State<Arc<AppState>>,
-    Json(request): Json<MigrateIndividualUserRequest>,
+    State(_state): State<Arc<AppState>>,
+    Json(_request): Json<MigrateIndividualUserRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let user_metadata = state
-        .yral_metadata_client
-        .get_user_metadata_v2(request.user_principal.to_text())
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "User metadata not found".to_string(),
-        ))?;
-
-    if user_metadata.user_canister_id != request.user_canister {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "User canister does not match metadata".to_string(),
-        ));
-    }
-
-    let user_info_canister = UserInfoService(USER_INFO_SERVICE_ID, &state.agent);
-
-    let individual_user_service = IndividualUserTemplate(request.user_canister, &state.agent);
-
-    let session_type_res = individual_user_service
-        .get_session_type()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    let session_type = match session_type_res {
-        Result7::Ok(session_type) => Ok(session_type),
-        Result7::Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
-    }?;
-
-    let registered_session = matches!(session_type, SessionType::RegisteredSession);
-
-    let accept_new_registration_res = user_info_canister
-        .accept_new_user_registration(request.user_principal, registered_session)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    if let Result_::Err(e) = accept_new_registration_res {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, e));
-    }
-
-    let service_canister_migration_redis =
-        ServiceCanisterMigrationRedis::new(state.service_cansister_migration_redis_pool.clone());
-
-    service_canister_migration_redis
-        .set_migrated_info_for_user(
-            request.user_principal,
-            MigrationStatus {
-                migrated: false,
-                individual_user_canister: request.user_canister,
-            },
-        )
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    state
-        .qstash_client
-        .transfer_all_posts_to_service_canister(&request)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    Ok(())
+    // TODO: migrate to user_post_service/user_info_service
+    // Previously used IndividualUserTemplate to get session_type and register
+    // the user in UserInfoService. Individual user canisters have been
+    // decommissioned — this migration endpoint is no longer needed.
+    log::warn!("migrate_individual_user_to_service_canister is deprecated — \
+                individual user canisters have been decommissioned");
+    Ok((StatusCode::OK, "Migration no longer needed".to_string()))
 }
 
 pub async fn transfer_all_posts_for_the_individual_user(
-    State(state): State<Arc<AppState>>,
-    Json(request): Json<MigrateIndividualUserRequest>,
+    State(_state): State<Arc<AppState>>,
+    Json(_request): Json<MigrateIndividualUserRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let individual_user_template = IndividualUserTemplate(request.user_canister, &state.agent);
-
-    let mut posts_left = true;
-
-    let mut start_index = 0;
-
-    while posts_left {
-        let posts_res = individual_user_template
-            .get_posts_of_this_user_profile_with_pagination_cursor(start_index, 100)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        match posts_res {
-            Result6::Ok(posts) => {
-                let transfer_posts_requests = posts.iter().map(|post_details| async {
-                    process_post_for_transfer(
-                        post_details.id,
-                        request.user_canister,
-                        request.user_principal,
-                    )
-                    .await
-                    .map_err(|e| e.to_string())
-                });
-
-                let result = join_all(transfer_posts_requests).await;
-
-                if let Some(Err(e)) = result.first() {
-                    log::error!("failed to transfer post {e}")
-                }
-            }
-            Result6::Err(e) => {
-                if matches!(e, GetPostsOfUserProfileError::ReachedEndOfItemsList) {
-                    posts_left = false;
-                } else {
-                    log::error!("failed to transfer post error from canister {:?}", e);
-
-                    break;
-                }
-            }
-        }
-
-        start_index += 100;
-    }
-
-    state
-        .qstash_client
-        .update_yral_metadata_mapping(&request)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    Ok(())
+    // TODO: migrate to user_post_service/user_info_service
+    // Previously used IndividualUserTemplate to fetch posts from individual user
+    // canisters and transfer them to UserPostService. Individual user canisters
+    // have been decommissioned — this transfer endpoint is no longer needed.
+    log::warn!("transfer_all_posts_for_the_individual_user is deprecated — \
+                individual user canisters have been decommissioned");
+    Ok((StatusCode::OK, "Transfer no longer needed".to_string()))
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

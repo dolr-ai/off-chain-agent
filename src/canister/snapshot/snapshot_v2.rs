@@ -1,12 +1,7 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
 use axum::{extract::State, response::IntoResponse, Json};
-use candid::Principal;
 use chrono::Utc;
-use futures::StreamExt;
 use http::StatusCode;
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
@@ -18,9 +13,8 @@ use crate::{
     app_state::AppState,
     canister::snapshot::{
         alert::snapshot_alert_job_impl,
-        download::get_canister_snapshot,
         upload::upload_snapshot_to_storj_v2,
-        utils::{get_user_canister_list_for_backup, insert_canister_backup_date_into_redis},
+        utils::insert_canister_backup_date_into_redis,
     },
     types::RedisPool,
 };
@@ -49,28 +43,12 @@ pub async fn backup_canisters_job_v2(
     let agent = state.agent.clone();
     let canister_backup_redis_pool = state.canister_backup_redis_pool.clone();
 
-    let mut user_canister_list =
-        get_user_canister_list_for_backup(&agent, &canister_backup_redis_pool, date_str.clone())
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    if payload.num_canisters > 0 {
-        user_canister_list = user_canister_list
-            .into_iter()
-            .take(payload.num_canisters as usize)
-            .collect();
-    }
+    // TODO: migrate to user_post_service/user_info_service
+    // Individual user canister backups are no longer needed — user canisters have been
+    // decommissioned. Only platform/subnet orchestrator backups remain.
+    let _ = payload; // payload kept for API compatibility
 
     tokio::spawn(async move {
-        let _failed_canisters_ids = backup_user_canisters_bulk(
-            &agent,
-            user_canister_list,
-            &canister_backup_redis_pool,
-            date_str.clone(),
-            payload.parallelism,
-        )
-        .await;
-
         if let Err(e) =
             backup_pf_and_subnet_orchs(&agent, &canister_backup_redis_pool, date_str.clone()).await
         {
@@ -87,112 +65,6 @@ pub async fn backup_canisters_job_v2(
     });
 
     Ok((StatusCode::OK, "Backup started".to_string()))
-}
-
-#[instrument(skip(agent, user_canister_list, canister_backup_redis_pool))]
-pub async fn backup_user_canisters_bulk(
-    agent: &Agent,
-    user_canister_list: Vec<Principal>,
-    canister_backup_redis_pool: &RedisPool,
-    date_str: String,
-    parallelism: u32,
-) -> Result<Vec<Principal>, anyhow::Error> {
-    let total_canisters = user_canister_list.len();
-    let completed_counter = Arc::new(AtomicUsize::new(0));
-    let failed_counter = Arc::new(AtomicUsize::new(0));
-
-    log::info!("Starting backup for {} canisters", total_canisters);
-
-    let futures = user_canister_list.into_iter().map(|canister_id| {
-        let agent = agent.clone();
-        let date_str = date_str.clone();
-        let completed_counter = completed_counter.clone();
-        let failed_counter = failed_counter.clone();
-        let canister_data = CanisterData {
-            canister_id,
-            canister_type: CanisterType::User,
-        };
-        let canister_backup_redis_pool = canister_backup_redis_pool.clone();
-
-        async move {
-            let result = backup_canister_impl(
-                &agent,
-                &canister_backup_redis_pool,
-                canister_data.clone(),
-                date_str,
-            )
-            .await;
-
-            let current_completed = if result.is_ok() {
-                completed_counter.fetch_add(1, Ordering::Relaxed) + 1
-            } else {
-                failed_counter.fetch_add(1, Ordering::Relaxed);
-                completed_counter.fetch_add(1, Ordering::Relaxed) + 1
-            };
-
-            if current_completed % 500 == 0 {
-                let failed_count = failed_counter.load(Ordering::Relaxed);
-                let success_count = current_completed - failed_count;
-                log::info!(
-                    "Backup progress: {current_completed}/{total_canisters} completed - {success_count} successful, {failed_count} failed"
-                );
-            }
-
-            Some((
-                canister_data.canister_id,
-                result.map_err(|e| anyhow::anyhow!("Failed to backup user canister: {}", e)),
-            ))
-        }
-    });
-    let results: Vec<Option<(Principal, Result<(), anyhow::Error>)>> =
-        futures::stream::iter(futures)
-            .buffer_unordered(parallelism as usize)
-            .collect::<Vec<_>>()
-            .await;
-
-    let failed_canisters_ids = results
-        .iter()
-        .filter(|result| result.is_some())
-        .map(|result| result.as_ref().unwrap().0)
-        .collect::<Vec<_>>();
-    log::error!(
-        "Failed to backup user canisters: {:?}/{:?}",
-        failed_canisters_ids.len(),
-        results.len()
-    );
-
-    Ok(failed_canisters_ids)
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BackupUserCanisterPayload {
-    pub canister_id: Principal,
-    pub date_str: String,
-}
-
-#[instrument(skip(state))]
-pub async fn backup_user_canister(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<BackupUserCanisterPayload>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let agent = state.agent.clone();
-    let canister_backup_redis_pool = state.canister_backup_redis_pool.clone();
-
-    let canister_data = CanisterData {
-        canister_id: payload.canister_id,
-        canister_type: CanisterType::User,
-    };
-
-    backup_canister_impl(
-        &agent,
-        &canister_backup_redis_pool,
-        canister_data,
-        payload.date_str,
-    )
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    Ok((StatusCode::OK, "Backup successful".to_string()))
 }
 
 #[instrument(skip(agent))]

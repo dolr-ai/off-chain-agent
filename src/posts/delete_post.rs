@@ -15,10 +15,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use types::PostRequest;
 use verify::VerifiedPostRequest;
-use yral_canisters_client::{
-    individual_user_template::{IndividualUserTemplate, Result_},
-    user_post_service::UserPostService,
-};
+use yral_canisters_client::user_post_service::UserPostService;
 
 use crate::kvrocks::{KvrocksClient, VideoDeleted};
 use crate::{
@@ -65,14 +62,19 @@ pub async fn handle_delete_post(
         get_agent_from_delegated_identity_wire(&verified_request.request.delegated_identity_wire)
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let individual_user_template =
-        IndividualUserTemplate(verified_request.user_canister, &user_ic_agent);
+
+    // TODO: migrate to user_post_service/user_info_service
+    // Previously used IndividualUserTemplate to delete posts from individual user
+    // canisters. Those canisters have been decommissioned — route all deletes
+    // through UserPostService now.
+    let user_post_service =
+        UserPostService(*USER_POST_SERVICE_CANISTER_ID, &user_ic_agent);
 
     // Call the canister to delete the post
-    let delete_res = individual_user_template.delete_post(post_id).await;
+    let delete_res = user_post_service.delete_post(post_id.to_string()).await;
     match delete_res {
-        Ok(Result_::Ok) => (),
-        Ok(Result_::Err(_)) => {
+        Ok(yral_canisters_client::user_post_service::Result_::Ok) => (),
+        Ok(yral_canisters_client::user_post_service::Result_::Err(_)) => {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "Delete post failed - either the post doesn't exist or already deleted".to_string(),
@@ -185,21 +187,17 @@ pub async fn handle_delete_post_v2(
             }
         }
     } else {
-        // Use IndividualUserTemplate
-        let individual_user_template =
-            IndividualUserTemplate(publisher_canister_id, &user_ic_agent);
+        // TODO: migrate to user_post_service/user_info_service
+        // Individual user canisters have been decommissioned. Route all deletes
+        // through UserPostService, even for users whose metadata still points to
+        // a legacy canister.
+        let user_post_service =
+            UserPostService(*USER_POST_SERVICE_CANISTER_ID, &user_ic_agent);
 
-        // IndividualUserTemplate.delete_post still takes u64, so parse the String
-        let post_id_u64 = post_id.parse::<u64>().map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("Invalid post_id format: {e}"),
-            )
-        })?;
-        let delete_res = individual_user_template.delete_post(post_id_u64).await;
+        let delete_res = user_post_service.delete_post(post_id.clone()).await;
         match delete_res {
-            Ok(Result_::Ok) => (),
-            Ok(Result_::Err(_)) => {
+            Ok(yral_canisters_client::user_post_service::Result_::Ok) => (),
+            Ok(yral_canisters_client::user_post_service::Result_::Err(_)) => {
                 return Err((
                     StatusCode::BAD_REQUEST,
                     "Delete post failed - either the post doesn't exist or already deleted"

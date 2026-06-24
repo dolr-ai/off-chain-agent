@@ -9,7 +9,6 @@ pub mod utils;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum CanisterType {
-    User,
     SubnetOrch,
     PlatformOrch,
 }

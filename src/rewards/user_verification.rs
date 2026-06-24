@@ -5,10 +5,7 @@ use anyhow::Result;
 use candid::Principal;
 use redis::AsyncCommands;
 use std::sync::Arc;
-use yral_canisters_client::{
-    individual_user_template::IndividualUserTemplate,
-    user_info_service::{SessionType, UserInfoService},
-};
+use yral_canisters_client::user_info_service::{SessionType, UserInfoService};
 
 #[derive(Clone)]
 pub struct UserVerification {
@@ -101,53 +98,18 @@ async fn check_user_registration(user_principal: Principal, app_state: &Arc<AppS
         }
         yral_canisters_client::user_info_service::Result8::Err(e) => {
             if e.contains("User not found") {
+                // TODO: migrate to user_post_service/user_info_service
+                // Previously fell back to IndividualUserTemplate.get_session_type().
+                // Individual user canisters have been decommissioned — if the user
+                // is not found in user_info_service, they are not registered.
                 log::debug!(
-                    "User {user_principal} not found in user info service, checking individual canister"
+                    "User {user_principal} not found in user info service — treating as not registered"
                 );
-                check_individual_canister_registration(user_principal, app_state).await
+                false
             } else {
                 log::debug!("Failed to get session type for principal {user_principal}: {e}");
                 false
             }
-        }
-    }
-}
-
-/// Check individual canister for registration status
-async fn check_individual_canister_registration(
-    user_principal: Principal,
-    app_state: &Arc<AppState>,
-) -> bool {
-    let canister_id = match app_state
-        .get_individual_canister_by_user_principal(user_principal)
-        .await
-    {
-        Ok(id) => id,
-        Err(e) => {
-            log::debug!("Failed to get individual canister for principal {user_principal}: {e}");
-            return false;
-        }
-    };
-
-    let individual_template = IndividualUserTemplate(canister_id, &app_state.agent);
-
-    match individual_template.get_session_type().await {
-        Ok(result) => match result {
-            yral_canisters_client::individual_user_template::Result7::Ok(session_type) => {
-                matches!(
-                    session_type,
-                    yral_canisters_client::individual_user_template::SessionType::RegisteredSession
-                )
-            }
-            yral_canisters_client::individual_user_template::Result7::Err(_) => false,
-        },
-        Err(e) => {
-            log::debug!(
-                "Failed to get session type from individual canister for {}: {}",
-                user_principal,
-                e
-            );
-            false
         }
     }
 }

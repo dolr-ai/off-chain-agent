@@ -30,7 +30,6 @@ use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 use yral_alloydb_client::AlloyDbInstance;
-use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
 use yup_oauth2::hyper_rustls::HttpsConnector;
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
@@ -255,9 +254,6 @@ impl AppState {
         }
     }
 
-    pub fn individual_user(&self, user_canister: Principal) -> IndividualUserTemplate<'_> {
-        IndividualUserTemplate(user_canister, &self.agent)
-    }
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {

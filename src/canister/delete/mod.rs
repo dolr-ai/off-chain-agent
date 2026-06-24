@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
 use yral_canisters_client::{
-    individual_user_template::IndividualUserTemplate,
     user_index::{Result3, UserIndex},
     user_info_service::UserInfoService,
     user_post_service::UserPostService,
@@ -316,33 +315,13 @@ async fn get_canister_posts(
             start = end;
         }
     } else {
-        // Use IndividualUserTemplate for legacy users
-        loop {
-            let end = start + batch_size;
-
-            let result = IndividualUserTemplate(canister_id, agent)
-                .get_posts_of_this_user_profile_with_pagination_cursor(start, end)
-                .await?;
-
-            match result {
-                yral_canisters_client::individual_user_template::Result6::Ok(posts) => {
-                    let result_len = posts.len();
-                    all_posts.extend(posts.into_iter().map(|p| UserPostV2 {
-                        canister_id: canister_id.to_string(),
-                        post_id: p.id.to_string(), // Convert u64 to String
-                        video_id: p.video_uid,
-                    }));
-                    if result_len < batch_size as usize {
-                        break;
-                    }
-                }
-                yral_canisters_client::individual_user_template::Result6::Err(_) => {
-                    break;
-                }
-            }
-
-            start = end;
-        }
+        // TODO: migrate to user_post_service/user_info_service
+        // Individual user canisters have been decommissioned. Legacy canister_id
+        // values that are not USER_INFO_SERVICE_CANISTER_ID are no longer supported.
+        log::warn!(
+            "Skipping posts fetch for non-user-info-service canister {canister_id} — \
+             individual user canisters have been decommissioned"
+        );
     }
 
     Ok(all_posts)
@@ -384,35 +363,15 @@ async fn delete_posts_from_canister(agent: &Agent, posts: Vec<UserPostV2>) {
                         }
                     }
                 } else {
-                    // Use IndividualUserTemplate for legacy users
-                    let individual_user_template =
-                        IndividualUserTemplate(canister_principal, &agent);
-
-                    // Parse String post_id to u64 for IndividualUserTemplate
-                    let post_id_u64 = post.post_id.parse::<u64>().map_err(|e| {
-                        format!("Invalid post_id format for legacy canister: {}", e)
-                    })?;
-
-                    match individual_user_template.delete_post(post_id_u64).await {
-                        Ok(yral_canisters_client::individual_user_template::Result_::Ok) => Ok(()),
-                        Ok(yral_canisters_client::individual_user_template::Result_::Err(_)) => {
-                            log::error!(
-                                "Failed to delete post {} from canister {}",
-                                post.post_id,
-                                post.canister_id
-                            );
-                            Err("Failed to delete post".to_string())
-                        }
-                        Err(e) => {
-                            log::error!(
-                                "Failed to delete post {} from canister {}: {}",
-                                post.post_id,
-                                post.canister_id,
-                                e
-                            );
-                            Err(format!("Failed to delete post: {e}"))
-                        }
-                    }
+                    // TODO: migrate to user_post_service/user_info_service
+                    // Individual user canisters have been decommissioned. Skip deletion
+                    // for posts that still reference a legacy canister_id.
+                    log::warn!(
+                        "Skipping post deletion for legacy canister {} — \
+                         individual user canisters have been decommissioned",
+                        post.canister_id
+                    );
+                    Ok(())
                 }
             }
         })
@@ -462,17 +421,18 @@ async fn handle_duplicate_posts_cleanup(
 }
 
 async fn get_user_principal_from_canister(
-    agent: &Agent,
+    _agent: &Agent,
     canister_id: Principal,
 ) -> Result<Principal, anyhow::Error> {
-    let individual_user_template = IndividualUserTemplate(canister_id, agent);
-
-    match individual_user_template.get_profile_details_v_2().await {
-        Ok(profile) => Ok(profile.principal_id),
-        Err(e) => Err(anyhow::Error::msg(format!(
-            "Failed to get user principal from canister {canister_id}: {e}"
-        ))),
-    }
+    // TODO: migrate to user_info_service/user_info_service
+    // Previously used IndividualUserTemplate.get_profile_details_v_2() to get the
+    // user principal from a canister. Individual user canisters have been
+    // decommissioned. Callers should resolve the user principal via metadata
+    // or user_info_service instead.
+    Err(anyhow::Error::msg(format!(
+        "Failed to get user principal from canister {canister_id}: \
+         individual user canisters have been decommissioned"
+    )))
 }
 
 async fn process_canister_deletion_with_error_handling(

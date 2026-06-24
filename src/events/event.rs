@@ -223,10 +223,6 @@ impl Event {
                     // Handle V3 payload
                     tokio::spawn(async move {
                         use std::cmp::Ordering;
-                        use yral_canisters_client::individual_user_template::{
-                            IndividualUserTemplate,
-                            PostViewDetailsFromFrontend as IndividualPostViewDetails,
-                        };
                         use yral_canisters_client::user_post_service::{
                             PostViewDetailsFromFrontend as UserPostViewDetails, UserPostService,
                         };
@@ -281,38 +277,30 @@ impl Event {
                                         );
                                     }
                                 } else {
-                                    // Use IndividualUserTemplate
+                                    // TODO: migrate to user_post_service/user_info_service
+                                    // Individual user canisters have been decommissioned. Route view
+                                    // detail updates through UserPostService for all users.
                                     let payload = match percentage_watched.cmp(&95) {
-                                        Ordering::Less => {
-                                            IndividualPostViewDetails::WatchedPartially {
-                                                percentage_watched,
-                                            }
-                                        }
-                                        _ => IndividualPostViewDetails::WatchedMultipleTimes {
+                                        Ordering::Less => UserPostViewDetails::WatchedPartially {
+                                            percentage_watched,
+                                        },
+                                        _ => UserPostViewDetails::WatchedMultipleTimes {
                                             percentage_watched,
                                             watch_count,
                                         },
                                     };
 
-                                    let individual_user_template = IndividualUserTemplate(
-                                        publisher_canister_id,
+                                    let user_post_service = UserPostService(
+                                        *USER_POST_SERVICE_CANISTER_ID,
                                         &app_state.agent,
                                     );
 
-                                    let post_id_u64 = match post_id.parse::<u64>() {
-                                        Ok(id) => id,
-                                        Err(e) => {
-                                            error!("Invalid post_id format: {e}");
-                                            return;
-                                        }
-                                    };
-
-                                    if let Err(e) = individual_user_template
-                                        .update_post_add_view_details(post_id_u64, payload)
+                                    if let Err(e) = user_post_service
+                                        .update_post_add_view_details(post_id.clone(), payload)
                                         .await
                                     {
                                         error!(
-                                            "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
+                                            "Failed to update view details for post {post_id} in UserPostService canister (legacy user): {e:?}"
                                         );
                                     }
                                 }
@@ -349,43 +337,43 @@ impl Event {
                     match params_v2 {
                         Ok(params) => {
                             // Handle V2 payload (legacy)
+                            // TODO: migrate to user_post_service/user_info_service
+                            // Previously used IndividualUserTemplate to update view details.
+                            // Individual user canisters have been decommissioned — route
+                            // through UserPostService instead.
                             tokio::spawn(async move {
                                 use std::cmp::Ordering;
-                                use yral_canisters_client::individual_user_template::IndividualUserTemplate;
-                                use yral_canisters_client::individual_user_template::PostViewDetailsFromFrontend;
+                                use yral_canisters_client::user_post_service::{
+                                    PostViewDetailsFromFrontend as UserPostViewDetails, UserPostService,
+                                };
 
                                 let percentage_watched = params.percentage_watched as u8;
                                 if percentage_watched == 0 || percentage_watched > 100 {
                                     debug!("Invalid percentage_watched: {percentage_watched}");
                                     return;
                                 }
-                                let post_id = params.post_id.parse::<u64>().unwrap();
-                                let _post_id_str = post_id.to_string();
-                                let publisher_canister_id = params.publisher_canister_id.unwrap();
-
+                                let post_id = params.post_id;
                                 let watch_count = 1u8;
 
                                 let payload = match percentage_watched.cmp(&95) {
                                     Ordering::Less => {
-                                        PostViewDetailsFromFrontend::WatchedPartially {
-                                            percentage_watched,
-                                        }
+                                        UserPostViewDetails::WatchedPartially { percentage_watched }
                                     }
-                                    _ => PostViewDetailsFromFrontend::WatchedMultipleTimes {
+                                    _ => UserPostViewDetails::WatchedMultipleTimes {
                                         percentage_watched,
                                         watch_count,
                                     },
                                 };
 
-                                let individual_user_template =
-                                    IndividualUserTemplate(publisher_canister_id, &app_state.agent);
+                                let user_post_service =
+                                    UserPostService(*USER_POST_SERVICE_CANISTER_ID, &app_state.agent);
 
-                                if let Err(e) = individual_user_template
-                                    .update_post_add_view_details(post_id, payload)
+                                if let Err(e) = user_post_service
+                                    .update_post_add_view_details(post_id.clone(), payload)
                                     .await
                                 {
                                     error!(
-                                        "Failed to update view details for post {post_id} in canister {publisher_canister_id}: {e:?}"
+                                        "Failed to update view details for post {post_id} in UserPostService canister (V2 legacy): {e:?}"
                                     );
                                 }
                             });

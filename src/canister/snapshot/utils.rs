@@ -8,7 +8,7 @@ use yral_canisters_client::ic::PLATFORM_ORCHESTRATOR_ID;
 use crate::{
     canister::{
         snapshot::CanisterType,
-        utils::{get_subnet_orch_ids, get_user_canisters_list_v2},
+        utils::get_subnet_orch_ids,
     },
     types::RedisPool,
 };
@@ -57,36 +57,6 @@ pub async fn get_canister_backup_date_list(
     }
 
     Ok(canister_backup_date_list)
-}
-
-pub async fn get_user_canister_list_for_backup(
-    agent: &Agent,
-    canister_backup_redis_pool: &RedisPool,
-    date_str: String,
-) -> Result<Vec<Principal>, anyhow::Error> {
-    let user_canister_list = get_user_canisters_list_v2(agent).await?;
-
-    log::info!("User canister list length: {:?}", user_canister_list.len());
-
-    let canister_backup_date_list =
-        get_canister_backup_date_list(canister_backup_redis_pool, CanisterType::User, date_str)
-            .await?;
-    let canister_backup_date_set = canister_backup_date_list
-        .iter()
-        .map(|canister_id| Principal::from_text(canister_id).unwrap())
-        .collect::<HashSet<_>>();
-
-    let user_canister_list = user_canister_list
-        .into_iter()
-        .filter(|canister_id| !canister_backup_date_set.contains(canister_id))
-        .collect::<Vec<_>>();
-
-    log::info!(
-        "User canister list length after filtering: {:?}",
-        user_canister_list.len()
-    );
-
-    Ok(user_canister_list)
 }
 
 pub async fn get_subnet_orch_ids_list_for_backup(

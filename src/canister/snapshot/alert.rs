@@ -12,7 +12,6 @@ use crate::{
     app_state::AppState,
     canister::snapshot::utils::{
         get_platform_orch_ids_list_for_backup, get_subnet_orch_ids_list_for_backup,
-        get_user_canister_list_for_backup,
     },
     types::RedisPool,
 };
@@ -53,15 +52,9 @@ pub async fn snapshot_alert_job_impl(
     log::info!("Fetching canister lists...");
     let mut canisters_backups = Vec::new();
 
-    let user_canisters_left_for_backup =
-        get_user_canister_list_for_backup(agent, redis_pool, date_str.clone()).await?;
-    for canister_id in user_canisters_left_for_backup {
-        let canister_data = CanisterData {
-            canister_id,
-            canister_type: CanisterType::User,
-        };
-        canisters_backups.push((canister_data, date_str.clone()));
-    }
+    // TODO: migrate to user_post_service/user_info_service
+    // Individual user canister backups are no longer needed — user canisters have been
+    // decommissioned. Only platform/subnet orchestrator backups remain.
 
     // Add subnet orchestrators
     let subnet_orch_ids =
