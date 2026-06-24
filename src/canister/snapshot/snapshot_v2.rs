@@ -13,6 +13,7 @@ use crate::{
     app_state::AppState,
     canister::snapshot::{
         alert::snapshot_alert_job_impl,
+        download::get_canister_snapshot,
         upload::upload_snapshot_to_storj_v2,
         utils::insert_canister_backup_date_into_redis,
     },

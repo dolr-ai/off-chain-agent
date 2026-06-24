@@ -1,9 +1,8 @@
-use std::env;
 use std::{error::Error, sync::Arc};
 
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
-use http::{header::AUTHORIZATION, StatusCode};
+use http::StatusCode;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::ic::USER_INFO_SERVICE_ID;
@@ -136,48 +135,4 @@ pub async fn transfer_all_posts_for_the_individual_user(
     log::warn!("transfer_all_posts_for_the_individual_user is deprecated — \
                 individual user canisters have been decommissioned");
     Ok((StatusCode::OK, "Transfer no longer needed".to_string()))
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SyncPostToPostServiceRequest {
-    user_principal: Principal,
-    canister_id: Principal,
-    post_id: u64,
-}
-
-pub async fn process_post_for_transfer(
-    post_id: u64,
-    canister_id: Principal,
-    user_principal: Principal,
-) -> Result<(), Box<dyn Error>> {
-    let request_payload = SyncPostToPostServiceRequest {
-        user_principal,
-        canister_id,
-        post_id,
-    };
-
-    let yral_cloudflare_worker_token = env::var("YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN")?;
-
-    let response_result = reqwest::Client::new()
-        .post("https://yral-upload-video.go-bazzinga.workers.dev/sync_post_to_post_canister")
-        .header(
-            AUTHORIZATION,
-            format!("Bearer {}", yral_cloudflare_worker_token),
-        )
-        .json(&request_payload)
-        .send()
-        .await;
-
-    match response_result {
-        Err(e) => Err(e.into()),
-        Ok(response) => {
-            if response.status().is_success() {
-                Ok(())
-            } else {
-                let response_error = response.text().await?;
-
-                Err(response_error.into())
-            }
-        }
-    }
 }
