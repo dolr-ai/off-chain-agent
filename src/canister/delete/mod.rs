@@ -457,7 +457,7 @@ async fn process_canister_deletion_with_error_handling(
             {
                 let redis_key = format!("failed_canister_deletions:{timestamp_str}");
                 if let Err(redis_err) = store_failed_canister_info(
-                    &state.canister_backup_redis_pool,
+                    &state.canister_redis_pool,
                     &redis_key,
                     FailedCanisterInfo {
                         canister_id: canister_id.to_string(),

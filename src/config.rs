@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_with::serde_as;
 
-use crate::consts::{STORJ_BACKUP_CANISTER_ACCESS_GRANT, STORJ_INTERFACE_TOKEN};
+use crate::consts::STORJ_INTERFACE_TOKEN;
 
 #[serde_as]
 #[derive(Deserialize, Clone)]
@@ -24,7 +24,6 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn load() -> Result<Self, ConfigError> {
         Lazy::force(&STORJ_INTERFACE_TOKEN);
-        Lazy::force(&STORJ_BACKUP_CANISTER_ACCESS_GRANT);
         // set env var
         let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY");
         env::set_var("SERVICE_ACCOUNT_JSON", sa_key_file.clone());

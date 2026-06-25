@@ -4,7 +4,6 @@
 
 Off-chain agent is a service that runs on Fly.io and is responsible for orchestrating the off-chain operations of the platform. It is responsible for the following:
 
-- Daily backups for disaster recovery
 - Monitoring
 
 ## Operations
@@ -12,33 +11,6 @@ Off-chain agent is a service that runs on Fly.io and is responsible for orchestr
 - Self-hosted Airflow migration and operating notes: [docs/self-hosted-airflow.md](docs/self-hosted-airflow.md)
 
 ## Architecture
-
-### Periodic Backups
-
-```mermaid
-flowchart TD
-    IndividualCansiter1[(Individual User <br>Canister 1)]
-    IndividualCansiter2[(Individual User <br>Canister 2)]
-    UserIndex[(User Index)]
-    OffChainAgent[OffChain Agent]
-    CFWorker[Cloudflare Worker]
-    R2[(R2 store)]
-
-    OffChainAgent --[1.1]--> UserIndex
-    OffChainAgent --[2(get snapshot)]--> IndividualCansiter1
-    OffChainAgent --[2.1(store snapshot)]--> R2
-    OffChainAgent --[3]--> IndividualCansiter2
-    OffChainAgent --[3.1]--> R2
-
-    CFWorker -- 1(cron trigger) --> OffChainAgent
-
-
-    subgraph OnChain
-        UserIndex
-        IndividualCansiter1
-        IndividualCansiter2
-    end
-```
 
 ### Video Processing Pipeline (NSFW detection)
 

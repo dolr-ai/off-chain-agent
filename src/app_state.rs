@@ -78,8 +78,7 @@ pub struct AppState {
     #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     pub alloydb_client: AlloyDbInstance,
     #[cfg(not(feature = "local-bin"))]
-    #[cfg(not(feature = "local-bin"))]
-    pub canister_backup_redis_pool: RedisPool,
+    pub canister_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
     pub notification_client: NotificationClient,
     #[cfg(not(feature = "local-bin"))]
@@ -164,8 +163,7 @@ impl AppState {
             #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
             alloydb_client: init_alloydb_client().await,
             #[cfg(not(feature = "local-bin"))]
-            #[cfg(not(feature = "local-bin"))]
-            canister_backup_redis_pool: init_canister_backup_redis_pool().await,
+            canister_redis_pool: init_canister_redis_pool().await,
             #[cfg(not(feature = "local-bin"))]
             notification_client: NotificationClient::new(
                 env::var("YRAL_METADATA_NOTIFICATION_API_KEY").unwrap_or_default(),
@@ -433,9 +431,9 @@ async fn init_alloydb_client() -> AlloyDbInstance {
     AlloyDbInstance::new(client, instance, db_name, db_user, db_password)
 }
 
-async fn init_canister_backup_redis_pool() -> RedisPool {
-    let redis_url = std::env::var("CANISTER_BACKUP_CACHE_REDIS_URL")
-        .expect("CANISTER_BACKUP_CACHE_REDIS_URL must be set");
+async fn init_canister_redis_pool() -> RedisPool {
+    let redis_url = std::env::var("CANISTER_REDIS_URL")
+        .expect("CANISTER_REDIS_URL must be set");
 
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
