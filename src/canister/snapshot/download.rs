@@ -4,7 +4,6 @@ use tracing::instrument;
 use super::{CanisterData, CanisterType};
 
 #[instrument(skip(agent))]
-#[allow(unused_variables)]
 pub async fn get_canister_snapshot(
     canister_data: CanisterData,
     agent: &Agent,
