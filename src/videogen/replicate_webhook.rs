@@ -239,7 +239,6 @@ pub fn generate_webhook_url(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderMap, HeaderName, HeaderValue};
     use serde_json::json;
 
     fn create_test_payload() -> ReplicateWebhookPayload {

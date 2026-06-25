@@ -359,12 +359,9 @@ mod tests {
             let redis_url = std::env::var("TEST_REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
-            let manager = bb8_redis::RedisConnectionManager::new(redis_url)
-                .expect("Failed to create Redis connection manager");
-            let pool = bb8::Pool::builder()
-                .build(manager)
-                .await
-                .expect("Failed to build Redis pool");
+            let client = redis::Client::open(redis_url)
+                .expect("Failed to create Redis client");
+            let pool = DragonflyPool::new_direct(client);
 
             let key_prefix = test_key_prefix();
             let mut tracker = ViewTracker::new(pool);
@@ -380,7 +377,7 @@ mod tests {
         }
 
         async fn cleanup(&self) -> Result<()> {
-            let mut conn = self.tracker.pool.get().await?;
+            let mut conn = self.tracker.redis_store_pool.get().await?;
 
             let patterns = vec![
                 format!("impressions:rewards:video:{}*", self.key_prefix),
@@ -397,7 +394,7 @@ mod tests {
                         .arg(&pattern)
                         .arg("COUNT")
                         .arg(100)
-                        .query_async(&mut *conn)
+                        .query_async(&mut conn)
                         .await?;
 
                     if !keys.is_empty() {
@@ -523,7 +520,7 @@ mod tests {
             .unwrap();
         assert_eq!(count_before, 2);
 
-        let mut conn = test_tracker.tracker.pool.get().await.unwrap();
+        let mut conn = test_tracker.tracker.redis_store_pool.get().await.unwrap();
         let _: () = conn
             .set::<_, _, ()>("impressions:rewards:config:version", "2")
             .await
@@ -689,7 +686,7 @@ mod tests {
         assert_eq!(total_loggedin_before, 2);
 
         // Change config version
-        let mut conn = test_tracker.tracker.pool.get().await.unwrap();
+        let mut conn = test_tracker.tracker.redis_store_pool.get().await.unwrap();
         let _: () = conn
             .set::<_, _, ()>("impressions:rewards:config:version", "2")
             .await
