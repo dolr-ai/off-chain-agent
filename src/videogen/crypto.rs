@@ -89,7 +89,7 @@ mod tests {
         let crypto = Crypto::default();
 
         // Generate a random Secp256k1 secret key and convert to JWK for to_secret
-        let secret = k256::SecretKey::random(&mut rand::rng());
+        let secret = k256::SecretKey::random(&mut k256::elliptic_curve::rand_core::OsRng);
         let to_secret: JwkEcKey = secret.to_jwk();
 
         let identity = DelegatedIdentityWire {

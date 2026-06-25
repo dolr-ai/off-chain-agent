@@ -19,18 +19,8 @@ use crate::qstash::service_canister_migration::{
 use crate::qstash::verify::verify_qstash_message;
 use crate::setup_context;
 use crate::{
-    app_state::AppState,
-    canister::{
-        delete::handle_delete_and_reclaim_canisters,
-        snapshot::{
-            // alert::snapshot_alert_job,
-            alert::snapshot_alert_job,
-            snapshot_v2::backup_canisters_job_v2,
-        },
-    },
-    events::event::storj::storj_ingest,
-    posts::report_post::qstash_report_post,
-    rewards::api::update_reward_config,
+    app_state::AppState, events::event::storj::storj_ingest,
+    posts::report_post::qstash_report_post, rewards::api::update_reward_config,
 };
 
 pub mod client;
@@ -145,15 +135,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     let router = router
         .route("/storj_ingest", post(storj_ingest))
         .route("/report_post", post(qstash_report_post))
-        .route(
-            "/start_backup_canisters_job_v2",
-            post(backup_canisters_job_v2),
-        )
-        .route("/snapshot_alert_job", post(snapshot_alert_job))
-        .route(
-            "/delete_and_reclaim_canisters",
-            post(handle_delete_and_reclaim_canisters),
-        )
         .route(
             "/process_video_gen",
             post(crate::videogen::qstash_process::process_video_generation),

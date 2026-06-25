@@ -15,12 +15,7 @@ RUN apt-get update \
     libswscale-dev \
     libswresample-dev \
     libblas-dev \
-    liblapack-dev \
-    unzip
-
-RUN curl -L https://github.com/storj/storj/releases/latest/download/uplink_linux_amd64.zip -o uplink_linux_amd64.zip
-RUN unzip -o uplink_linux_amd64.zip
-RUN install uplink /usr/local/bin/uplink
+    liblapack-dev
 
 EXPOSE 50051
 

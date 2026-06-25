@@ -88,11 +88,22 @@ fn get_redis_store_hosts() -> Vec<String> {
         .collect()
 }
 
-/// Simple connection pool - just wraps SentinelConnectionManager
-/// MultiplexedConnection handles multiplexing internally, so we just need one connection
+/// Connection source for DragonflyPool — either Sentinel-managed or a direct client
+enum ConnectionSource {
+    Sentinel(Arc<SentinelConnectionManager>),
+    /// Direct (non-Sentinel) client, used for tests and simple setups.
+    /// Boxed to keep the enum small (Client is ~288 bytes).
+    Direct {
+        client: Box<Client>,
+        config: AsyncConnectionConfig,
+    },
+}
+
+/// Simple connection pool — wraps either a SentinelConnectionManager or a direct Client.
+/// MultiplexedConnection handles multiplexing internally, so we just need one connection.
 #[derive(Clone)]
 pub struct DragonflyPool {
-    connection_manager: Arc<SentinelConnectionManager>,
+    connection_source: Arc<ConnectionSource>,
     /// Cached connection - MultiplexedConnection is cheap to clone
     cached_conn: Arc<RwLock<Option<MultiplexedConnection>>>,
 }
@@ -100,7 +111,22 @@ pub struct DragonflyPool {
 impl DragonflyPool {
     pub fn new(connection_manager: Arc<SentinelConnectionManager>) -> Arc<Self> {
         Arc::new(Self {
-            connection_manager,
+            connection_source: Arc::new(ConnectionSource::Sentinel(connection_manager)),
+            cached_conn: Arc::new(RwLock::new(None)),
+        })
+    }
+
+    /// Create a DragonflyPool from a direct Redis client (no Sentinel).
+    /// Useful for tests and simple single-node setups.
+    pub fn new_direct(client: Client) -> Arc<Self> {
+        let config = AsyncConnectionConfig::new()
+            .set_response_timeout(Duration::from_secs(30))
+            .set_connection_timeout(Duration::from_secs(10));
+        Arc::new(Self {
+            connection_source: Arc::new(ConnectionSource::Direct {
+                client: Box::new(client),
+                config,
+            }),
             cached_conn: Arc::new(RwLock::new(None)),
         })
     }
@@ -116,7 +142,7 @@ impl DragonflyPool {
         }
 
         // Create new connection
-        let conn = self.connection_manager.connect().await?;
+        let conn = self.create_connection().await?;
 
         // Cache it
         {
@@ -146,7 +172,7 @@ impl DragonflyPool {
         }
 
         // Cached connection is stale, create new one
-        let conn = self.connection_manager.connect().await?;
+        let conn = self.create_connection().await?;
 
         // Cache it
         {
@@ -155,6 +181,18 @@ impl DragonflyPool {
         }
 
         Ok(conn)
+    }
+
+    /// Create a new connection from the underlying source (Sentinel or direct)
+    async fn create_connection(&self) -> std::result::Result<MultiplexedConnection, RedisError> {
+        match &*self.connection_source {
+            ConnectionSource::Sentinel(manager) => manager.connect().await,
+            ConnectionSource::Direct { client, config } => {
+                client
+                    .get_multiplexed_async_connection_with_config(config)
+                    .await
+            }
+        }
     }
 
     /// Invalidate cached connection (call after connection errors)

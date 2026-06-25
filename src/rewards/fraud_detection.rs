@@ -233,12 +233,8 @@ mod tests {
             let redis_url = std::env::var("TEST_REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
-            let manager = bb8_redis::RedisConnectionManager::new(redis_url)
-                .expect("Failed to create Redis connection manager");
-            let pool = bb8::Pool::builder()
-                .build(manager)
-                .await
-                .expect("Failed to build Redis pool");
+            let client = redis::Client::open(redis_url).expect("Failed to create Redis client");
+            let pool = DragonflyPool::new_direct(client);
 
             let test_prefix = format!("test_fraud_{}", Uuid::new_v4().to_string());
             let detector = FraudDetector::with_config(pool, 3, 60);
@@ -266,7 +262,7 @@ mod tests {
                         .arg(&pattern)
                         .arg("COUNT")
                         .arg(100)
-                        .query_async(&mut *conn)
+                        .query_async(&mut conn)
                         .await?;
 
                     if !keys.is_empty() {

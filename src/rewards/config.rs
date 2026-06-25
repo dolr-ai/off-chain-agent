@@ -218,10 +218,12 @@ async fn initialize_config(
 
 #[cfg(test)]
 mod tests {
+    use crate::yral_auth::dragonfly::DragonflyPool;
+
     use super::*;
 
     struct TestConfig {
-        redis_pool: RedisPool,
+        redis_pool: Arc<DragonflyPool>,
         cleanup_keys: Vec<String>,
     }
 
@@ -230,12 +232,8 @@ mod tests {
             let redis_url = std::env::var("TEST_REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
-            let manager = bb8_redis::RedisConnectionManager::new(redis_url)
-                .expect("Failed to create Redis connection manager");
-            let pool = bb8::Pool::builder()
-                .build(manager)
-                .await
-                .expect("Failed to build Redis pool");
+            let client = redis::Client::open(redis_url).expect("Failed to create Redis client");
+            let pool = DragonflyPool::new_direct(client);
 
             Self {
                 redis_pool: pool,

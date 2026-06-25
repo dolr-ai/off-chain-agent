@@ -12,12 +12,3 @@ pub async fn get_user_principal_canister_list_v2(
 ) -> Result<Vec<(Principal, Principal)>, anyhow::Error> {
     Ok(vec![])
 }
-
-/// Fetch the list of subnet orchestrator canister IDs.
-///
-/// The platform orchestrator canister has been decommissioned.
-/// This function now returns an empty list.
-#[instrument(skip(_agent))]
-pub async fn get_subnet_orch_ids(_agent: &Agent) -> Result<Vec<Principal>, anyhow::Error> {
-    Ok(vec![])
-}
