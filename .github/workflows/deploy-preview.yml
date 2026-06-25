@@ -110,7 +110,6 @@ jobs:
             secret/data/off-chain-agent/ALLOYDB_SERVICE_ACCOUNT_JSON_PROD value | ALLOYDB_SERVICE_ACCOUNT_JSON ;
             secret/data/off-chain-agent/ALLOYDB_INSTANCE_PROD value | ALLOYDB_INSTANCE ;
             secret/data/off-chain-agent/ALLOYDB_DB_PASSWORD_PROD value | ALLOYDB_DB_PASSWORD ;
-            secret/data/off-chain-agent/CANISTER_BACKUP_CACHE_REDIS_URL value | CANISTER_REDIS_URL ;
             secret/data/off-chain-agent/YRAL_METADATA_NOTIFICATION_API_KEY value | YRAL_METADATA_NOTIFICATION_API_KEY ;
             secret/data/off-chain-agent/ML_FEED_CACHE_MEMORYSTORE_URL value | ML_FEED_CACHE_MEMORYSTORE_URL ;
             secret/data/off-chain-agent/YRAL_HON_WORKER_JWT value | YRAL_HON_WORKER_JWT ;
@@ -231,7 +230,6 @@ jobs:
           ALLOYDB_SERVICE_ACCOUNT_JSON: ${{ env.ALLOYDB_SERVICE_ACCOUNT_JSON }}
           ALLOYDB_INSTANCE: ${{ env.ALLOYDB_INSTANCE }}
           ALLOYDB_DB_PASSWORD: ${{ env.ALLOYDB_DB_PASSWORD }}
-          CANISTER_REDIS_URL: ${{ env.CANISTER_REDIS_URL }}
           YRAL_METADATA_NOTIFICATION_API_KEY: ${{ env.YRAL_METADATA_NOTIFICATION_API_KEY }}
           ML_FEED_CACHE_MEMORYSTORE_URL: ${{ env.ML_FEED_CACHE_MEMORYSTORE_URL }}
           YRAL_HON_WORKER_JWT: ${{ env.YRAL_HON_WORKER_JWT }}
@@ -303,7 +301,6 @@ jobs:
             --arg alloydb_service_account_json "$(flatten "$ALLOYDB_SERVICE_ACCOUNT_JSON")" \
             --arg alloydb_instance "$ALLOYDB_INSTANCE" \
             --arg alloydb_db_password "$ALLOYDB_DB_PASSWORD" \
-            --arg canister_redis_url "$CANISTER_REDIS_URL" \
             --arg yral_metadata_notification_api_key "$YRAL_METADATA_NOTIFICATION_API_KEY" \
             --arg ml_feed_cache_memorystore_url "$ML_FEED_CACHE_MEMORYSTORE_URL" \
             --arg yral_hon_worker_jwt "$YRAL_HON_WORKER_JWT" \
@@ -372,7 +369,6 @@ jobs:
               { "key": "ALLOYDB_SERVICE_ACCOUNT_JSON", "value": $alloydb_service_account_json, "is_literal": true},
               { "key": "ALLOYDB_INSTANCE", "value": $alloydb_instance, "is_literal":true},
               { "key": "ALLOYDB_DB_PASSWORD", "value": $alloydb_db_password, "is_literal":true},
-              { "key": "CANISTER_REDIS_URL", "value": $canister_redis_url, "is_literal": true},
               { "key": "YRAL_METADATA_NOTIFICATION_API_KEY", "value": $yral_metadata_notification_api_key, "is_literal": true},
               { "key": "ML_FEED_CACHE_MEMORYSTORE_URL", "value": $ml_feed_cache_memorystore_url, "is_literal": true},
               { "key": "YRAL_HON_WORKER_JWT", "value": $yral_hon_worker_jwt, "is_literal": true},
