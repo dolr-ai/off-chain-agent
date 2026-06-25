@@ -67,8 +67,7 @@ pub async fn handle_delete_post(
     // Previously used IndividualUserTemplate to delete posts from individual user
     // canisters. Those canisters have been decommissioned — route all deletes
     // through UserPostService now.
-    let user_post_service =
-        UserPostService(*USER_POST_SERVICE_CANISTER_ID, &user_ic_agent);
+    let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &user_ic_agent);
 
     // Call the canister to delete the post
     let delete_res = user_post_service.delete_post(post_id.to_string()).await;
@@ -191,8 +190,7 @@ pub async fn handle_delete_post_v2(
         // Individual user canisters have been decommissioned. Route all deletes
         // through UserPostService, even for users whose metadata still points to
         // a legacy canister.
-        let user_post_service =
-            UserPostService(*USER_POST_SERVICE_CANISTER_ID, &user_ic_agent);
+        let user_post_service = UserPostService(*USER_POST_SERVICE_CANISTER_ID, &user_ic_agent);
 
         let delete_res = user_post_service.delete_post(post_id.clone()).await;
         match delete_res {

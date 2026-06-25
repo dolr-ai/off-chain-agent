@@ -344,7 +344,8 @@ impl Event {
                             tokio::spawn(async move {
                                 use std::cmp::Ordering;
                                 use yral_canisters_client::user_post_service::{
-                                    PostViewDetailsFromFrontend as UserPostViewDetails, UserPostService,
+                                    PostViewDetailsFromFrontend as UserPostViewDetails,
+                                    UserPostService,
                                 };
 
                                 let percentage_watched = params.percentage_watched as u8;
@@ -365,8 +366,10 @@ impl Event {
                                     },
                                 };
 
-                                let user_post_service =
-                                    UserPostService(*USER_POST_SERVICE_CANISTER_ID, &app_state.agent);
+                                let user_post_service = UserPostService(
+                                    *USER_POST_SERVICE_CANISTER_ID,
+                                    &app_state.agent,
+                                );
 
                                 if let Err(e) = user_post_service
                                     .update_post_add_view_details(post_id.clone(), payload)

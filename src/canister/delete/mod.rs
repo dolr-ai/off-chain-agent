@@ -10,8 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
 use yral_canisters_client::{
-    user_info_service::UserInfoService,
-    user_post_service::UserPostService,
+    user_info_service::UserInfoService, user_post_service::UserPostService,
 };
 
 use crate::yral_auth::dragonfly::{format_to_dragonfly_key, YRAL_AUTH_REDIS_KEY_PREFIX};

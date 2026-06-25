@@ -1,13 +1,12 @@
-use candid::Principal;
 use ic_agent::Agent;
 use tracing::instrument;
 
 use super::{CanisterData, CanisterType};
 
-#[instrument(skip(agent))]
+#[instrument(skip(_agent))]
 pub async fn get_canister_snapshot(
     canister_data: CanisterData,
-    agent: &Agent,
+    _agent: &Agent,
 ) -> Result<Vec<u8>, anyhow::Error> {
     match canister_data.canister_type {
         // Subnet orchestrators (user_index canisters) have been decommissioned.
