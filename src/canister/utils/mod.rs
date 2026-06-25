@@ -12,5 +12,3 @@ pub async fn get_user_principal_canister_list_v2(
 ) -> Result<Vec<(Principal, Principal)>, anyhow::Error> {
     Ok(vec![])
 }
-
-

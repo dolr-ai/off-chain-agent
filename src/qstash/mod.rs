@@ -19,10 +19,8 @@ use crate::qstash::service_canister_migration::{
 use crate::qstash::verify::verify_qstash_message;
 use crate::setup_context;
 use crate::{
-    app_state::AppState,
-    canister::delete::handle_delete_and_reclaim_canisters,
-    events::event::storj::storj_ingest,
-    posts::report_post::qstash_report_post,
+    app_state::AppState, canister::delete::handle_delete_and_reclaim_canisters,
+    events::event::storj::storj_ingest, posts::report_post::qstash_report_post,
     rewards::api::update_reward_config,
 };
 

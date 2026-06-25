@@ -432,8 +432,7 @@ async fn init_alloydb_client() -> AlloyDbInstance {
 }
 
 async fn init_canister_redis_pool() -> RedisPool {
-    let redis_url = std::env::var("CANISTER_REDIS_URL")
-        .expect("CANISTER_REDIS_URL must be set");
+    let redis_url = std::env::var("CANISTER_REDIS_URL").expect("CANISTER_REDIS_URL must be set");
 
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
