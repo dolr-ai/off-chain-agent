@@ -9,8 +9,7 @@ use std::{collections::HashMap, env, sync::Arc};
 use tracing::instrument;
 
 use crate::{
-    app_state::AppState,
-    canister::snapshot::utils::get_subnet_orch_ids_list_for_backup,
+    app_state::AppState, canister::snapshot::utils::get_subnet_orch_ids_list_for_backup,
     types::RedisPool,
 };
 

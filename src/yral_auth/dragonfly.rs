@@ -91,9 +91,10 @@ fn get_redis_store_hosts() -> Vec<String> {
 /// Connection source for DragonflyPool — either Sentinel-managed or a direct client
 enum ConnectionSource {
     Sentinel(Arc<SentinelConnectionManager>),
-    /// Direct (non-Sentinel) client, used for tests and simple setups
+    /// Direct (non-Sentinel) client, used for tests and simple setups.
+    /// Boxed to keep the enum small (Client is ~288 bytes).
     Direct {
-        client: Client,
+        client: Box<Client>,
         config: AsyncConnectionConfig,
     },
 }
@@ -122,7 +123,10 @@ impl DragonflyPool {
             .set_response_timeout(Duration::from_secs(30))
             .set_connection_timeout(Duration::from_secs(10));
         Arc::new(Self {
-            connection_source: Arc::new(ConnectionSource::Direct { client, config }),
+            connection_source: Arc::new(ConnectionSource::Direct {
+                client: Box::new(client),
+                config,
+            }),
             cached_conn: Arc::new(RwLock::new(None)),
         })
     }
@@ -184,7 +188,9 @@ impl DragonflyPool {
         match &*self.connection_source {
             ConnectionSource::Sentinel(manager) => manager.connect().await,
             ConnectionSource::Direct { client, config } => {
-                client.get_multiplexed_async_connection_with_config(config).await
+                client
+                    .get_multiplexed_async_connection_with_config(config)
+                    .await
             }
         }
     }

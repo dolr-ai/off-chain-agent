@@ -253,7 +253,6 @@ impl AppState {
             )),
         }
     }
-
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {

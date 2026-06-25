@@ -119,8 +119,10 @@ pub async fn migrate_individual_user_to_service_canister(
     // Previously used IndividualUserTemplate to get session_type and register
     // the user in UserInfoService. Individual user canisters have been
     // decommissioned — this migration endpoint is no longer needed.
-    log::warn!("migrate_individual_user_to_service_canister is deprecated — \
-                individual user canisters have been decommissioned");
+    log::warn!(
+        "migrate_individual_user_to_service_canister is deprecated — \
+                individual user canisters have been decommissioned"
+    );
     Ok((StatusCode::OK, "Migration no longer needed".to_string()))
 }
 
@@ -132,7 +134,9 @@ pub async fn transfer_all_posts_for_the_individual_user(
     // Previously used IndividualUserTemplate to fetch posts from individual user
     // canisters and transfer them to UserPostService. Individual user canisters
     // have been decommissioned — this transfer endpoint is no longer needed.
-    log::warn!("transfer_all_posts_for_the_individual_user is deprecated — \
-                individual user canisters have been decommissioned");
+    log::warn!(
+        "transfer_all_posts_for_the_individual_user is deprecated — \
+                individual user canisters have been decommissioned"
+    );
     Ok((StatusCode::OK, "Transfer no longer needed".to_string()))
 }

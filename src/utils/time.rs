@@ -4,7 +4,9 @@ use std::time::UNIX_EPOCH;
 /// from `individual_user_template`. Kept here so callers that still need to
 /// serialise timestamps to candid don't depend on the decommissioned canister
 /// client.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, candid::CandidType, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, candid::CandidType, serde::Serialize, serde::Deserialize,
+)]
 pub struct SystemTime {
     pub nanos_since_epoch: u32,
     pub secs_since_epoch: u64,

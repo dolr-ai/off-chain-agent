@@ -5,10 +5,7 @@ use ic_agent::Agent;
 use redis::AsyncCommands;
 
 use crate::{
-    canister::{
-        snapshot::CanisterType,
-        utils::get_subnet_orch_ids,
-    },
+    canister::{snapshot::CanisterType, utils::get_subnet_orch_ids},
     types::RedisPool,
 };
 

@@ -233,8 +233,7 @@ mod tests {
             let redis_url = std::env::var("TEST_REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
-            let client = redis::Client::open(redis_url)
-                .expect("Failed to create Redis client");
+            let client = redis::Client::open(redis_url).expect("Failed to create Redis client");
             let pool = DragonflyPool::new_direct(client);
 
             let test_prefix = format!("test_fraud_{}", Uuid::new_v4().to_string());
