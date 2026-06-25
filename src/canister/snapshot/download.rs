@@ -3,10 +3,11 @@ use tracing::instrument;
 
 use super::{CanisterData, CanisterType};
 
-#[instrument(skip(_agent))]
+#[instrument(skip(agent))]
+#[allow(unused_variables)]
 pub async fn get_canister_snapshot(
     canister_data: CanisterData,
-    _agent: &Agent,
+    agent: &Agent,
 ) -> Result<Vec<u8>, anyhow::Error> {
     match canister_data.canister_type {
         // Subnet orchestrators (user_index canisters) have been decommissioned.
